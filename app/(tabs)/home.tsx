@@ -1,4 +1,5 @@
 // app/(tabs)/home.tsx - Main screen with product list
+import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
   FlatList,
@@ -49,8 +50,15 @@ const mockData = [
 
 export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState('');
+  const router = useRouter();
 
-  const renderProduct = ({ item }) => <ProductCard {...item} />;
+  const handleProductPress = (item) => {
+    router.push('/item-details');
+  };
+
+  const renderProduct = ({ item }) => (
+    <ProductCard {...item} onPress={() => handleProductPress(item)} />
+  );
 
   return (
     <SafeAreaView style={styles.container}>

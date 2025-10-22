@@ -23,6 +23,11 @@ export default function TabLayout() {
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: false, // Completely hide all headers
         // headerShown: useClientOnlyValue(false, true),
+        tabBarStyle: {
+          height: 70,
+          paddingBottom: 10,
+          paddingTop: 10,
+        },
       }}>
       <Tabs.Screen
         name="index"
@@ -34,10 +39,16 @@ export default function TabLayout() {
       <Tabs.Screen
         name="home"
         options={{
-          // header: () => <View style={{ height: 100 }} />,
           title: 'Home',
           tabBarIcon: ({ color }) => <TabBarIcon name="home" color={color} />,
-        }} />
+        }}
+      />
+      <Tabs.Screen
+        name="two"
+        options={{
+          href: null, // Hide from tab bar but keep accessible
+        }}
+      />
     </Tabs>
   );
 }
