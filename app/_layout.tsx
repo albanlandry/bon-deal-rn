@@ -57,6 +57,7 @@ function RootLayoutNav() {
         <Stack.Screen name="signup" options={{ headerShown: false }} />
         <Stack.Screen name="verify-number" options={{ headerShown: false }} />
         <Stack.Screen name="item-details" options={{ headerShown: false }} />
+        <Stack.Screen name="chatroom" options={{ headerShown: false }} />
       </Stack>
     </ThemeProvider>
   );
