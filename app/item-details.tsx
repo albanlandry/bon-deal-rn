@@ -1,4 +1,5 @@
 // app/item-details.tsx - Item details screen
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -12,7 +13,6 @@ import {
 } from 'react-native';
 import Carousel from 'react-native-reanimated-carousel';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/MaterialIcons';
 import { theme } from '../utils/theme';
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -52,6 +52,13 @@ Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium dolor
       avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop&crop=face',
       postedTime: "Publié il y'a 15 min",
     },
+  };
+
+  // Mock engagement data
+  const engagementData = {
+    likes: 24,
+    views: 156,
+    chats: 8,
   };
 
   const images = [
@@ -94,6 +101,23 @@ Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium dolor
     setIsFullscreen(false);
   };
 
+  const EngagementStats = () => (
+    <View style={styles.engagementContainer}>
+      <View style={styles.engagementItem}>
+        <Ionicons name="heart" size={16} color="#FF6B6B" />
+        <Text style={styles.engagementText}>{engagementData.likes}</Text>
+      </View>
+      <View style={styles.engagementItem}>
+        <Ionicons name="eye" size={16} color="#666" />
+        <Text style={styles.engagementText}>{engagementData.views}</Text>
+      </View>
+      <View style={styles.engagementItem}>
+        <Ionicons name="chatbubble" size={16} color="#666" />
+        <Text style={styles.engagementText}>{engagementData.chats}</Text>
+      </View>
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Fullscreen Carousel Modal */}
@@ -102,7 +126,7 @@ Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium dolor
           <TouchableOpacity
             style={styles.closeButton}
             onPress={handleCloseFullscreen}>
-            <Icon name="close" size={24} color="white" />
+            <Ionicons name="close" size={24} color="white" />
           </TouchableOpacity>
           
           <Carousel
@@ -142,7 +166,7 @@ Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium dolor
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.headerButton} onPress={handleBack}>
-          <Icon name="chevron-left" size={24} color="#000" />
+          <Ionicons name="chevron-back" size={24} color="#000" />
         </TouchableOpacity>
 
         <View style={styles.sellerInfo}>
@@ -155,10 +179,10 @@ Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium dolor
 
         <View style={styles.headerActions}>
           <TouchableOpacity style={styles.headerButton} onPress={handleHome}>
-            <Icon name="home" size={24} color="#000" />
+            <Ionicons name="home" size={24} color="#000" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.headerButton}>
-            <Icon name="more-vert" size={24} color="#000" />
+            <Ionicons name="ellipsis-vertical" size={24} color="#000" />
           </TouchableOpacity>
         </View>
       </View>
@@ -200,6 +224,7 @@ Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium dolor
         {/* Product Info */}
         <View style={styles.productInfo}>
           <Text style={styles.productTitle}>{item.title}</Text>
+          <EngagementStats />
           <Text style={styles.productDescription}>{item.description}</Text>
         </View>
       </ScrollView>
@@ -208,14 +233,14 @@ Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium dolor
       <View style={styles.bottomBar}>
         <View style={styles.bottomLeft}>
           <TouchableOpacity style={styles.actionButton} onPress={handleLike}>
-            <Icon
-              name={isLiked ? 'favorite' : 'favorite-border'}
+            <Ionicons
+              name={isLiked ? 'heart' : 'heart-outline'}
               size={24}
               color={isLiked ? '#FF6B6B' : '#666'}
             />
           </TouchableOpacity>
           <TouchableOpacity style={styles.actionButton} onPress={handleShare}>
-            <Icon name="share" size={24} color="#666" />
+            <Ionicons name="share-outline" size={24} color="#666" />
           </TouchableOpacity>
         </View>
 
@@ -319,7 +344,24 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: '#000',
+    marginBottom: theme.spacing.sm,
+  },
+  engagementContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  engagementItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: theme.spacing.lg,
+  },
+  engagementText: {
+    fontSize: 14,
+    color: '#666',
+    marginLeft: 4,
+    fontWeight: '500',
   },
   productDescription: {
     fontSize: 16,
