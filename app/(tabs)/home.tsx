@@ -1,16 +1,16 @@
 // app/(tabs)/home.tsx - Main screen with product list
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  FlatList,
-  StatusBar,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
-  View
+    FlatList,
+    StatusBar,
+    StyleSheet,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/MaterialIcons';
 import { theme } from '../../utils/theme';
 
 import ProductCard from '../../components/molecules/ProductCard';
@@ -52,11 +52,15 @@ export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const router = useRouter();
 
-  const handleProductPress = (item) => {
+  const handleProductPress = (item: any) => {
     router.push('/item-details');
   };
 
-  const renderProduct = ({ item }) => (
+  const handlePostItem = () => {
+    router.push('/post-item');
+  };
+
+  const renderProduct = ({ item }: { item: any }) => (
     <ProductCard {...item} onPress={() => handleProductPress(item)} />
   );
 
@@ -76,10 +80,10 @@ export default function HomeScreen() {
           editable={false}
         />
         <TouchableOpacity style={styles.searchIcon}>
-          <Icon name="search" size={24} color={theme.colors.gray} />
+          <Ionicons name="search" size={24} color={theme.colors.gray} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.notificationIcon}>
-          <Icon name="notifications" size={24} color={theme.colors.gray} />
+          <Ionicons name="notifications" size={24} color={theme.colors.gray} />
         </TouchableOpacity>
       </View>
 
@@ -94,8 +98,8 @@ export default function HomeScreen() {
       />
 
       {/* Floating Action Button */}
-      <TouchableOpacity style={styles.fab}>
-        <Icon name="add" size={24} color="white" />
+      <TouchableOpacity style={styles.fab} onPress={handlePostItem}>
+        <Ionicons name="add" size={24} color="white" />
       </TouchableOpacity>
     </SafeAreaView>
   );
