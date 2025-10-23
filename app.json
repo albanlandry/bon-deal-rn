@@ -23,7 +23,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.malbanjunior.bondeal"
+      "package": "com.gabtech.bondeal"
     },
     "web": {
       "bundler": "metro",
