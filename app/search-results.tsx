@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
     FlatList,
+    ScrollView,
     StatusBar,
     StyleSheet,
     Text,
@@ -142,7 +143,7 @@ export default function SearchResultsScreen() {
     const [filters, setFilters] = useState(filterOptions);
     const [sortOptions, setSortOptions] = useState(defaultSortOptions);
     const [activeSort, setActiveSort] = useState<SortType>('relevance');
-    const [showSortModal, setShowSortModal] = useState(false);
+    const [showDrawer, setShowDrawer] = useState(false);
 
     // Handle filter selection
     const handleFilterPress = (filterId: string) => {
@@ -166,7 +167,6 @@ export default function SearchResultsScreen() {
             }))
         );
         setActiveSort(sortId);
-        setShowSortModal(false);
         
         // Apply sort logic here
         console.log('Sort applied:', sortId);
@@ -189,26 +189,6 @@ export default function SearchResultsScreen() {
             >
                 {item.label}
             </Text>
-        </TouchableOpacity>
-    );
-
-    // Render sort option
-    const renderSortOption = ({ item }: { item: SortOption }) => (
-        <TouchableOpacity
-            style={styles.sortOption}
-            onPress={() => handleSortPress(item.id)}
-        >
-            <Text
-                style={[
-                    styles.sortOptionText,
-                    item.active && styles.sortOptionActive
-                ]}
-            >
-                {item.label}
-            </Text>
-            {item.active && (
-                <Ionicons name="checkmark" size={20} color={theme.colors.primary} />
-            )}
         </TouchableOpacity>
     );
 
@@ -236,7 +216,7 @@ export default function SearchResultsScreen() {
                     <Text style={styles.headerTitle}>Résultats de recherche</Text>
                     <Text style={styles.searchQuery}>"{query || 'Recherche'}"</Text>
                 </View>
-                <TouchableOpacity style={styles.filterButton}>
+                <TouchableOpacity style={styles.filterButton} onPress={() => setShowDrawer(true)}>
                     <Ionicons name="options-outline" size={24} color={theme.colors.gray} />
                 </TouchableOpacity>
             </View>
@@ -260,18 +240,6 @@ export default function SearchResultsScreen() {
                 />
             </View>
 
-            {/* Sort Row */}
-            <View style={styles.sortContainer}>
-                <Text style={styles.sortLabel}>Trier par:</Text>
-                <TouchableOpacity 
-                    style={styles.sortButton}
-                    onPress={() => setShowSortModal(true)}
-                >
-                    <Text style={styles.sortButtonText}>{getActiveSortLabel()}</Text>
-                    <Ionicons name="chevron-down" size={16} color={theme.colors.gray} />
-                </TouchableOpacity>
-            </View>
-
             {/* Search Results */}
             <FlatList
                 data={searchResults}
@@ -291,26 +259,101 @@ export default function SearchResultsScreen() {
                 }
             />
 
-            {/* Sort Modal */}
-            {showSortModal && (
-                <View style={styles.sortModalOverlay}>
+            {/* Right Drawer Menu */}
+            {showDrawer && (
+                <View style={styles.drawerOverlay}>
                     <TouchableOpacity 
-                        style={styles.sortModalBackdrop}
-                        onPress={() => setShowSortModal(false)}
+                        style={styles.drawerBackdrop}
+                        onPress={() => setShowDrawer(false)}
                     />
-                    <View style={styles.sortModal}>
-                        <View style={styles.sortModalHeader}>
-                            <Text style={styles.sortModalTitle}>Trier par</Text>
-                            <TouchableOpacity onPress={() => setShowSortModal(false)}>
+                    <View style={styles.drawer}>
+                        {/* Drawer Header */}
+                        <View style={styles.drawerHeader}>
+                            <Text style={styles.drawerTitle}>Filtres & Tri</Text>
+                            <TouchableOpacity onPress={() => setShowDrawer(false)}>
                                 <Ionicons name="close" size={24} color={theme.colors.gray} />
                             </TouchableOpacity>
                         </View>
-                        <FlatList
-                            data={sortOptions}
-                            renderItem={renderSortOption}
-                            keyExtractor={(item) => item.id}
-                            style={styles.sortOptionsList}
-                        />
+
+                        {/* Scrollable Content */}
+                        <ScrollView 
+                            style={styles.drawerContent}
+                            showsVerticalScrollIndicator={false}
+                            bounces={false}
+                        >
+                            {/* Sort Section */}
+                            <View style={styles.drawerSection}>
+                                <Text style={styles.drawerSectionTitle}>Trier par</Text>
+                                <View style={styles.drawerOptions}>
+                                    {sortOptions.map((option) => (
+                                        <TouchableOpacity
+                                            key={option.id}
+                                            style={styles.drawerOption}
+                                            onPress={() => handleSortPress(option.id)}
+                                        >
+                                            <Text
+                                                style={[
+                                                    styles.drawerOptionText,
+                                                    option.active && styles.drawerOptionActive
+                                                ]}
+                                            >
+                                                {option.label}
+                                            </Text>
+                                            {option.active && (
+                                                <Ionicons name="checkmark" size={20} color={theme.colors.primary} />
+                                            )}
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            </View>
+
+                            {/* Advanced Filters Section */}
+                            <View style={styles.drawerSection}>
+                                <Text style={styles.drawerSectionTitle}>Filtres avancés</Text>
+                                <View style={styles.drawerOptions}>
+                                    {filters.map((filter) => (
+                                        <TouchableOpacity
+                                            key={filter.id}
+                                            style={styles.drawerOption}
+                                            onPress={() => handleFilterPress(filter.id)}
+                                        >
+                                            <Text
+                                                style={[
+                                                    styles.drawerOptionText,
+                                                    filter.active && styles.drawerOptionActive
+                                                ]}
+                                            >
+                                                {filter.label}
+                                            </Text>
+                                            {filter.active && (
+                                                <Ionicons name="checkmark" size={20} color={theme.colors.primary} />
+                                            )}
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            </View>
+                        </ScrollView>
+
+                        {/* Drawer Actions */}
+                        <View style={styles.drawerActions}>
+                            <TouchableOpacity 
+                                style={styles.drawerActionButton}
+                                onPress={() => {
+                                    // Reset all filters
+                                    setFilters(filterOptions);
+                                    setSortOptions(defaultSortOptions);
+                                    setActiveSort('relevance');
+                                }}
+                            >
+                                <Text style={styles.drawerActionText}>Réinitialiser</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity 
+                                style={[styles.drawerActionButton, styles.drawerActionPrimary]}
+                                onPress={() => setShowDrawer(false)}
+                            >
+                                <Text style={styles.drawerActionPrimaryText}>Appliquer</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 </View>
             )}
@@ -392,34 +435,111 @@ const styles = StyleSheet.create({
     filterTextActive: {
         color: theme.colors.white,
     },
-    sortContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: theme.spacing.lg,
-        paddingVertical: theme.spacing.md,
+    // Right Drawer styles
+    drawerOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 1000,
+    },
+    drawerBackdrop: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    },
+    drawer: {
+        position: 'absolute',
+        top: 0,
+        right: 0,
+        bottom: 0,
+        width: '80%',
         backgroundColor: theme.colors.white,
+        shadowColor: '#000',
+        shadowOffset: { width: -2, height: 0 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 8,
+        flex: 1,
+    },
+    drawerHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: theme.spacing.lg,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.grayLight,
+        backgroundColor: '#F8F9FA',
+    },
+    drawerContent: {
+        flex: 1,
+    },
+    drawerTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#333',
+    },
+    drawerSection: {
+        padding: theme.spacing.lg,
         borderBottomWidth: 1,
         borderBottomColor: theme.colors.grayLight,
     },
-    sortLabel: {
+    drawerSectionTitle: {
         fontSize: 16,
         fontWeight: '600',
         color: '#333',
+        marginBottom: theme.spacing.md,
     },
-    sortButton: {
+    drawerOptions: {
+        gap: theme.spacing.sm,
+    },
+    drawerOption: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#F8F9FA',
+        justifyContent: 'space-between',
+        paddingVertical: theme.spacing.md,
+        paddingHorizontal: theme.spacing.sm,
         borderRadius: 8,
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: 8,
+        backgroundColor: '#F8F9FA',
     },
-    sortButtonText: {
-        fontSize: 14,
+    drawerOptionText: {
+        fontSize: 16,
         color: '#333',
         fontWeight: '500',
-        marginRight: theme.spacing.sm,
+    },
+    drawerOptionActive: {
+        color: theme.colors.primary,
+        fontWeight: '600',
+    },
+    drawerActions: {
+        flexDirection: 'row',
+        padding: theme.spacing.lg,
+        gap: theme.spacing.md,
+        borderTopWidth: 1,
+        borderTopColor: theme.colors.grayLight,
+        backgroundColor: '#F8F9FA',
+    },
+    drawerActionButton: {
+        flex: 1,
+        paddingVertical: theme.spacing.md,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: theme.colors.grayLight,
+        alignItems: 'center',
+    },
+    drawerActionPrimary: {
+        backgroundColor: theme.colors.primary,
+        borderColor: theme.colors.primary,
+    },
+    drawerActionText: {
+        fontSize: 16,
+        color: theme.colors.gray,
+        fontWeight: '600',
+    },
+    drawerActionPrimaryText: {
+        fontSize: 16,
+        color: theme.colors.white,
+        fontWeight: '600',
     },
     resultsList: {
         paddingTop: theme.spacing.md,
@@ -434,7 +554,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         paddingHorizontal: theme.spacing.xl,
-        paddingVertical: theme.spacing.xxl,
+        paddingVertical: theme.spacing.xl,
     },
     emptyTitle: {
         fontSize: 18,
@@ -448,62 +568,5 @@ const styles = StyleSheet.create({
         color: theme.colors.gray,
         textAlign: 'center',
         lineHeight: 20,
-    },
-    // Sort Modal styles
-    sortModalOverlay: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        zIndex: 1000,
-    },
-    sortModalBackdrop: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    },
-    sortModal: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        backgroundColor: theme.colors.white,
-        borderTopLeftRadius: 16,
-        borderTopRightRadius: 16,
-        maxHeight: '50%',
-    },
-    sortModalHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: theme.spacing.lg,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.grayLight,
-    },
-    sortModalTitle: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: '#333',
-    },
-    sortOptionsList: {
-        maxHeight: 300,
-    },
-    sortOption: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: theme.spacing.lg,
-        paddingVertical: theme.spacing.md,
-        borderBottomWidth: 1,
-        borderBottomColor: theme.colors.grayLight,
-    },
-    sortOptionText: {
-        fontSize: 16,
-        color: '#333',
-        fontWeight: '500',
-    },
-    sortOptionActive: {
-        color: theme.colors.primary,
-        fontWeight: '600',
     },
 });
