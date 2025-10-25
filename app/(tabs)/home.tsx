@@ -1,15 +1,16 @@
 // app/(tabs)/home.tsx - Main screen with product list
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    FlatList,
-    RefreshControl,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  FlatList,
+  Image,
+  RefreshControl,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../../utils/theme';
@@ -142,12 +143,49 @@ const categories = [
   { id: 'Education', name: 'Éducation', icon: 'book-outline' },
 ];
 
+// Mock user data
+const currentUser = {
+  name: 'Jean Baptiste',
+  avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face',
+  location: 'Akebe, Libreville',
+  notificationCount: 3,
+};
+
+// Get personalized greeting based on time
+const getGreeting = () => {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Bonjour';
+  if (hour < 18) return 'Bon après-midi';
+  return 'Bonsoir';
+};
+
 export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [refreshing, setRefreshing] = useState(false);
   const [filteredData, setFilteredData] = useState(mockData);
+  const [currentLocation, setCurrentLocation] = useState(currentUser.location);
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const categoryListRef = useRef<FlatList>(null);
   const router = useRouter();
+
+  // Initial scroll to selected category on mount
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (categoryListRef.current) {
+        const categoryIndex = categories.findIndex(cat => cat.id === selectedCategory);
+        if (categoryIndex !== -1) {
+          categoryListRef.current.scrollToIndex({
+            index: categoryIndex,
+            animated: false, // No animation on initial load
+            viewPosition: 0.5,
+          });
+        }
+      }
+    }, 100); // Small delay to ensure FlatList is rendered
+
+    return () => clearTimeout(timer);
+  }, []);
 
   // Filter data based on selected category
   const filterData = useCallback((category: string) => {
@@ -159,10 +197,20 @@ export default function HomeScreen() {
     }
   }, []);
 
-  // Handle category selection
+  // Handle category selection with scroll
   const handleCategoryPress = (categoryId: string) => {
     setSelectedCategory(categoryId);
     filterData(categoryId);
+    
+    // Scroll to selected category
+    const categoryIndex = categories.findIndex(cat => cat.id === categoryId);
+    if (categoryIndex !== -1 && categoryListRef.current) {
+      categoryListRef.current.scrollToIndex({
+        index: categoryIndex,
+        animated: true,
+        viewPosition: 0.5, // Center the item in the view
+      });
+    }
   };
 
   // Pull to refresh functionality
@@ -176,6 +224,39 @@ export default function HomeScreen() {
     }, 1500);
   }, []);
 
+  // Handle location picker
+  const handleLocationPress = () => {
+    // In a real app, this would open a location picker modal
+    console.log('Open location picker');
+    // For demo, cycle through some locations
+    const locations = [
+      'Akebe, Libreville',
+      'Centre-ville, Libreville',
+      'Nkembo, Libreville',
+      'Montagne Sainte, Libreville'
+    ];
+    const currentIndex = locations.indexOf(currentLocation);
+    const nextIndex = (currentIndex + 1) % locations.length;
+    setCurrentLocation(locations[nextIndex]);
+  };
+
+  // Handle notification press
+  const handleNotificationPress = () => {
+    console.log('Navigate to notifications');
+    // In a real app, navigate to notifications screen
+  };
+
+  // Handle profile press
+  const handleProfilePress = () => {
+    console.log('Navigate to profile');
+    // In a real app, navigate to profile screen
+  };
+
+  // Handle view mode toggle
+  const handleViewModeToggle = (mode: 'list' | 'grid') => {
+    setViewMode(mode);
+  };
+
   const handleProductPress = (item: any) => {
     router.push('/item-details');
   };
@@ -186,6 +267,31 @@ export default function HomeScreen() {
 
   const renderProduct = ({ item }: { item: any }) => (
     <ProductCard {...item} onPress={() => handleProductPress(item)} />
+  );
+
+  const renderGridProduct = ({ item }: { item: any }) => (
+    <View style={styles.gridItem}>
+      <TouchableOpacity style={styles.gridProductCard} onPress={() => handleProductPress(item)}>
+        {item.imageUrl && (
+          <Image source={{ uri: item.imageUrl }} style={styles.gridImage} resizeMode="cover" />
+        )}
+        <View style={styles.gridContent}>
+          <Text style={styles.gridTitle} numberOfLines={2}>{item.title}</Text>
+          <Text style={styles.gridLocation} numberOfLines={1}>{item.location}</Text>
+          <Text style={styles.gridPrice}>{item.price}</Text>
+          <View style={styles.gridActions}>
+            <View style={styles.gridActionItem}>
+              <Ionicons name="heart-outline" size={12} color="#666" />
+              <Text style={styles.gridActionText}>{item.likes}</Text>
+            </View>
+            <View style={styles.gridActionItem}>
+              <Ionicons name="eye-outline" size={12} color="#666" />
+              <Text style={styles.gridActionText}>{item.views}</Text>
+            </View>
+          </View>
+        </View>
+      </TouchableOpacity>
+    </View>
   );
 
   const renderCategoryItem = ({ item }: { item: any }) => (
@@ -216,48 +322,102 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={theme.colors.white} />
       
-      {/* Header */}
+      {/* Enhanced Header */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.welcomeText}>Bonjour !</Text>
-          <Text style={styles.locationText}>Akebe, Libreville</Text>
-        </View>
-        <TouchableOpacity style={styles.notificationIcon}>
-          <Ionicons name="notifications-outline" size={24} color={theme.colors.gray} />
-          <View style={styles.notificationBadge}>
-            <Text style={styles.badgeText}>3</Text>
+        <View style={styles.headerLeft}>
+          <TouchableOpacity style={styles.profileContainer} onPress={handleProfilePress}>
+            <Image source={{ uri: currentUser.avatar }} style={styles.userAvatar} />
+            <View style={styles.onlineIndicator} />
+          </TouchableOpacity>
+          <View style={styles.welcomeContainer}>
+            <Text style={styles.greetingText}>{getGreeting()},</Text>
+            <Text style={styles.userName}>{currentUser.name}</Text>
           </View>
-        </TouchableOpacity>
+        </View>
+        <View style={styles.headerRight}>
+          <TouchableOpacity style={styles.searchIconContainer} onPress={() => router.push('/search')}>
+            <Ionicons name="search-outline" size={24} color={theme.colors.gray} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.notificationContainer} onPress={handleNotificationPress}>
+            <Ionicons name="notifications-outline" size={24} color={theme.colors.gray} />
+            {currentUser.notificationCount > 0 && (
+              <View style={styles.notificationBadge}>
+                <Text style={styles.badgeText}>{currentUser.notificationCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <TouchableOpacity style={styles.searchButton} onPress={() => router.push('/search')}>
-          <Ionicons name="search" size={20} color={theme.colors.gray} />
-          <Text style={styles.searchPlaceholder}>Rechercher des articles...</Text>
+      {/* Location Bar with View Toggle */}
+      <View style={styles.locationBar}>
+        <TouchableOpacity style={styles.locationContainer} onPress={handleLocationPress}>
+          <Ionicons name="location-outline" size={16} color={theme.colors.primary} />
+          <Text style={styles.locationText}>{currentLocation}</Text>
+          <Ionicons name="chevron-down" size={14} color={theme.colors.gray} />
         </TouchableOpacity>
+        <View style={styles.viewToggleContainer}>
+          <TouchableOpacity 
+            style={[styles.viewToggleButton, viewMode === 'list' && styles.viewToggleActive]} 
+            onPress={() => handleViewModeToggle('list')}
+          >
+            <Ionicons 
+              name="list-outline" 
+              size={18} 
+              color={viewMode === 'list' ? theme.colors.white : theme.colors.gray} 
+            />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.viewToggleButton, viewMode === 'grid' && styles.viewToggleActive]} 
+            onPress={() => handleViewModeToggle('grid')}
+          >
+            <Ionicons 
+              name="grid-outline" 
+              size={18} 
+              color={viewMode === 'grid' ? theme.colors.white : theme.colors.gray} 
+            />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Category Filters */}
       <View style={styles.categoryContainer}>
         <FlatList
+          ref={categoryListRef}
           data={categories}
           renderItem={renderCategoryItem}
           keyExtractor={(item) => item.id}
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.categoryList}
+          onScrollToIndexFailed={(info) => {
+            // Handle scroll failure gracefully
+            console.log('Scroll to index failed:', info);
+            const wait = new Promise(resolve => setTimeout(resolve, 500));
+            wait.then(() => {
+              categoryListRef.current?.scrollToIndex({
+                index: info.index,
+                animated: true,
+                viewPosition: 0.5,
+              });
+            });
+          }}
         />
       </View>
 
       {/* Product List */}
       <FlatList
         data={filteredData}
-        renderItem={renderProduct}
+        renderItem={viewMode === 'list' ? renderProduct : renderGridProduct}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContainer}
+        contentContainerStyle={[
+          styles.listContainer,
+          viewMode === 'grid' && styles.gridContainer
+        ]}
         showsVerticalScrollIndicator={false}
-        ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
+        ItemSeparatorComponent={() => viewMode === 'list' ? <View style={styles.itemSeparator} /> : null}
+        numColumns={viewMode === 'grid' ? 2 : 1}
+        key={viewMode} // Force re-render when view mode changes
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -289,17 +449,55 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.md,
     backgroundColor: theme.colors.white,
   },
-  welcomeText: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#333',
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  profileContainer: {
+    position: 'relative',
+    marginRight: theme.spacing.md,
+  },
+  userAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: theme.colors.primary,
+  },
+  onlineIndicator: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: theme.colors.success,
+    borderWidth: 2,
+    borderColor: theme.colors.white,
+  },
+  welcomeContainer: {
+    flex: 1,
+  },
+  greetingText: {
+    fontSize: 16,
+    color: theme.colors.gray,
     marginBottom: 2,
   },
-  locationText: {
-    fontSize: 14,
-    color: theme.colors.gray,
+  userName: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#333',
   },
-  notificationIcon: {
+  searchIconContainer: {
+    padding: theme.spacing.sm,
+    marginRight: theme.spacing.xs,
+  },
+  notificationContainer: {
     position: 'relative',
     padding: theme.spacing.sm,
   },
@@ -319,23 +517,42 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  searchContainer: {
+  locationBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: theme.spacing.lg,
-    paddingBottom: theme.spacing.md,
+    paddingBottom: theme.spacing.sm,
     backgroundColor: theme.colors.white,
   },
-  searchButton: {
+  locationContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F8F9FA',
-    borderRadius: 12,
+    borderRadius: 20,
     paddingHorizontal: theme.spacing.md,
-    paddingVertical: 12,
+    paddingVertical: 8,
   },
-  searchPlaceholder: {
-    fontSize: 15,
-    color: theme.colors.gray,
-    marginLeft: theme.spacing.sm,
+  locationText: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '500',
+    marginHorizontal: 6,
+  },
+  viewToggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#F8F9FA',
+    borderRadius: 20,
+    padding: 2,
+  },
+  viewToggleButton: {
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 8,
+    borderRadius: 18,
+    marginHorizontal: 2,
+  },
+  viewToggleActive: {
+    backgroundColor: theme.colors.primary,
   },
   categoryContainer: {
     backgroundColor: theme.colors.white,
@@ -372,9 +589,67 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.md,
     paddingBottom: 100, // Space for FAB
   },
+  gridContainer: {
+    paddingHorizontal: theme.spacing.md,
+    paddingTop: theme.spacing.md,
+    paddingBottom: 100, // Space for FAB
+  },
   itemSeparator: {
     height: 1,
     backgroundColor: theme.colors.grayLight,
+  },
+  gridItem: {
+    flex: 1,
+    marginHorizontal: theme.spacing.xs,
+    marginBottom: theme.spacing.md,
+  },
+  gridProductCard: {
+    backgroundColor: theme.colors.white,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    overflow: 'hidden',
+  },
+  gridImage: {
+    width: '100%',
+    height: 120,
+  },
+  gridContent: {
+    padding: theme.spacing.sm,
+  },
+  gridTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+    lineHeight: 16,
+  },
+  gridLocation: {
+    fontSize: 11,
+    color: '#666',
+    marginBottom: 4,
+  },
+  gridPrice: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: theme.colors.success,
+    marginBottom: 8,
+  },
+  gridActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  gridActionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  gridActionText: {
+    fontSize: 10,
+    color: '#666',
+    marginLeft: 4,
   },
   fab: {
     position: 'absolute',
