@@ -49,8 +49,11 @@ export default function SearchScreen() {
       // Simulate search API call
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      // Navigate to search results or perform search
-      console.log('Searching for:', searchQuery);
+      // Navigate to search results
+      router.push({
+        pathname: '/search-results',
+        params: { query: searchQuery.trim() }
+      });
       setIsLoading(false);
     }
   };
