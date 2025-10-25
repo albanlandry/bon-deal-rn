@@ -2,13 +2,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-    FlatList,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  FlatList,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../utils/theme';
@@ -33,16 +34,24 @@ const suggestions = [
 export default function SearchScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [recentItems, setRecentItems] = useState(recentSearches);
+  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
-  const handleSearch = () => {
+  const handleSearch = async () => {
     if (searchQuery.trim()) {
+      setIsLoading(true);
+      
       // Add to recent searches if not already present
       if (!recentItems.includes(searchQuery.trim())) {
         setRecentItems([searchQuery.trim(), ...recentItems.slice(0, 4)]);
       }
+      
+      // Simulate search API call
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
       // Navigate to search results or perform search
       console.log('Searching for:', searchQuery);
+      setIsLoading(false);
     }
   };
 
@@ -102,6 +111,13 @@ export default function SearchScreen() {
             autoFocus={true}
             returnKeyType="search"
           />
+          {isLoading && (
+            <ActivityIndicator 
+              size="small" 
+              color={theme.colors.primary} 
+              style={styles.loadingIndicator}
+            />
+          )}
         </View>
         <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
           <Text style={styles.cancelText}>Annuler</Text>
@@ -226,5 +242,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
     fontWeight: '500',
+  },
+  loadingIndicator: {
+    marginLeft: theme.spacing.sm,
   },
 });

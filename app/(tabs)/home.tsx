@@ -166,6 +166,8 @@ export default function HomeScreen() {
   const [filteredData, setFilteredData] = useState(mockData);
   const [currentLocation, setCurrentLocation] = useState(currentUser.location);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [isLoading, setIsLoading] = useState(true);
+  const [showProfileQuickAccess, setShowProfileQuickAccess] = useState(false);
   const categoryListRef = useRef<FlatList>(null);
   const router = useRouter();
 
@@ -185,6 +187,18 @@ export default function HomeScreen() {
     }, 100); // Small delay to ensure FlatList is rendered
 
     return () => clearTimeout(timer);
+  }, []);
+
+  // Simulate initial data loading
+  useEffect(() => {
+    const loadData = async () => {
+      setIsLoading(true);
+      // Simulate API call delay
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      setIsLoading(false);
+    };
+    
+    loadData();
   }, []);
 
   // Filter data based on selected category
@@ -242,14 +256,31 @@ export default function HomeScreen() {
 
   // Handle notification press
   const handleNotificationPress = () => {
-    console.log('Navigate to notifications');
-    // In a real app, navigate to notifications screen
+    router.push('/notifications');
   };
 
   // Handle profile press
   const handleProfilePress = () => {
-    console.log('Navigate to profile');
-    // In a real app, navigate to profile screen
+    setShowProfileQuickAccess(true);
+  };
+
+  // Handle profile quick access actions
+  const handleProfileAction = (action: string) => {
+    setShowProfileQuickAccess(false);
+    switch (action) {
+      case 'profile':
+        router.push('/(tabs)/profile');
+        break;
+      case 'settings':
+        console.log('Navigate to settings');
+        break;
+      case 'help':
+        console.log('Navigate to help');
+        break;
+      case 'logout':
+        console.log('Logout user');
+        break;
+    }
   };
 
   // Handle view mode toggle
@@ -316,6 +347,121 @@ export default function HomeScreen() {
         {item.name}
       </Text>
     </TouchableOpacity>
+  );
+
+  // Loading skeleton components
+  const renderSkeletonItem = () => (
+    <View style={styles.skeletonItem}>
+      <View style={styles.skeletonImage} />
+      <View style={styles.skeletonContent}>
+        <View style={styles.skeletonTitle} />
+        <View style={styles.skeletonLocation} />
+        <View style={styles.skeletonPrice} />
+        <View style={styles.skeletonActions} />
+      </View>
+    </View>
+  );
+
+  const renderGridSkeletonItem = () => (
+    <View style={styles.gridItem}>
+      <View style={styles.gridSkeletonCard}>
+        <View style={styles.gridSkeletonImage} />
+        <View style={styles.gridSkeletonContent}>
+          <View style={styles.gridSkeletonTitle} />
+          <View style={styles.gridSkeletonLocation} />
+          <View style={styles.gridSkeletonPrice} />
+        </View>
+      </View>
+    </View>
+  );
+
+  // Profile Quick Access Modal
+  const renderProfileQuickAccess = () => (
+    <View style={styles.profileQuickAccessOverlay}>
+      <TouchableOpacity 
+        style={styles.profileQuickAccessBackdrop} 
+        onPress={() => setShowProfileQuickAccess(false)}
+      />
+      <View style={styles.profileQuickAccessModal}>
+        {/* Profile Header */}
+        <View style={styles.profileQuickAccessHeader}>
+          <Image source={{ uri: currentUser.avatar }} style={styles.profileQuickAccessAvatar} />
+          <View style={styles.profileQuickAccessInfo}>
+            <Text style={styles.profileQuickAccessName}>{currentUser.name}</Text>
+            <Text style={styles.profileQuickAccessLocation}>{currentUser.location}</Text>
+          </View>
+          <TouchableOpacity 
+            style={styles.profileQuickAccessClose}
+            onPress={() => setShowProfileQuickAccess(false)}
+          >
+            <Ionicons name="close" size={24} color={theme.colors.gray} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Quick Stats */}
+        <View style={styles.profileQuickStats}>
+          <View style={styles.profileQuickStat}>
+            <Text style={styles.profileQuickStatNumber}>12</Text>
+            <Text style={styles.profileQuickStatLabel}>Annonces</Text>
+          </View>
+          <View style={styles.profileQuickStat}>
+            <Text style={styles.profileQuickStatNumber}>8</Text>
+            <Text style={styles.profileQuickStatLabel}>Vendus</Text>
+          </View>
+          <View style={styles.profileQuickStat}>
+            <Text style={styles.profileQuickStatNumber}>24</Text>
+            <Text style={styles.profileQuickStatLabel}>Favoris</Text>
+          </View>
+        </View>
+
+        {/* Quick Actions */}
+        <View style={styles.profileQuickActions}>
+          <TouchableOpacity 
+            style={styles.profileQuickAction}
+            onPress={() => handleProfileAction('profile')}
+          >
+            <View style={styles.profileQuickActionIcon}>
+              <Ionicons name="person-outline" size={20} color={theme.colors.primary} />
+            </View>
+            <Text style={styles.profileQuickActionText}>Mon Profil</Text>
+            <Ionicons name="chevron-forward" size={16} color={theme.colors.gray} />
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.profileQuickAction}
+            onPress={() => handleProfileAction('settings')}
+          >
+            <View style={styles.profileQuickActionIcon}>
+              <Ionicons name="settings-outline" size={20} color={theme.colors.gray} />
+            </View>
+            <Text style={styles.profileQuickActionText}>Paramètres</Text>
+            <Ionicons name="chevron-forward" size={16} color={theme.colors.gray} />
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.profileQuickAction}
+            onPress={() => handleProfileAction('help')}
+          >
+            <View style={styles.profileQuickActionIcon}>
+              <Ionicons name="help-circle-outline" size={20} color={theme.colors.gray} />
+            </View>
+            <Text style={styles.profileQuickActionText}>Aide & Support</Text>
+            <Ionicons name="chevron-forward" size={16} color={theme.colors.gray} />
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.profileQuickAction}
+            onPress={() => handleProfileAction('logout')}
+          >
+            <View style={styles.profileQuickActionIcon}>
+              <Ionicons name="log-out-outline" size={20} color="#FF3B30" />
+            </View>
+            <Text style={[styles.profileQuickActionText, styles.profileQuickActionDanger]}>Se déconnecter</Text>
+            <Ionicons name="chevron-forward" size={16} color={theme.colors.gray} />
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
   );
 
   return (
@@ -407,15 +553,15 @@ export default function HomeScreen() {
 
       {/* Product List */}
       <FlatList
-        data={filteredData}
-        renderItem={viewMode === 'list' ? renderProduct : renderGridProduct}
-        keyExtractor={(item) => item.id}
+        data={isLoading ? Array(6).fill({}) : filteredData}
+        renderItem={isLoading ? (viewMode === 'list' ? renderSkeletonItem : renderGridSkeletonItem) : (viewMode === 'list' ? renderProduct : renderGridProduct)}
+        keyExtractor={(item, index) => isLoading ? `skeleton-${index}` : item.id}
         contentContainerStyle={[
           styles.listContainer,
           viewMode === 'grid' && styles.gridContainer
         ]}
         showsVerticalScrollIndicator={false}
-        ItemSeparatorComponent={() => viewMode === 'list' ? <View style={styles.itemSeparator} /> : null}
+        ItemSeparatorComponent={() => viewMode === 'list' && !isLoading ? <View style={styles.itemSeparator} /> : null}
         numColumns={viewMode === 'grid' ? 2 : 1}
         key={viewMode} // Force re-render when view mode changes
         refreshControl={
@@ -432,6 +578,9 @@ export default function HomeScreen() {
       <TouchableOpacity style={styles.fab} onPress={handlePostItem}>
         <Ionicons name="add" size={24} color="white" />
       </TouchableOpacity>
+
+      {/* Profile Quick Access Modal */}
+      {showProfileQuickAccess && renderProfileQuickAccess()}
     </SafeAreaView>
   );
 }
@@ -650,6 +799,186 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#666',
     marginLeft: 4,
+  },
+  // Skeleton loading styles
+  skeletonItem: {
+    flexDirection: 'row',
+    backgroundColor: theme.colors.white,
+    marginHorizontal: theme.spacing.lg,
+    padding: theme.spacing.sm,
+    paddingVertical: theme.spacing.md,
+  },
+  skeletonImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 8,
+    backgroundColor: '#E0E0E0',
+    marginRight: theme.spacing.md,
+  },
+  skeletonContent: {
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  skeletonTitle: {
+    height: 16,
+    backgroundColor: '#E0E0E0',
+    borderRadius: 4,
+    marginBottom: 8,
+    width: '80%',
+  },
+  skeletonLocation: {
+    height: 12,
+    backgroundColor: '#E0E0E0',
+    borderRadius: 4,
+    marginBottom: 8,
+    width: '60%',
+  },
+  skeletonPrice: {
+    height: 16,
+    backgroundColor: '#E0E0E0',
+    borderRadius: 4,
+    marginBottom: 8,
+    width: '40%',
+  },
+  skeletonActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  gridSkeletonCard: {
+    backgroundColor: theme.colors.white,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  gridSkeletonImage: {
+    width: '100%',
+    height: 120,
+    backgroundColor: '#E0E0E0',
+  },
+  gridSkeletonContent: {
+    padding: theme.spacing.sm,
+  },
+  gridSkeletonTitle: {
+    height: 14,
+    backgroundColor: '#E0E0E0',
+    borderRadius: 4,
+    marginBottom: 4,
+    width: '90%',
+  },
+  gridSkeletonLocation: {
+    height: 11,
+    backgroundColor: '#E0E0E0',
+    borderRadius: 4,
+    marginBottom: 4,
+    width: '70%',
+  },
+  gridSkeletonPrice: {
+    height: 14,
+    backgroundColor: '#E0E0E0',
+    borderRadius: 4,
+    width: '50%',
+  },
+  // Profile Quick Access styles
+  profileQuickAccessOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1000,
+  },
+  profileQuickAccessBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  profileQuickAccessModal: {
+    position: 'absolute',
+    top: 100,
+    left: theme.spacing.lg,
+    right: theme.spacing.lg,
+    backgroundColor: theme.colors.white,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  profileQuickAccessHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: theme.spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.grayLight,
+  },
+  profileQuickAccessAvatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    marginRight: theme.spacing.md,
+  },
+  profileQuickAccessInfo: {
+    flex: 1,
+  },
+  profileQuickAccessName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 4,
+  },
+  profileQuickAccessLocation: {
+    fontSize: 14,
+    color: theme.colors.gray,
+  },
+  profileQuickAccessClose: {
+    padding: theme.spacing.sm,
+  },
+  profileQuickStats: {
+    flexDirection: 'row',
+    padding: theme.spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.grayLight,
+  },
+  profileQuickStat: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  profileQuickStatNumber: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: theme.colors.primary,
+    marginBottom: 4,
+  },
+  profileQuickStatLabel: {
+    fontSize: 12,
+    color: theme.colors.gray,
+    fontWeight: '500',
+  },
+  profileQuickActions: {
+    padding: theme.spacing.md,
+  },
+  profileQuickAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.sm,
+  },
+  profileQuickActionIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F8F9FA',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: theme.spacing.md,
+  },
+  profileQuickActionText: {
+    flex: 1,
+    fontSize: 16,
+    color: '#333',
+    fontWeight: '500',
+  },
+  profileQuickActionDanger: {
+    color: '#FF3B30',
   },
   fab: {
     position: 'absolute',

@@ -59,6 +59,7 @@ function RootLayoutNav() {
         <Stack.Screen name="item-details" options={{ headerShown: false }} />
         <Stack.Screen name="chatroom" options={{ headerShown: false }} />
         <Stack.Screen name="post-item" options={{ headerShown: false }} />
+        <Stack.Screen name="notifications" options={{ headerShown: false }} />
         <Stack.Screen 
           name="search" 
           options={{ 
