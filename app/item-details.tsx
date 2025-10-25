@@ -4,7 +4,9 @@ import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
   Dimensions,
+  FlatList,
   Image,
+  Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -23,6 +25,11 @@ interface ItemDetailsProps {
   title?: string;
   description?: string;
   price?: string;
+  location?: {
+    latitude: number;
+    longitude: number;
+    address: string;
+  };
   seller?: {
     name: string;
     avatar: string;
@@ -47,12 +54,53 @@ Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu 
 
 Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.`,
     price: '350000 FCFA',
+    location: {
+      latitude: 0.4162,
+      longitude: 9.4673,
+      address: 'Kinguele, Libreville, Gabon',
+    },
     seller: {
       name: 'user12345',
       avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop&crop=face',
       postedTime: "Publié il y'a 15 min",
     },
   };
+
+  // Mock suggested items data
+  const suggestedItems = [
+    {
+      id: '2',
+      imageUrl: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=300&h=200&fit=crop&crop=center',
+      title: 'MacBook Air M1 2020',
+      price: '280000 FCFA',
+      location: 'Libreville Centre',
+      status: 'available',
+    },
+    {
+      id: '3',
+      imageUrl: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=300&h=200&fit=crop&crop=center',
+      title: 'iPhone 12 Pro Max 128GB',
+      price: '320000 FCFA',
+      location: 'Akebe',
+      status: 'available',
+    },
+    {
+      id: '4',
+      imageUrl: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=300&h=200&fit=crop&crop=center',
+      title: 'iPad Pro 11" 2021',
+      price: '450000 FCFA',
+      location: 'Montagne Sainte',
+      status: 'sold',
+    },
+    {
+      id: '5',
+      imageUrl: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=300&h=200&fit=crop&crop=center',
+      title: 'Dell XPS 13 2021',
+      price: '380000 FCFA',
+      location: 'Nzeng Ayong',
+      status: 'available',
+    },
+  ];
 
   // Mock engagement data
   const engagementData = {
@@ -116,6 +164,35 @@ Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium dolor
         <Text style={styles.engagementText}>{engagementData.chats}</Text>
       </View>
     </View>
+  );
+
+  const handleOpenMap = () => {
+    if (item.location) {
+      const { latitude, longitude, address } = item.location;
+      const url = `https://maps.google.com/maps?q=${latitude},${longitude}&z=15`;
+      Linking.openURL(url);
+    }
+  };
+
+  const renderSuggestedItem = ({ item }: { item: any }) => (
+    <TouchableOpacity style={styles.suggestedItem} onPress={() => router.push('/item-details')}>
+      <View style={styles.suggestedImageContainer}>
+        <Image source={{ uri: item.imageUrl }} style={styles.suggestedImage} />
+        <View style={[
+          styles.suggestedStatusBadge,
+          { backgroundColor: item.status === 'available' ? '#34C759' : '#FF3B30' }
+        ]}>
+          <Text style={styles.suggestedStatusText}>
+            {item.status === 'available' ? 'Disponible' : 'Vendu'}
+          </Text>
+        </View>
+      </View>
+      <View style={styles.suggestedContent}>
+        <Text style={styles.suggestedTitle} numberOfLines={2}>{item.title}</Text>
+        <Text style={styles.suggestedLocation}>{item.location}</Text>
+        <Text style={styles.suggestedPrice}>{item.price}</Text>
+      </View>
+    </TouchableOpacity>
   );
 
   return (
@@ -187,7 +264,11 @@ Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium dolor
         </View>
       </View>
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.scrollView} 
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Image Carousel */}
         <View style={styles.imageContainer}>
           <Carousel
@@ -226,6 +307,36 @@ Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium dolor
           <Text style={styles.productTitle}>{item.title}</Text>
           <EngagementStats />
           <Text style={styles.productDescription}>{item.description}</Text>
+          
+          {/* Location Map */}
+          {item.location && (
+            <View style={styles.mapSection}>
+              <Text style={styles.sectionTitle}>Localisation</Text>
+              <TouchableOpacity style={styles.mapContainer} onPress={handleOpenMap}>
+                <View style={styles.mapPlaceholder}>
+                  <Ionicons name="location" size={48} color={theme.colors.primary} />
+                  <Text style={styles.mapPlaceholderText}>Appuyez pour voir sur la carte</Text>
+                  <Text style={styles.mapCoordinates}>
+                    {item.location.latitude.toFixed(4)}, {item.location.longitude.toFixed(4)}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+              <Text style={styles.locationAddress}>{item.location.address}</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Suggested Items */}
+        <View style={styles.suggestedSection}>
+          <Text style={styles.sectionTitle}>Articles similaires</Text>
+          <FlatList
+            data={suggestedItems}
+            renderItem={renderSuggestedItem}
+            keyExtractor={(item) => item.id}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.suggestedList}
+          />
         </View>
       </ScrollView>
 
@@ -308,6 +419,9 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
+  scrollContent: {
+    paddingBottom: theme.spacing.xl,
+  },
   imageContainer: {
     position: 'relative',
     marginBottom: theme.spacing.lg,
@@ -338,7 +452,7 @@ const styles = StyleSheet.create({
   },
   productInfo: {
     paddingHorizontal: theme.spacing.lg,
-    paddingBottom: 100, // Space for bottom bar
+    // paddingBottom: 100, // Space for bottom bar
   },
   productTitle: {
     fontSize: 24,
@@ -466,6 +580,110 @@ const styles = StyleSheet.create({
   },
   fullscreenPaginationDotActive: {
     backgroundColor: 'white',
+  },
+  // Map styles
+  mapSection: {
+    marginTop: theme.spacing.lg,
+    marginBottom: theme.spacing.lg,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  mapContainer: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: theme.spacing.sm,
+    backgroundColor: '#F8F9FA',
+    borderWidth: 1,
+    borderColor: theme.colors.grayLight,
+  },
+  mapPlaceholder: {
+    height: 200,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
+  },
+  mapPlaceholderText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.colors.primary,
+    marginTop: theme.spacing.sm,
+    marginBottom: theme.spacing.xs,
+  },
+  mapCoordinates: {
+    fontSize: 12,
+    color: theme.colors.gray,
+    fontWeight: '500',
+  },
+  locationAddress: {
+    fontSize: 14,
+    color: theme.colors.gray,
+    fontWeight: '500',
+  },
+  // Suggested items styles
+  suggestedSection: {
+    marginTop: theme.spacing.lg,
+    marginBottom: theme.spacing.xxxxxxxl,
+  },
+  suggestedList: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.lg,
+  },
+  suggestedItem: {
+    width: 160,
+    marginRight: theme.spacing.md,
+    backgroundColor: theme.colors.white,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    overflow: 'hidden',
+  },
+  suggestedImageContainer: {
+    position: 'relative',
+  },
+  suggestedImage: {
+    width: '100%',
+    height: 120,
+  },
+  suggestedStatusBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  suggestedStatusText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  suggestedContent: {
+    padding: theme.spacing.sm,
+  },
+  suggestedTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+    lineHeight: 18,
+  },
+  suggestedLocation: {
+    fontSize: 12,
+    color: theme.colors.gray,
+    marginBottom: 4,
+  },
+  suggestedPrice: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: theme.colors.primary,
   },
 });
 
