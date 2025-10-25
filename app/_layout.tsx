@@ -9,8 +9,8 @@ import 'react-native-reanimated';
 import { useColorScheme } from '@/components/useColorScheme';
 
 export {
-  // Catch any errors thrown by the Layout component.
-  ErrorBoundary
+    // Catch any errors thrown by the Layout component.
+    ErrorBoundary
 } from 'expo-router';
 
 export const unstable_settings = {
@@ -59,6 +59,14 @@ function RootLayoutNav() {
         <Stack.Screen name="item-details" options={{ headerShown: false }} />
         <Stack.Screen name="chatroom" options={{ headerShown: false }} />
         <Stack.Screen name="post-item" options={{ headerShown: false }} />
+        <Stack.Screen 
+          name="search" 
+          options={{ 
+            headerShown: false,
+            animation: 'slide_from_right',
+            animationDuration: 200
+          }} 
+        />
       </Stack>
     </ThemeProvider>
   );

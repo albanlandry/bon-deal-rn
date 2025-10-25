@@ -79,7 +79,7 @@ export default function HomeScreen() {
           value="Akebe, Libreville"
           editable={false}
         />
-        <TouchableOpacity style={styles.searchIcon}>
+        <TouchableOpacity style={styles.searchIcon} onPress={() => router.push('/search')}>
           <Ionicons name="search" size={24} color={theme.colors.gray} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.notificationIcon}>
