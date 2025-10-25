@@ -13,24 +13,56 @@ interface ProductCardProps {
   likes: number;
   views: number;
   comments: number;
+  status?: 'available' | 'sold';
   onPress?: () => void;
 }
 
 const ProductCard: React.FC<ProductCardProps> = React.memo(
-  ({ imageUrl, title, location, price, likes, views, comments, onPress }) => {
+  ({ imageUrl, title, location, price, likes, views, comments, status = 'available', onPress }) => {
     const handleLike = () => { console.log('like'); }; // Placeholder
     const handleView = () => { console.log('view'); }; // Placeholder
     const handleComment = () => { console.log('comment'); }; // Placeholder
+
+    const getStatusConfig = () => {
+      switch (status) {
+        case 'sold':
+          return {
+            text: 'Vendu',
+            backgroundColor: '#FF3B30',
+            textColor: '#FFFFFF',
+            icon: 'check-circle'
+          };
+        case 'available':
+        default:
+          return {
+            text: 'Disponible',
+            backgroundColor: '#34C759',
+            textColor: '#FFFFFF',
+            icon: 'circle'
+          };
+      }
+    };
+
+    const statusConfig = getStatusConfig();
 
     return (
       <TouchableOpacity style={styles.container} onPress={onPress}>
         <View style={styles.contentContainer}>
           {imageUrl && (
-            <Image
-              source={{ uri: imageUrl }}
-              style={styles.image}
-              resizeMode="cover"
-            />
+            <View style={styles.imageContainer}>
+              <Image
+                source={{ uri: imageUrl }}
+                style={styles.image}
+                resizeMode="cover"
+              />
+              {/* Status Badge */}
+              <View style={[styles.statusBadge, { backgroundColor: statusConfig.backgroundColor }]}>
+                <Icon name={statusConfig.icon} size={12} color={statusConfig.textColor} />
+                <Text style={[styles.statusText, { color: statusConfig.textColor }]}>
+                  {statusConfig.text}
+                </Text>
+              </View>
+            </View>
           )}
           <View style={styles.content}>
             <View>
@@ -88,6 +120,29 @@ const styles = StyleSheet.create({
     height: 120,
     borderRadius: 8,
     marginRight: theme.spacing.md,
+  },
+  imageContainer: {
+    position: 'relative',
+  },
+  statusBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  statusText: {
+    fontSize: 10,
+    fontWeight: '600',
+    marginLeft: 4,
   },
   content: {
     flex: 1,

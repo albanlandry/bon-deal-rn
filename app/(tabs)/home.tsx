@@ -32,6 +32,7 @@ const mockData = [
     condition: 'Used',
     seller: 'Jean Baptiste',
     postedDate: '2 jours',
+    status: 'available',
   },
   {
     id: '2',
@@ -46,6 +47,7 @@ const mockData = [
     condition: 'New',
     seller: 'Marie Claire',
     postedDate: '1 jour',
+    status: 'available',
   },
   {
     id: '3',
@@ -60,6 +62,7 @@ const mockData = [
     condition: 'Used',
     seller: 'Paul Mba',
     postedDate: '3 jours',
+    status: 'sold',
   },
   {
     id: '4',
@@ -74,6 +77,7 @@ const mockData = [
     condition: 'Used',
     seller: 'Sarah Nguema',
     postedDate: '5 jours',
+    status: 'available',
   },
   {
     id: '5',
@@ -88,6 +92,7 @@ const mockData = [
     condition: 'Used',
     seller: 'Pierre Obiang',
     postedDate: '1 semaine',
+    status: 'available',
   },
   {
     id: '6',
@@ -102,6 +107,7 @@ const mockData = [
     condition: 'Used',
     seller: 'David Mve',
     postedDate: '4 jours',
+    status: 'sold',
   },
   {
     id: '7',
@@ -116,6 +122,7 @@ const mockData = [
     condition: 'Used',
     seller: 'Fatou Diallo',
     postedDate: '2 semaines',
+    status: 'available',
   },
   {
     id: '8',
@@ -130,6 +137,7 @@ const mockData = [
     condition: 'Used',
     seller: 'Marc Ondo',
     postedDate: '6 jours',
+    status: 'available',
   },
 ];
 

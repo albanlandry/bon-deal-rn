@@ -17,7 +17,7 @@ import { theme } from '../utils/theme';
 import ProductCard from '../components/molecules/ProductCard';
 
 // Filter types
-type FilterType = 'category' | 'price' | 'location' | 'condition';
+type FilterType = 'category' | 'price' | 'location' | 'condition' | 'status';
 type SortType = 'relevance' | 'price_low' | 'price_high' | 'date_new' | 'date_old' | 'distance';
 
 interface Filter {
@@ -49,6 +49,7 @@ const mockSearchResults = [
         seller: 'Jean Baptiste',
         postedDate: '2 jours',
         distance: '2.5 km',
+        status: 'available',
     },
     {
         id: '2',
@@ -64,6 +65,7 @@ const mockSearchResults = [
         seller: 'Marie Claire',
         postedDate: '1 jour',
         distance: '1.2 km',
+        status: 'available',
     },
     {
         id: '3',
@@ -79,6 +81,7 @@ const mockSearchResults = [
         seller: 'Paul Mba',
         postedDate: '3 jours',
         distance: '3.8 km',
+        status: 'sold',
     },
     {
         id: '4',
@@ -94,6 +97,7 @@ const mockSearchResults = [
         seller: 'Sarah Nguema',
         postedDate: '5 jours',
         distance: '2.1 km',
+        status: 'available',
     },
     {
         id: '5',
@@ -109,6 +113,7 @@ const mockSearchResults = [
         seller: 'Pierre Obiang',
         postedDate: '1 semaine',
         distance: '8.5 km',
+        status: 'sold',
     },
 ];
 
@@ -124,6 +129,8 @@ const filterOptions: Filter[] = [
     { id: 'over_100k', label: '> 100k FCFA', type: 'price', active: false },
     { id: 'new', label: 'Neuf', type: 'condition', active: false },
     { id: 'used', label: 'Occasion', type: 'condition', active: false },
+    { id: 'available', label: 'Disponible', type: 'status', active: false },
+    { id: 'sold', label: 'Vendu', type: 'status', active: false },
 ];
 
 // Sort options
