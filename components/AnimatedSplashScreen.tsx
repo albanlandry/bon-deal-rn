@@ -21,7 +21,6 @@ export default function AnimatedSplashScreen({ onFinish }: AnimatedSplashScreenP
   const scale = useSharedValue(0);
   const opacity = useSharedValue(0);
   const slideY = useSharedValue(0);
-  const progress = useSharedValue(0);
   const rotation = useSharedValue(0);
   const gradientAnim = useSharedValue(0);
   const logoGlow = useSharedValue(0);
@@ -63,12 +62,6 @@ export default function AnimatedSplashScreen({ onFinish }: AnimatedSplashScreenP
       withSpring(0, { damping: 15, stiffness: 100 })
     );
 
-    // Progress bar
-    progress.value = withTiming(100, {
-      duration: 2500,
-      easing: Easing.inOut(Easing.ease),
-    });
-
     // Rotation for logo
     rotation.value = withTiming(360, {
       duration: 2000,
@@ -78,7 +71,7 @@ export default function AnimatedSplashScreen({ onFinish }: AnimatedSplashScreenP
     // Hide splash screen after animations complete
     const timer = setTimeout(() => {
       onFinish();
-    }, 2800);
+    }, 2500);
 
     return () => clearTimeout(timer);
   }, []);
@@ -111,11 +104,6 @@ export default function AnimatedSplashScreen({ onFinish }: AnimatedSplashScreenP
   const textStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: slideY.value }],
     opacity: opacity.value,
-  }));
-
-  const progressStyle = useAnimatedStyle(() => ({
-    width: `${progress.value}%`,
-    opacity: interpolate(progress.value, [0, 50, 100], [0.2, 0.5, 1]),
   }));
 
   return (
@@ -160,18 +148,6 @@ export default function AnimatedSplashScreen({ onFinish }: AnimatedSplashScreenP
         <Text style={styles.appName}>BonDeal</Text>
         <Text style={styles.tagline}>Your Marketplace, Your Deals</Text>
       </Animated.View>
-
-      {/* Progress Bar with gradient */}
-      <View style={styles.progressContainer}>
-        <LinearGradient
-          colors={['#2f95dc', '#1e90ff', '#0ea5e9']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={styles.progressBarGradient}
-        >
-          <Animated.View style={[styles.progressBar, progressStyle]} />
-        </LinearGradient>
-      </View>
 
       {/* Floating particles effect */}
       <View style={styles.particles}>
@@ -285,24 +261,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontWeight: '400',
     letterSpacing: 0.5,
-  },
-  progressContainer: {
-    width: '70%',
-    height: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    borderRadius: 3,
-    overflow: 'hidden',
-    marginTop: 50,
-  },
-  progressBarGradient: {
-    height: '100%',
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  progressBar: {
-    height: '100%',
-    backgroundColor: 'transparent',
-    borderRadius: 3,
   },
   particles: {
     position: 'absolute',
