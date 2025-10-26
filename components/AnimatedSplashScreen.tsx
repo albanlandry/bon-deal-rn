@@ -2,14 +2,15 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, {
-    Easing,
-    interpolate,
-    useAnimatedStyle,
-    useSharedValue,
-    withRepeat,
-    withSequence,
-    withSpring,
-    withTiming,
+  Easing,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
+  withSpring,
+  withTiming,
 } from 'react-native-reanimated';
 
 interface AnimatedSplashScreenProps {
@@ -24,6 +25,9 @@ export default function AnimatedSplashScreen({ onFinish }: AnimatedSplashScreenP
   const rotation = useSharedValue(0);
   const gradientAnim = useSharedValue(0);
   const logoGlow = useSharedValue(0);
+  const letterBTranslateX = useSharedValue(0); // Start centered, move left
+  const letterDTranslateX = useSharedValue(0); // Start at B's position, move right
+  const letterDOpacity = useSharedValue(0);
 
   useEffect(() => {
     // Gradient animation (continuous flow)
@@ -68,10 +72,38 @@ export default function AnimatedSplashScreen({ onFinish }: AnimatedSplashScreenP
       easing: Easing.out(Easing.ease),
     });
 
+    // Both letters animate horizontally to be centered and on the same line
+    // B moves to the left, D starts at center and moves to the right
+    // Start after B's rotation completes (2000ms)
+    letterBTranslateX.value = withDelay(
+      2000,
+      withTiming(-12, { // Move B to the left - adjusted for better centering
+        duration: 600,
+        easing: Easing.out(Easing.cubic),
+      })
+    );
+
+    // D letter animation - start at center where B is, then move to the right
+    letterDTranslateX.value = withDelay(
+      2000,
+      withTiming(28, { // Move D to the right - adjusted for better centering
+        duration: 600,
+        easing: Easing.out(Easing.cubic),
+      })
+    );
+
+    letterDOpacity.value = withDelay(
+      2000,
+      withTiming(1, {
+        duration: 600,
+        easing: Easing.out(Easing.cubic),
+      })
+    );
+
     // Hide splash screen after animations complete
     const timer = setTimeout(() => {
       onFinish();
-    }, 2500);
+    }, 2900); // 2000ms (rotation) + 600ms (letter animation) + 300ms buffer
 
     return () => clearTimeout(timer);
   }, []);
@@ -106,6 +138,15 @@ export default function AnimatedSplashScreen({ onFinish }: AnimatedSplashScreenP
     opacity: opacity.value,
   }));
 
+  const letterBStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: letterBTranslateX.value }],
+  }));
+
+  const letterDStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: letterDTranslateX.value }],
+    opacity: letterDOpacity.value,
+  }));
+
   return (
     <View style={styles.container}>
       {/* Animated Gradient Background */}
@@ -136,7 +177,14 @@ export default function AnimatedSplashScreen({ onFinish }: AnimatedSplashScreenP
             end={{ x: 1, y: 1 }}
             style={styles.logoGradient}
           >
-            <Text style={styles.logoText}>B</Text>
+            <View style={styles.lettersContainer}>
+              <Animated.View style={[letterBStyle, styles.bLetterWrapper]}>
+                <Text style={styles.logoText}>B</Text>
+              </Animated.View>
+              <Animated.View style={[letterDStyle, styles.dLetterWrapper]}>
+                <Text style={styles.logoTextD}>D</Text>
+              </Animated.View>
+            </View>
           </LinearGradient>
         </View>
         {/* Outer ring */}
@@ -228,6 +276,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  lettersContainer: {
+    position: 'relative',
+    width: 120, // Fixed width to keep B centered
+    height: 70,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  bLetterWrapper: {
+    position: 'absolute',
+    left: 32, // Center B initially (adjust based on font size)
+  },
   logoText: {
     fontSize: 56,
     fontWeight: 'bold',
@@ -235,6 +294,18 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(255, 255, 255, 0.3)',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
+  },
+  logoTextD: {
+    fontSize: 56,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(255, 255, 255, 0.3)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  dLetterWrapper: {
+    position: 'absolute',
+    left: 32, // Start D at the same centered position as B
   },
   logoRing: {
     position: 'absolute',
