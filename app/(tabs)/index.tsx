@@ -2,11 +2,11 @@
 import { useRouter } from 'expo-router';
 import React from 'react';
 import {
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
@@ -99,6 +99,12 @@ export default function MenuScreen() {
     {
       title: 'Other',
       items: [
+        {
+          title: 'Splash Screen',
+          subtitle: 'Animated splash screen',
+          icon: 'visibility',
+          route: '/splash',
+        },
         {
           title: 'Modal',
           subtitle: 'Example modal',
