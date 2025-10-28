@@ -65,6 +65,12 @@ export default function MenuScreen() {
           icon: 'confirmation-number',
           route: '/verify-number',
         },
+        {
+          title: 'Terms & Conditions',
+          subtitle: 'User consent screen',
+          icon: 'document-text',
+          route: '/terms-and-conditions',
+        },
       ],
     },
     {

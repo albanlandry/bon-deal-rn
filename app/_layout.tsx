@@ -65,6 +65,7 @@ function RootLayoutNav() {
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
         <Stack.Screen name="signup" options={{ headerShown: false }} />
+        <Stack.Screen name="terms-and-conditions" options={{ headerShown: false }} />
         <Stack.Screen name="verify-number" options={{ headerShown: false }} />
         <Stack.Screen name="item-details" options={{ headerShown: false }} />
         <Stack.Screen name="chatroom" options={{ headerShown: false }} />
