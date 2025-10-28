@@ -1,3 +1,8 @@
+/**
+ * This file has been replaced by app.config.js to support config plugins.
+ * The app.config.js file takes precedence and contains the same configuration.
+ * You can delete this file once you've verified app.config.js is working.
+ */
 {
   "expo": {
     "name": "bondeal",
