@@ -67,6 +67,7 @@ function RootLayoutNav() {
         <Stack.Screen name="signup" options={{ headerShown: false }} />
         <Stack.Screen name="terms-and-conditions" options={{ headerShown: false }} />
         <Stack.Screen name="verify-number" options={{ headerShown: false }} />
+        <Stack.Screen name="set-password" options={{ headerShown: false }} />
         <Stack.Screen name="item-details" options={{ headerShown: false }} />
         <Stack.Screen name="chatroom" options={{ headerShown: false }} />
         <Stack.Screen name="post-item" options={{ headerShown: false }} />

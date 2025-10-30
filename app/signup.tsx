@@ -1,6 +1,8 @@
 // app/signup.tsx - Signup screen
-import { Link } from 'expo-router';
-import React, { useState } from 'react';
+import * as Localization from 'expo-localization';
+import { Link, useRouter } from 'expo-router';
+import { parsePhoneNumberFromString } from 'libphonenumber-js';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -11,17 +13,72 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import CountryPicker, {
+  Country,
+  CountryCode,
+  getCallingCode,
+} from 'react-native-country-picker-modal';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../utils/theme';
 
 export default function SignupScreen() {
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [password, setPassword] = useState('');
-  const [repeatPassword, setRepeatPassword] = useState('');
+  const router = useRouter();
+
+  // Country/phone state
+  const [countryCode, setCountryCode] = useState<CountryCode>('US');
+  const [callingCode, setCallingCode] = useState<string>('1');
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
+  const [nationalNumber, setNationalNumber] = useState('');
+
+  // Legacy password fields removed for phone-based signup
+
+  useEffect(() => {
+    // Auto-detect country using device locale
+    const region = (Localization as any).region as CountryCode | undefined;
+    const fallback = Array.isArray(Localization.getLocales)
+      ? (Localization.getLocales()[0]?.regionCode as CountryCode | undefined)
+      : undefined;
+    const detected = region || fallback;
+    if (detected) {
+      setCountryCode(detected);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Resolve calling code whenever country changes
+    (async () => {
+      try {
+        const code = await getCallingCode(countryCode);
+        if (code) setCallingCode(code);
+      } catch {}
+    })();
+  }, [countryCode]);
+
+  const onSelectCountry = (country: Country) => {
+    setCountryCode(country.cca2);
+    if (country.callingCode && country.callingCode.length > 0) {
+      setCallingCode(country.callingCode[0]);
+    }
+  };
+
+  // Keep calling code in sync when country changes (for auto-detected region)
+  // No custom header required for the country picker
+
+  const fullE164 = useMemo(() => {
+    const raw = `+${callingCode}${nationalNumber.replace(/\D/g, '')}`;
+    const parsed = parsePhoneNumberFromString(raw);
+    return parsed?.isValid() ? parsed.number : raw;
+  }, [callingCode, nationalNumber]);
 
   const handleSignup = () => {
-    // Add signup logic here
-    console.log('Signup pressed');
+    if (!nationalNumber.trim()) {
+      return;
+    }
+    // Navigate to OTP verification with prepared phone number
+    router.push({
+      pathname: '/verify-number',
+      params: { phone: fullE164 },
+    });
   };
 
   return (
@@ -35,49 +92,38 @@ export default function SignupScreen() {
           {/* Title */}
           <Text style={styles.title}>Rejoignez-nous dès aujourd's hui !</Text>
 
-          {/* Phone Number Input */}
-          <TextInput
-            style={styles.input}
-            placeholder="Phone number"
-            placeholderTextColor="#999"
-            value={phoneNumber}
-            onChangeText={setPhoneNumber}
-            keyboardType="phone-pad"
-            autoCapitalize="none"
-          />
+          {/* Phone Number with Country Picker */}
+          <View style={styles.phoneRow}>
+            <View style={styles.countryPickerButton}>
+              <CountryPicker
+                withFilter
+                withFlag
+                withCallingCode
+                countryCode={countryCode}
+                onSelect={onSelectCountry}
+                containerButtonStyle={styles.countryPickerInner}
+              />
+              <Text style={styles.callingCodeText}>{`+${callingCode}`}</Text>
+            </View>
 
-          {/* Password Input */}
-          <TextInput
-            style={styles.input}
-            placeholder="password"
-            placeholderTextColor="#999"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            autoCapitalize="none"
-          />
-
-          {/* Repeat Password Input */}
-          <TextInput
-            style={styles.input}
-            placeholder="repeat password"
-            placeholderTextColor="#999"
-            value={repeatPassword}
-            onChangeText={setRepeatPassword}
-            secureTextEntry
-            autoCapitalize="none"
-          />
-
-          {/* Password Requirements */}
-          <View style={styles.requirementsContainer}>
-            <Text style={styles.requirementText}>Minimum of 8 characters</Text>
-            <Text style={styles.requirementText}>At least one uppercase letter (A-Z)</Text>
-            <Text style={styles.requirementText}>At least one lowercase letter (a-z)</Text>
-            <Text style={styles.requirementText}>At least one number (0-9)</Text>
-            <Text style={styles.requirementText}>
-              At least one special character (e.g., ! @ # $ % ^ & *)
-            </Text>
+            <TextInput
+              style={[styles.input, styles.nationalInput]}
+              placeholder="Phone number"
+              placeholderTextColor="#999"
+              value={nationalNumber}
+              onChangeText={setNationalNumber}
+              keyboardType="phone-pad"
+              autoCapitalize="none"
+            />
           </View>
+
+          {/* Helper text */}
+          <Text style={styles.helperText}>
+            We’ll send a verification code to this number.
+          </Text>
+
+          {/* Spacer */}
+          <View style={styles.requirementsContainer} />
 
           {/* Already have account link */}
           <View style={styles.loginLinkContainer}>
@@ -90,7 +136,14 @@ export default function SignupScreen() {
           </View>
 
           {/* Continue Button */}
-          <TouchableOpacity style={styles.continueButton} onPress={handleSignup}>
+          <TouchableOpacity
+            style={[
+              styles.continueButton,
+              (!nationalNumber || nationalNumber.replace(/\D/g, '').length < 6) && styles.continueButtonDisabled,
+            ]}
+            onPress={handleSignup}
+            disabled={!nationalNumber || nationalNumber.replace(/\D/g, '').length < 6}
+          >
             <Text style={styles.continueButtonText}>Continuer</Text>
           </TouchableOpacity>
         </ScrollView>
@@ -120,11 +173,47 @@ const styles = StyleSheet.create({
     marginBottom: 40,
     lineHeight: 40,
   },
+  phoneRow: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  countryPickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#F8F9FA',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    height: 56,
+    minWidth: 96,
+  },
+  countryPickerInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: '100%',
+    paddingVertical: 0,
+  },
+  callingCodeText: {
+    fontSize: 16,
+    color: '#333',
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  nationalInput: {
+    flex: 1,
+  },
+  countryHeader: {
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
   input: {
     backgroundColor: '#F8F9FA',
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 16,
+    height: 56,
     fontSize: 16,
     marginBottom: 16,
     color: '#333',
@@ -134,7 +223,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     paddingLeft: 4,
   },
-  requirementText: {
+  helperText: {
     fontSize: 13,
     color: '#666',
     marginBottom: 4,
@@ -160,6 +249,10 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     marginTop: 'auto',
+  },
+  continueButtonDisabled: {
+    backgroundColor: '#B0B0B0',
+    opacity: 0.6,
   },
   continueButtonText: {
     color: theme.colors.white,

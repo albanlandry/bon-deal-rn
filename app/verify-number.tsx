@@ -1,5 +1,5 @@
 // app/verify-number.tsx - Number verification screen
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
     KeyboardAvoidingView,
@@ -16,6 +16,7 @@ import { theme } from '../utils/theme';
 
 export default function VerifyNumberScreen() {
   const router = useRouter();
+  const { phone } = useLocalSearchParams<{ phone?: string }>();
   const [otp, setOtp] = useState('');
 
   const handleOtpComplete = (code: string) => {
@@ -26,9 +27,9 @@ export default function VerifyNumberScreen() {
 
   const handleContinue = () => {
     if (otp.length === 6) {
-      // Verify OTP and navigate
+      // Verify OTP then navigate to set password
       console.log('Verifying OTP:', otp);
-      // router.push('/(tabs)/home');
+      router.push({ pathname: '/set-password', params: { phone: phone || '' } });
     }
   };
 
