@@ -3,6 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Dimensions,
   FlatList,
   Image,
   RefreshControl,
@@ -16,6 +17,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../../utils/theme';
 
 import ProductCard from '../../components/molecules/ProductCard';
+
+// Grid layout constants for responsive design
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const GRID_PADDING = 16; // theme.spacing.md
+const GRID_GAP = 8; // theme.spacing.xs
+const GRID_ITEM_WIDTH = (SCREEN_WIDTH - (GRID_PADDING * 2) - GRID_GAP) / 2;
+const GRID_ITEM_HEIGHT = 280;
+const GRID_IMAGE_HEIGHT = 160;
 
 // Enhanced mock data with diverse products
 const mockData = [
@@ -309,23 +318,48 @@ export default function HomeScreen() {
   );
 
   const renderGridProduct = ({ item }: { item: any }) => (
-    <View style={styles.gridItem}>
+    <View style={[styles.gridItem, { width: GRID_ITEM_WIDTH }]}>
       <TouchableOpacity style={styles.gridProductCard} onPress={() => handleProductPress(item)}>
         {item.imageUrl && (
           <Image source={{ uri: item.imageUrl }} style={styles.gridImage} resizeMode="cover" />
         )}
         <View style={styles.gridContent}>
-          <Text style={styles.gridTitle} numberOfLines={2}>{item.title}</Text>
-          <Text style={styles.gridLocation} numberOfLines={1}>{item.location}</Text>
-          <Text style={styles.gridPrice}>{item.price}</Text>
+          <Text 
+            style={styles.gridTitle} 
+            numberOfLines={2} 
+            ellipsizeMode="tail">
+            {item.title}
+          </Text>
+          <Text 
+            style={styles.gridLocation} 
+            numberOfLines={1} 
+            ellipsizeMode="tail">
+            {item.location}
+          </Text>
+          <Text 
+            style={styles.gridPrice} 
+            numberOfLines={1} 
+            ellipsizeMode="tail">
+            {item.price}
+          </Text>
           <View style={styles.gridActions}>
             <View style={styles.gridActionItem}>
               <Ionicons name="heart-outline" size={12} color="#666" />
-              <Text style={styles.gridActionText}>{item.likes}</Text>
+              <Text 
+                style={styles.gridActionText} 
+                numberOfLines={1} 
+                ellipsizeMode="tail">
+                {item.likes}
+              </Text>
             </View>
             <View style={styles.gridActionItem}>
               <Ionicons name="eye-outline" size={12} color="#666" />
-              <Text style={styles.gridActionText}>{item.views}</Text>
+              <Text 
+                style={styles.gridActionText} 
+                numberOfLines={1} 
+                ellipsizeMode="tail">
+                {item.views}
+              </Text>
             </View>
           </View>
         </View>
@@ -371,7 +405,7 @@ export default function HomeScreen() {
   );
 
   const renderGridSkeletonItem = () => (
-    <View style={styles.gridItem}>
+    <View style={[styles.gridItem, { width: GRID_ITEM_WIDTH }]}>
       <View style={styles.gridSkeletonCard}>
         <View style={styles.gridSkeletonImage} />
         <View style={styles.gridSkeletonContent}>
@@ -571,6 +605,7 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
         ItemSeparatorComponent={() => viewMode === 'list' && !isLoading ? <View style={styles.itemSeparator} /> : null}
         numColumns={viewMode === 'grid' ? 2 : 1}
+        columnWrapperStyle={viewMode === 'grid' ? styles.gridRow : undefined}
         key={viewMode} // Force re-render when view mode changes
         refreshControl={
           <RefreshControl
@@ -747,18 +782,21 @@ const styles = StyleSheet.create({
     paddingBottom: 100, // Space for FAB
   },
   gridContainer: {
-    paddingHorizontal: theme.spacing.md,
+    paddingHorizontal: GRID_PADDING,
     paddingTop: theme.spacing.md,
     paddingBottom: 100, // Space for FAB
+  },
+  gridRow: {
+    justifyContent: 'space-between',
+    marginBottom: 0,
   },
   itemSeparator: {
     height: 1,
     backgroundColor: theme.colors.grayLight,
   },
   gridItem: {
-    flex: 1,
-    marginHorizontal: theme.spacing.xs,
     marginBottom: theme.spacing.md,
+    height: GRID_ITEM_HEIGHT, // Fixed height for consistent grid
   },
   gridProductCard: {
     backgroundColor: theme.colors.white,
@@ -769,44 +807,57 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
     overflow: 'hidden',
+    height: '100%',
+    width: '100%',
   },
   gridImage: {
     width: '100%',
-    height: 120,
+    height: GRID_IMAGE_HEIGHT, // Fixed image height
+    backgroundColor: '#f0f0f0',
   },
   gridContent: {
     padding: theme.spacing.sm,
+    flex: 1,
+    justifyContent: 'space-between',
   },
   gridTitle: {
     fontSize: 14,
     fontWeight: '600',
     color: '#333',
     marginBottom: 4,
-    lineHeight: 16,
+    lineHeight: 18,
+    minHeight: 36, // Ensure consistent height for 2 lines
   },
   gridLocation: {
     fontSize: 11,
     color: '#666',
     marginBottom: 4,
+    minHeight: 14,
   },
   gridPrice: {
     fontSize: 14,
     fontWeight: '700',
     color: theme.colors.success,
     marginBottom: 8,
+    minHeight: 18,
   },
   gridActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    marginTop: 'auto',
   },
   gridActionItem: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
+    minWidth: 0, // Allow text truncation
   },
   gridActionText: {
     fontSize: 10,
     color: '#666',
     marginLeft: 4,
+    flexShrink: 1,
+    minWidth: 0, // Allow text truncation
   },
   // Skeleton loading styles
   skeletonItem: {
@@ -856,10 +907,12 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.white,
     borderRadius: 12,
     overflow: 'hidden',
+    height: GRID_ITEM_HEIGHT,
+    width: '100%',
   },
   gridSkeletonImage: {
     width: '100%',
-    height: 120,
+    height: GRID_IMAGE_HEIGHT,
     backgroundColor: '#E0E0E0',
   },
   gridSkeletonContent: {
