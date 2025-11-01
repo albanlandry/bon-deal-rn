@@ -1,5 +1,6 @@
 // app/post-item.tsx - Post/Edit Item Screen
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -16,6 +17,7 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { showToast } from '../components/atoms/Toast';
 import { theme } from '../utils/theme';
 
 interface FormData {
@@ -512,16 +514,65 @@ export default function PostItemScreen() {
         return Object.keys(newErrors).length === 0;
     };
 
-    const handleAddImage = () => {
-        // In a real app, this would open image picker
-        const mockImages = [
-            'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=400&h=300&fit=crop&crop=center',
-            'https://images.unsplash.com/photo-1541807084-5c52b6b3adef?w=400&h=300&fit=crop&crop=center',
-            'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=400&h=300&fit=crop&crop=center',
-        ];
-        
-        const randomImage = mockImages[Math.floor(Math.random() * mockImages.length)];
-        updateFormData('images', [...formData.images, randomImage]);
+    const handleAddImage = async () => {
+        try {
+            // Request camera/media library permissions
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+                showToast.error('Permission requise', 'Nous avons besoin de votre permission pour accéder à vos photos.');
+                return;
+            }
+
+            // Show action sheet for camera or gallery
+            Alert.alert(
+                'Ajouter une photo',
+                'Choisissez une option',
+                [
+                    {
+                        text: 'Annuler',
+                        style: 'cancel',
+                    },
+                    {
+                        text: 'Prendre une photo',
+                        onPress: async () => {
+                            const result = await ImagePicker.launchCameraAsync({
+                                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                                allowsEditing: true,
+                                aspect: [4, 3],
+                                quality: 0.8,
+                            });
+
+                            if (!result.canceled && result.assets[0]) {
+                                updateFormData('images', [...formData.images, result.assets[0].uri]);
+                            }
+                        },
+                    },
+                    {
+                        text: 'Choisir depuis la galerie',
+                        onPress: async () => {
+                            const result = await ImagePicker.launchImageLibraryAsync({
+                                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                                allowsMultipleSelection: false,
+                                allowsEditing: true,
+                                aspect: [4, 3],
+                                quality: 0.8,
+                            });
+
+                            if (!result.canceled && result.assets[0]) {
+                                if (formData.images.length >= 10) {
+                                    showToast.error('Limite atteinte', 'Vous pouvez ajouter un maximum de 10 photos.');
+                                    return;
+                                }
+                                updateFormData('images', [...formData.images, result.assets[0].uri]);
+                                showToast.success('Photo ajoutée', 'La photo a été ajoutée avec succès.');
+                            }
+                        },
+                    },
+                ]
+            );
+        } catch (error) {
+            showToast.error('Erreur', 'Impossible d\'accéder aux photos. Veuillez réessayer.');
+        }
     };
 
     const handleRemoveImage = (index: number) => {
@@ -550,16 +601,17 @@ export default function PostItemScreen() {
     };
 
     const handleSaveDraft = () => {
-        Alert.alert('Brouillon sauvegardé', 'Votre article a été sauvegardé comme brouillon.');
+        // TODO: Save draft to API
+        showToast.success('Brouillon sauvegardé', 'Votre article a été sauvegardé comme brouillon.');
     };
 
     const handlePublish = () => {
         if (validateForm()) {
-            Alert.alert(
-                'Article publié',
-                'Votre article a été publié avec succès!',
-                [{ text: 'OK', onPress: () => router.back() }]
-            );
+            // TODO: Publish to API
+            showToast.success('Article publié', 'Votre article a été publié avec succès!');
+            router.back();
+        } else {
+            showToast.error('Erreur de validation', 'Veuillez corriger les erreurs dans le formulaire.');
         }
     };
 

@@ -66,6 +66,12 @@ export default function MenuScreen() {
           route: '/verify-number',
         },
         {
+          title: 'Set Password',
+          subtitle: 'Set password after verification',
+          icon: 'lock',
+          route: '/set-password',
+        },
+        {
           title: 'Terms & Conditions',
           subtitle: 'User consent screen',
           icon: 'document-text',
@@ -89,16 +95,98 @@ export default function MenuScreen() {
           route: '/item-details',
         },
         {
+          title: 'Post Item',
+          subtitle: 'Create new product listing',
+          icon: 'add-circle',
+          route: '/post-item',
+        },
+        {
+          title: 'Search',
+          subtitle: 'Search products',
+          icon: 'search',
+          route: '/search',
+        },
+        {
+          title: 'Search Results',
+          subtitle: 'Filtered search results',
+          icon: 'filter-list',
+          route: '/search-results',
+        },
+        {
           title: 'Chat',
-          subtitle: 'Messaging',
+          subtitle: 'Messaging list',
           icon: 'chat',
           route: '/(tabs)/chat',
+        },
+        {
+          title: 'Chatroom',
+          subtitle: 'Individual chat conversation',
+          icon: 'forum',
+          route: '/chatroom',
+        },
+        {
+          title: 'Notifications',
+          subtitle: 'User notifications',
+          icon: 'notifications',
+          route: '/notifications',
         },
         {
           title: 'Profile',
           subtitle: 'User profile',
           icon: 'person',
           route: '/(tabs)/profile',
+        },
+      ],
+    },
+    {
+      title: 'User Management',
+      items: [
+        {
+          title: 'Edit Profile',
+          subtitle: 'Edit user profile information',
+          icon: 'edit',
+          route: '/edit-profile',
+        },
+        {
+          title: 'My Listings',
+          subtitle: 'Manage your product listings',
+          icon: 'list',
+          route: '/my-listings',
+        },
+        {
+          title: 'Favorites',
+          subtitle: 'View favorited products',
+          icon: 'favorite',
+          route: '/(tabs)/favorites',
+        },
+      ],
+    },
+    {
+      title: 'Settings',
+      items: [
+        {
+          title: 'Settings',
+          subtitle: 'Main settings screen',
+          icon: 'settings',
+          route: '/settings',
+        },
+        {
+          title: 'Notification Settings',
+          subtitle: 'Configure notification preferences',
+          icon: 'notifications-active',
+          route: '/notification-settings',
+        },
+        {
+          title: 'Privacy Settings',
+          subtitle: 'Manage privacy preferences',
+          icon: 'privacy-tip',
+          route: '/privacy-settings',
+        },
+        {
+          title: 'Help & Support',
+          subtitle: 'Get help and contact support',
+          icon: 'help-outline',
+          route: '/help-support',
         },
       ],
     },

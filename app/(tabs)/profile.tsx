@@ -111,15 +111,16 @@ export default function ProfileScreen() {
     const handleMenuPress = (itemId: string) => {
         switch (itemId) {
             case 'my-listings':
-                console.log('Navigate to My Listings');
+                router.push('/my-listings');
                 break;
             case 'favorites':
-                console.log('Navigate to Favorites');
+                router.push('/(tabs)/favorites');
                 break;
             case 'sold-items':
-                console.log('Navigate to Sold Items');
+                router.push('/my-listings');
                 break;
             case 'reviews':
+                // TODO: Navigate to reviews screen when implemented
                 console.log('Navigate to Reviews');
                 break;
             default:
@@ -130,18 +131,19 @@ export default function ProfileScreen() {
     const handleSettingsPress = (itemId: string) => {
         switch (itemId) {
             case 'edit-profile':
-                console.log('Navigate to Edit Profile');
+                router.push('/edit-profile');
                 break;
             case 'notifications':
-                console.log('Navigate to Notifications');
+                router.push('/settings');
                 break;
             case 'privacy':
-                console.log('Navigate to Privacy');
+                router.push('/settings');
                 break;
             case 'help':
-                console.log('Navigate to Help');
+                router.push('/help-support');
                 break;
             case 'about':
+                // TODO: Show about modal
                 console.log('Navigate to About');
                 break;
             case 'logout':
@@ -212,7 +214,7 @@ export default function ProfileScreen() {
                 {/* Header */}
                 <View style={styles.header}>
                     <Text style={styles.headerTitle}>Profil</Text>
-                    <TouchableOpacity style={styles.settingsButton}>
+                    <TouchableOpacity style={styles.settingsButton} onPress={() => router.push('/settings')}>
                         <Ionicons name="settings-outline" size={24} color={theme.colors.gray} />
                     </TouchableOpacity>
                 </View>

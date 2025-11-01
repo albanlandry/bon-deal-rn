@@ -8,6 +8,7 @@ import 'react-native-reanimated';
 
 import AnimatedSplashScreen from '@/components/AnimatedSplashScreen';
 import { useColorScheme } from '@/components/useColorScheme';
+import Toast from '@/components/atoms/Toast';
 
 export {
     // Catch any errors thrown by the Layout component.
@@ -74,6 +75,13 @@ function RootLayoutNav() {
         <Stack.Screen name="notifications" options={{ headerShown: false }} />
         <Stack.Screen name="search-results" options={{ headerShown: false }} />
         <Stack.Screen name="splash" options={{ headerShown: false }} />
+        <Stack.Screen name="edit-profile" options={{ headerShown: false }} />
+        <Stack.Screen name="my-listings" options={{ headerShown: false }} />
+        <Stack.Screen name="favorites" options={{ headerShown: false }} />
+        <Stack.Screen name="settings" options={{ headerShown: false }} />
+        <Stack.Screen name="notification-settings" options={{ headerShown: false }} />
+        <Stack.Screen name="privacy-settings" options={{ headerShown: false }} />
+        <Stack.Screen name="help-support" options={{ headerShown: false }} />
         <Stack.Screen 
           name="search" 
           options={{ 
@@ -83,6 +91,7 @@ function RootLayoutNav() {
           }} 
         />
       </Stack>
+      <Toast />
     </ThemeProvider>
   );
 }
