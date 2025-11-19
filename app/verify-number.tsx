@@ -27,9 +27,9 @@ export default function VerifyNumberScreen() {
 
   const handleContinue = () => {
     if (otp.length === 6) {
-      // Verify OTP then navigate to set password
+      // Verify OTP then navigate to profile setup
       console.log('Verifying OTP:', otp);
-      router.push({ pathname: '/set-password', params: { phone: phone || '' } });
+      router.push({ pathname: '/setup-profile', params: { phone: phone || '' } });
     }
   };
 

@@ -66,6 +66,12 @@ export default function MenuScreen() {
           route: '/verify-number',
         },
         {
+          title: 'Setup Profile',
+          subtitle: 'Set profile image and nickname',
+          icon: 'account-circle',
+          route: '/setup-profile',
+        },
+        {
           title: 'Set Password',
           subtitle: 'Set password after verification',
           icon: 'lock',
