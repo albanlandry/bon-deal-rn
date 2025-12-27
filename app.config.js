@@ -1,6 +1,12 @@
 /**
  * @type {import('expo/config').ExpoConfig}
  */
+
+// Load environment variables
+require('dotenv').config({
+  path: process.env.ENV_FILE || `.env.${process.env.APP_ENV || 'local'}`,
+});
+
 module.exports = {
   expo: {
     name: 'bondeal',
@@ -69,7 +75,24 @@ module.exports = {
       typedRoutes: true,
     },
     extra: {
-      // Add any custom configuration here
+      // Environment variables accessible via Constants.expoConfig.extra
+      env: process.env.APP_ENV || 'local',
+      apiBaseUrl: process.env.API_BASE_URL || 'http://localhost:8000',
+      apiTimeout: parseInt(process.env.API_TIMEOUT || '30000', 10),
+      firebaseApiKey: process.env.FIREBASE_API_KEY || '',
+      firebaseAuthDomain: process.env.FIREBASE_AUTH_DOMAIN || '',
+      firebaseProjectId: process.env.FIREBASE_PROJECT_ID || '',
+      firebaseStorageBucket: process.env.FIREBASE_STORAGE_BUCKET || '',
+      firebaseMessagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || '',
+      firebaseAppId: process.env.FIREBASE_APP_ID || '',
+      enableAnalytics: process.env.ENABLE_ANALYTICS === 'true',
+      enableCrashlytics: process.env.ENABLE_CRASHLYTICS === 'true',
+      enableLogging: process.env.ENABLE_LOGGING !== 'false',
+      debugMode: process.env.DEBUG_MODE === 'true',
+      logLevel: process.env.LOG_LEVEL || 'debug',
+      appName: process.env.APP_NAME || 'BonDeal',
+      appVersion: process.env.APP_VERSION || '1.0.0',
+      // EAS configuration
       eas: {
         projectId: 'your-project-id',
       },

@@ -9,6 +9,7 @@ import 'react-native-reanimated';
 import AnimatedSplashScreen from '@/components/AnimatedSplashScreen';
 import { useColorScheme } from '@/components/useColorScheme';
 import Toast from '@/components/atoms/Toast';
+import { PhoneAuthProvider } from '@/contexts/PhoneAuthContext';
 
 export {
     // Catch any errors thrown by the Layout component.
@@ -60,8 +61,9 @@ function RootLayoutNav() {
   const colorScheme = useColorScheme();
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
+    <PhoneAuthProvider>
+      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
         <Stack.Screen name="login" options={{ headerShown: false }} />
@@ -90,8 +92,9 @@ function RootLayoutNav() {
             animationDuration: 200
           }} 
         />
-      </Stack>
-      <Toast />
-    </ThemeProvider>
+        </Stack>
+        <Toast />
+      </ThemeProvider>
+    </PhoneAuthProvider>
   );
 }

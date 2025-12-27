@@ -1,9 +1,13 @@
 // app/signup.tsx - Signup screen
+import { usePhoneAuth } from '@/contexts/PhoneAuthContext';
+import auth from '@react-native-firebase/auth';
 import * as Localization from 'expo-localization';
 import { Link, useRouter } from 'expo-router';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -18,17 +22,20 @@ import CountryPicker, {
   CountryCode,
   getCallingCode,
 } from 'react-native-country-picker-modal';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme } from '../utils/theme';
 
 export default function SignupScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { setConfirmation, setPhoneNumber } = usePhoneAuth();
 
   // Country/phone state
   const [countryCode, setCountryCode] = useState<CountryCode>('US');
   const [callingCode, setCallingCode] = useState<string>('1');
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [nationalNumber, setNationalNumber] = useState('');
+  const [loading, setLoading] = useState(false);
 
   // Legacy password fields removed for phone-based signup
 
@@ -70,15 +77,53 @@ export default function SignupScreen() {
     return parsed?.isValid() ? parsed.number : raw;
   }, [callingCode, nationalNumber]);
 
-  const handleSignup = () => {
+  const handleSignup = async () => {
     if (!nationalNumber.trim()) {
       return;
     }
-    // Navigate to OTP verification with prepared phone number
-    router.push({
-      pathname: '/verify-number',
-      params: { phone: fullE164 },
-    });
+
+    // Validate phone number format
+    const parsed = parsePhoneNumberFromString(fullE164);
+    if (!parsed || !parsed.isValid()) {
+      Alert.alert('Invalid Phone Number', 'Please enter a valid phone number.');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // Send OTP code via Firebase Auth
+      const confirmation = await auth().signInWithPhoneNumber(fullE164);
+      
+      // Store confirmation and phone number in context for the verify screen
+      setConfirmation(confirmation);
+      setPhoneNumber(fullE164);
+      
+      setLoading(false);
+      
+      // Navigate to OTP verification with phone number
+      router.push({
+        pathname: '/verify-number',
+        params: { 
+          phone: fullE164,
+        },
+      });
+    } catch (error: any) {
+      setLoading(false);
+      console.error('Firebase signup error:', error);
+      
+      let errorMessage = 'Failed to send verification code. Please try again.';
+      
+      if (error.code === 'auth/invalid-phone-number') {
+        errorMessage = 'Invalid phone number format. Please check and try again.';
+      } else if (error.code === 'auth/too-many-requests') {
+        errorMessage = 'Too many requests. Please try again later.';
+      } else if (error.code === 'auth/quota-exceeded') {
+        errorMessage = 'SMS quota exceeded. Please try again later.';
+      }
+      
+      Alert.alert('Error', errorMessage);
+    }
   };
 
   return (
@@ -102,6 +147,16 @@ export default function SignupScreen() {
                 countryCode={countryCode}
                 onSelect={onSelectCountry}
                 containerButtonStyle={styles.countryPickerInner}
+                modalProps={{
+                  style: {
+                    margin: 0,
+                  },
+                }}
+                flatListProps={{
+                  contentContainerStyle: {
+                    paddingTop: insets.top,
+                  },
+                } as any}
               />
               <Text style={styles.callingCodeText}>{`+${callingCode}`}</Text>
             </View>
@@ -139,12 +194,16 @@ export default function SignupScreen() {
           <TouchableOpacity
             style={[
               styles.continueButton,
-              (!nationalNumber || nationalNumber.replace(/\D/g, '').length < 6) && styles.continueButtonDisabled,
+              ((!nationalNumber || nationalNumber.replace(/\D/g, '').length < 6) || loading) && styles.continueButtonDisabled,
             ]}
             onPress={handleSignup}
-            disabled={!nationalNumber || nationalNumber.replace(/\D/g, '').length < 6}
+            disabled={!nationalNumber || nationalNumber.replace(/\D/g, '').length < 6 || loading}
           >
-            <Text style={styles.continueButtonText}>Continuer</Text>
+            {loading ? (
+              <ActivityIndicator color={theme.colors.white} />
+            ) : (
+              <Text style={styles.continueButtonText}>Continuer</Text>
+            )}
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -215,7 +274,6 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     height: 56,
     fontSize: 16,
-    marginBottom: 16,
     color: '#333',
   },
   requirementsContainer: {
