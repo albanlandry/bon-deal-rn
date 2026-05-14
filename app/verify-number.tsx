@@ -20,7 +20,7 @@ import { usePhoneAuth } from '@/contexts/PhoneAuthContext';
 
 export default function VerifyNumberScreen() {
   const router = useRouter();
-  const { phone } = useLocalSearchParams<{ phone?: string }>();
+  const { phone, mode } = useLocalSearchParams<{ phone?: string; mode?: string }>();
   const { confirmation, phoneNumber, setConfirmation, clearAuth } = usePhoneAuth();
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
@@ -44,16 +44,22 @@ export default function VerifyNumberScreen() {
 
     try {
       // Verify the OTP code with Firebase
-      const userCredential = await confirmation.confirm(otp);
-      
-      // Clear the auth context
+      await confirmation.confirm(otp);
+
+      // Firebase is now signed in — AuthContext's onAuthStateChanged handler
+      // exchanges the Firebase ID token for a backend JWT in the background.
       clearAuth();
-      
-      // Navigate to profile setup on successful verification
-      router.push({ 
-        pathname: '/setup-profile', 
-        params: { phone: phone || phoneNumber || '' } 
-      });
+
+      if (mode === 'login') {
+        // Returning user — straight into the app.
+        router.replace('/(tabs)/home');
+      } else {
+        // New user — continue onboarding (profile setup → password).
+        router.push({
+          pathname: '/setup-profile',
+          params: { phone: phone || phoneNumber || '' },
+        });
+      }
     } catch (error: any) {
       setLoading(false);
       console.error('Firebase verification error:', error);

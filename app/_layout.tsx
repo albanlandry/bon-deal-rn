@@ -6,10 +6,15 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState } from 'react';
 import 'react-native-reanimated';
 
+import { QueryClientProvider } from '@tanstack/react-query';
+
 import AnimatedSplashScreen from '@/components/AnimatedSplashScreen';
 import { useColorScheme } from '@/components/useColorScheme';
 import Toast from '@/components/atoms/Toast';
 import { PhoneAuthProvider } from '@/contexts/PhoneAuthContext';
+import { AuthProvider } from '@/contexts/AuthContext';
+import { queryClient } from '@/lib/queryClient';
+import { useForegroundMessageHandler } from '@/lib/push';
 
 export {
     // Catch any errors thrown by the Layout component.
@@ -59,42 +64,48 @@ export default function RootLayout() {
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
+  useForegroundMessageHandler();
 
   return (
-    <PhoneAuthProvider>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-        <Stack.Screen name="login" options={{ headerShown: false }} />
-        <Stack.Screen name="signup" options={{ headerShown: false }} />
-        <Stack.Screen name="terms-and-conditions" options={{ headerShown: false }} />
-        <Stack.Screen name="verify-number" options={{ headerShown: false }} />
-        <Stack.Screen name="set-password" options={{ headerShown: false }} />
-        <Stack.Screen name="item-details" options={{ headerShown: false }} />
-        <Stack.Screen name="chatroom" options={{ headerShown: false }} />
-        <Stack.Screen name="post-item" options={{ headerShown: false }} />
-        <Stack.Screen name="notifications" options={{ headerShown: false }} />
-        <Stack.Screen name="search-results" options={{ headerShown: false }} />
-        <Stack.Screen name="splash" options={{ headerShown: false }} />
-        <Stack.Screen name="edit-profile" options={{ headerShown: false }} />
-        <Stack.Screen name="my-listings" options={{ headerShown: false }} />
-        <Stack.Screen name="favorites" options={{ headerShown: false }} />
-        <Stack.Screen name="settings" options={{ headerShown: false }} />
-        <Stack.Screen name="notification-settings" options={{ headerShown: false }} />
-        <Stack.Screen name="privacy-settings" options={{ headerShown: false }} />
-        <Stack.Screen name="help-support" options={{ headerShown: false }} />
-        <Stack.Screen 
-          name="search" 
-          options={{ 
-            headerShown: false,
-            animation: 'slide_from_right',
-            animationDuration: 200
-          }} 
-        />
-        </Stack>
-        <Toast />
-      </ThemeProvider>
-    </PhoneAuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <PhoneAuthProvider>
+        <AuthProvider>
+          <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+            <Stack>
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="make-offer" options={{ presentation: 'modal', headerShown: false }} />
+            <Stack.Screen name="login" options={{ headerShown: false }} />
+            <Stack.Screen name="signup" options={{ headerShown: false }} />
+            <Stack.Screen name="terms-and-conditions" options={{ headerShown: false }} />
+            <Stack.Screen name="verify-number" options={{ headerShown: false }} />
+            <Stack.Screen name="set-password" options={{ headerShown: false }} />
+            <Stack.Screen name="item-details" options={{ headerShown: false }} />
+            <Stack.Screen name="chatroom" options={{ headerShown: false }} />
+            <Stack.Screen name="post-item" options={{ headerShown: false }} />
+            <Stack.Screen name="notifications" options={{ headerShown: false }} />
+            <Stack.Screen name="search-results" options={{ headerShown: false }} />
+            <Stack.Screen name="splash" options={{ headerShown: false }} />
+            <Stack.Screen name="edit-profile" options={{ headerShown: false }} />
+            <Stack.Screen name="my-listings" options={{ headerShown: false }} />
+            <Stack.Screen name="favorites" options={{ headerShown: false }} />
+            <Stack.Screen name="settings" options={{ headerShown: false }} />
+            <Stack.Screen name="notification-settings" options={{ headerShown: false }} />
+            <Stack.Screen name="privacy-settings" options={{ headerShown: false }} />
+            <Stack.Screen name="help-support" options={{ headerShown: false }} />
+            <Stack.Screen
+              name="search"
+              options={{
+                headerShown: false,
+                animation: 'slide_from_right',
+                animationDuration: 200
+              }}
+            />
+            </Stack>
+            <Toast />
+          </ThemeProvider>
+        </AuthProvider>
+      </PhoneAuthProvider>
+    </QueryClientProvider>
   );
 }

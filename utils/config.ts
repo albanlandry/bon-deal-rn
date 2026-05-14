@@ -89,8 +89,13 @@ const buildConfig = (): AppConfig => {
   return {
     env,
     api: {
-      baseUrl: getEnvVar('API_BASE_URL', 'http://localhost:3000/api/v1'),
-      timeout: getEnvNumber('API_TIMEOUT', 30000),
+      // app.config.js exposes these under camelCase keys in `extra`.
+      baseUrl:
+        Constants.expoConfig?.extra?.apiBaseUrl ||
+        getEnvVar('API_BASE_URL', 'http://localhost:8000'),
+      timeout:
+        Constants.expoConfig?.extra?.apiTimeout ||
+        getEnvNumber('API_TIMEOUT', 30000),
     },
     firebase: {
       apiKey: getEnvVar('FIREBASE_API_KEY'),

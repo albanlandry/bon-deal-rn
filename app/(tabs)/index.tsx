@@ -9,7 +9,7 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import Icon from '@expo/vector-icons/MaterialIcons';
 import { theme } from '../../utils/theme';
 
 interface MenuItemProps {
@@ -29,7 +29,7 @@ const MenuItem: React.FC<MenuItemProps> = ({
   <TouchableOpacity style={styles.menuItem} onPress={onPress}>
     <View style={styles.menuItemLeft}>
       <View style={styles.iconContainer}>
-        <Icon name={icon} size={24} color={theme.colors.primary} />
+        <Icon name={icon as any} size={24} color={theme.colors.primary} />
       </View>
       <View style={styles.menuItemText}>
         <Text style={styles.menuItemTitle}>{title}</Text>

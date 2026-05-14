@@ -4,6 +4,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Image,
   KeyboardAvoidingView,
@@ -16,6 +17,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { apiFetch } from '@/lib/api';
 import { showToast } from '../components/atoms/Toast';
 import { theme } from '../utils/theme';
 
@@ -26,6 +28,7 @@ export default function SetupProfileScreen() {
   const [nickname, setNickname] = useState('');
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -108,17 +111,32 @@ export default function SetupProfileScreen() {
     );
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (!validateForm()) {
       showToast.error('Erreur de validation', 'Veuillez corriger les erreurs dans le formulaire.');
       return;
     }
 
-    // TODO: Save profile image and nickname to backend
-    // For now, navigate to set password with the data
+    // Persist the chosen nickname as the backend username. The Firebase→JWT
+    // exchange may still be in flight; a 401 here is transparently retried by
+    // the API client. A failure (e.g. nickname taken) is surfaced but does not
+    // block onboarding — the backend keeps the auto-generated username.
+    setSaving(true);
+    try {
+      await apiFetch('/auth/me', {
+        method: 'PATCH',
+        body: { username: nickname.trim(), first_name: nickname.trim() },
+      });
+    } catch (e: any) {
+      console.warn('[setup-profile] profile save failed:', e);
+      showToast.error('Profil non enregistré', e?.message || 'Réessayez plus tard.');
+    } finally {
+      setSaving(false);
+    }
+
     router.push({
       pathname: '/set-password',
-      params: { 
+      params: {
         phone: phone || '',
         nickname: nickname.trim(),
         profileImage: profileImage || '',
@@ -201,11 +219,16 @@ export default function SetupProfileScreen() {
           <TouchableOpacity
             style={[
               styles.continueButton,
-              (!nickname.trim() || nickname.trim().length < 2) && styles.continueButtonDisabled,
+              (!nickname.trim() || nickname.trim().length < 2 || saving) &&
+                styles.continueButtonDisabled,
             ]}
             onPress={handleContinue}
-            disabled={!nickname.trim() || nickname.trim().length < 2}>
-            <Text style={styles.continueButtonText}>Continuer</Text>
+            disabled={!nickname.trim() || nickname.trim().length < 2 || saving}>
+            {saving ? (
+              <ActivityIndicator color={theme.colors.white} />
+            ) : (
+              <Text style={styles.continueButtonText}>Continuer</Text>
+            )}
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>

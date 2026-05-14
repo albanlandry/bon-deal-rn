@@ -1,12 +1,12 @@
 // app/item-details.tsx - Item details screen
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import React, { useState } from 'react';
 import {
+  ActivityIndicator,
   Dimensions,
-  FlatList,
   Image,
-  Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -16,218 +16,117 @@ import {
 import Carousel from 'react-native-reanimated-carousel';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../utils/theme';
+import { showToast } from '../components/atoms/Toast';
+import { useAuth } from '@/contexts/AuthContext';
+import { postByIdQuery } from '@/lib/api/posts';
+import { getOrCreateConversation } from '@/lib/api/conversations';
+import { formatAmount, formatRelativeTime } from '@/lib/format';
 
 const { width: screenWidth } = Dimensions.get('window');
 
-interface ItemDetailsProps {
-  id?: string;
-  imageUrl?: string;
-  title?: string;
-  description?: string;
-  price?: string;
-  location?: {
-    latitude: number;
-    longitude: number;
-    address: string;
-  };
-  seller?: {
-    name: string;
-    avatar: string;
-    postedTime: string;
-  };
-}
-
 export default function ItemDetailsScreen() {
   const router = useRouter();
+  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { user } = useAuth();
+  const postId = Number(id);
+
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isLiked, setIsLiked] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // Mock data - in real app, this would come from navigation params
-  const item: ItemDetailsProps = {
-    id: '1',
-    imageUrl: 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=400&h=300&fit=crop&crop=center',
-    title: 'Macbook Pro 2020 (256 GB)',
-    description: `Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+  const { data: post, isLoading, error, refetch } = useQuery(postByIdQuery(postId));
 
-Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
-
-Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.`,
-    price: '350000 FCFA',
-    location: {
-      latitude: 0.4162,
-      longitude: 9.4673,
-      address: 'Kinguele, Libreville, Gabon',
+  const contactMutation = useMutation({
+    mutationFn: () => getOrCreateConversation(postId),
+    onSuccess: (conv) => {
+      router.push({
+        pathname: '/chatroom',
+        params: { conversationId: String(conv.id) },
+      });
     },
-    seller: {
-      name: 'user12345',
-      avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop&crop=face',
-      postedTime: "Publié il y'a 15 min",
+    onError: (e: any) => {
+      showToast.error('Échec', e?.message || "Impossible d'ouvrir la conversation.");
     },
-  };
+  });
 
-  // Mock suggested items data
-  const suggestedItems = [
-    {
-      id: '2',
-      imageUrl: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=300&h=200&fit=crop&crop=center',
-      title: 'MacBook Air M1 2020',
-      price: '280000 FCFA',
-      location: 'Libreville Centre',
-      status: 'available',
-    },
-    {
-      id: '3',
-      imageUrl: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=300&h=200&fit=crop&crop=center',
-      title: 'iPhone 12 Pro Max 128GB',
-      price: '320000 FCFA',
-      location: 'Akebe',
-      status: 'available',
-    },
-    {
-      id: '4',
-      imageUrl: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=300&h=200&fit=crop&crop=center',
-      title: 'iPad Pro 11" 2021',
-      price: '450000 FCFA',
-      location: 'Montagne Sainte',
-      status: 'sold',
-    },
-    {
-      id: '5',
-      imageUrl: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=300&h=200&fit=crop&crop=center',
-      title: 'Dell XPS 13 2021',
-      price: '380000 FCFA',
-      location: 'Nzeng Ayong',
-      status: 'available',
-    },
-  ];
+  if (!Number.isFinite(postId) || postId <= 0) {
+    return (
+      <SafeAreaView style={styles.centered}>
+        <Ionicons name="alert-circle-outline" size={48} color="#FF6B6B" />
+        <Text style={styles.stateText}>Article introuvable.</Text>
+        <TouchableOpacity style={styles.stateButton} onPress={() => router.back()}>
+          <Text style={styles.stateButtonText}>Retour</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
 
-  // Mock engagement data
-  const engagementData = {
-    likes: 24,
-    views: 156,
-    chats: 8,
-  };
+  if (isLoading) {
+    return (
+      <SafeAreaView style={styles.centered}>
+        <ActivityIndicator color={theme.colors.primary} />
+      </SafeAreaView>
+    );
+  }
 
-  const images = [
-    'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=400&h=300&fit=crop&crop=center',
-    'https://images.unsplash.com/photo-1541807084-5c52b6b3adef?w=400&h=300&fit=crop&crop=center',
-    'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=400&h=300&fit=crop&crop=center',
-    'https://images.unsplash.com/photo-1517077304055-6e89abbf09b0?w=400&h=300&fit=crop&crop=center',
-  ];
+  if (error || !post) {
+    return (
+      <SafeAreaView style={styles.centered}>
+        <Ionicons name="alert-circle-outline" size={48} color="#FF6B6B" />
+        <Text style={styles.stateText}>Impossible de charger cet article.</Text>
+        <TouchableOpacity style={styles.stateButton} onPress={() => refetch()}>
+          <Text style={styles.stateButtonText}>Réessayer</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
 
-  const handleBack = () => {
-    router.back();
-  };
-
-  const handleHome = () => {
-    router.push('/(tabs)/home');
-  };
-
-  const handleLike = () => {
-    setIsLiked(!isLiked);
-  };
-
-  const handleShare = () => {
-    console.log('Share item');
-  };
-
-  const handleContact = () => {
-    console.log('Contact seller');
-  };
-
-  const handleNegotiate = () => {
-    console.log('Start negotiation');
-  };
+  const imageUrls = post.images.map((img) => img.url);
+  const isOwner = !!user && user.id === post.owner_id;
+  const priceLabel = post.is_free ? 'Gratuit' : formatAmount(post.price);
+  const locationText = [post.pickup_quartier, post.city].filter(Boolean).join(', ');
 
   const handleImagePress = (index: number) => {
     setCurrentImageIndex(index);
     setIsFullscreen(true);
   };
 
-  const handleCloseFullscreen = () => {
-    setIsFullscreen(false);
+  const handleNegotiate = () => {
+    router.push({ pathname: '/make-offer', params: { postId: String(post.id) } });
   };
-
-  const EngagementStats = () => (
-    <View style={styles.engagementContainer}>
-      <View style={styles.engagementItem}>
-        <Ionicons name="heart" size={16} color="#FF6B6B" />
-        <Text style={styles.engagementText}>{engagementData.likes}</Text>
-      </View>
-      <View style={styles.engagementItem}>
-        <Ionicons name="eye" size={16} color="#666" />
-        <Text style={styles.engagementText}>{engagementData.views}</Text>
-      </View>
-      <View style={styles.engagementItem}>
-        <Ionicons name="chatbubble" size={16} color="#666" />
-        <Text style={styles.engagementText}>{engagementData.chats}</Text>
-      </View>
-    </View>
-  );
-
-  const handleOpenMap = () => {
-    if (item.location) {
-      const { latitude, longitude, address } = item.location;
-      const url = `https://maps.google.com/maps?q=${latitude},${longitude}&z=15`;
-      Linking.openURL(url);
-    }
-  };
-
-  const renderSuggestedItem = ({ item }: { item: any }) => (
-    <TouchableOpacity style={styles.suggestedItem} onPress={() => router.push('/item-details')}>
-      <View style={styles.suggestedImageContainer}>
-        <Image source={{ uri: item.imageUrl }} style={styles.suggestedImage} />
-        <View style={[
-          styles.suggestedStatusBadge,
-          { backgroundColor: item.status === 'available' ? '#34C759' : '#FF3B30' }
-        ]}>
-          <Text style={styles.suggestedStatusText}>
-            {item.status === 'available' ? 'Disponible' : 'Vendu'}
-          </Text>
-        </View>
-      </View>
-      <View style={styles.suggestedContent}>
-        <Text style={styles.suggestedTitle} numberOfLines={2}>{item.title}</Text>
-        <Text style={styles.suggestedLocation}>{item.location}</Text>
-        <Text style={styles.suggestedPrice}>{item.price}</Text>
-      </View>
-    </TouchableOpacity>
-  );
 
   return (
     <SafeAreaView style={styles.container}>
       {/* Fullscreen Carousel Modal */}
-      {isFullscreen && (
+      {isFullscreen && imageUrls.length > 0 && (
         <View style={styles.fullscreenContainer}>
           <TouchableOpacity
             style={styles.closeButton}
-            onPress={handleCloseFullscreen}>
+            onPress={() => setIsFullscreen(false)}>
             <Ionicons name="close" size={24} color="white" />
           </TouchableOpacity>
-          
+
           <Carousel
             loop
             width={screenWidth}
             height={screenWidth}
             autoPlay={false}
-            data={images}
+            data={imageUrls}
             defaultIndex={currentImageIndex}
             scrollAnimationDuration={300}
             onSnapToItem={(index) => setCurrentImageIndex(index)}
             renderItem={({ item }) => (
               <TouchableOpacity
                 style={styles.fullscreenImageContainer}
-                onPress={handleCloseFullscreen}
+                onPress={() => setIsFullscreen(false)}
                 activeOpacity={1}>
                 <Image source={{ uri: item }} style={styles.fullscreenImage} />
               </TouchableOpacity>
             )}
           />
-          
-          {/* Fullscreen Pagination */}
+
           <View style={styles.fullscreenPagination}>
-            {images.map((_, index) => (
+            {imageUrls.map((_, index) => (
               <View
                 key={index}
                 style={[
@@ -242,129 +141,156 @@ Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium dolor
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.headerButton} onPress={handleBack}>
+        <TouchableOpacity style={styles.headerButton} onPress={() => router.back()}>
           <Ionicons name="chevron-back" size={24} color="#000" />
         </TouchableOpacity>
 
         <View style={styles.sellerInfo}>
-          <Image source={{ uri: item.seller?.avatar }} style={styles.sellerAvatar} />
+          <View style={styles.sellerAvatar}>
+            <Ionicons name="person" size={20} color="#999" />
+          </View>
           <View style={styles.sellerDetails}>
-            <Text style={styles.sellerName}>{item.seller?.name}</Text>
-            <Text style={styles.postedTime}>{item.seller?.postedTime}</Text>
+            <Text style={styles.sellerName} numberOfLines={1}>
+              {post.owner_username ?? 'Vendeur'}
+            </Text>
+            <Text style={styles.postedTime}>
+              Publié {formatRelativeTime(post.created_at)}
+            </Text>
           </View>
         </View>
 
         <View style={styles.headerActions}>
-          <TouchableOpacity style={styles.headerButton} onPress={handleHome}>
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={() => router.push('/(tabs)/home')}>
             <Ionicons name="home" size={24} color="#000" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.headerButton}>
-            <Ionicons name="ellipsis-vertical" size={24} color="#000" />
           </TouchableOpacity>
         </View>
       </View>
 
-      <ScrollView 
-        style={styles.scrollView} 
+      <ScrollView
+        style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
+        showsVerticalScrollIndicator={false}>
         {/* Image Carousel */}
         <View style={styles.imageContainer}>
-          <Carousel
-            loop
-            width={screenWidth}
-            height={300}
-            autoPlay={false}
-            data={images}
-            scrollAnimationDuration={300}
-            onSnapToItem={(index) => setCurrentImageIndex(index)}
-            renderItem={({ item, index }) => (
-              <TouchableOpacity
-                onPress={() => handleImagePress(index)}
-                activeOpacity={0.9}>
-                <Image source={{ uri: item }} style={styles.productImage} />
-              </TouchableOpacity>
-            )}
-          />
-          
-          {/* Pagination Dots */}
-          <View style={styles.paginationContainer}>
-            {images.map((_, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.paginationDot,
-                  index === currentImageIndex && styles.paginationDotActive,
-                ]}
+          {imageUrls.length > 0 ? (
+            <>
+              <Carousel
+                loop
+                width={screenWidth}
+                height={300}
+                autoPlay={false}
+                data={imageUrls}
+                scrollAnimationDuration={300}
+                onSnapToItem={(index) => setCurrentImageIndex(index)}
+                renderItem={({ item, index }) => (
+                  <TouchableOpacity
+                    onPress={() => handleImagePress(index)}
+                    activeOpacity={0.9}>
+                    <Image source={{ uri: item }} style={styles.productImage} />
+                  </TouchableOpacity>
+                )}
               />
-            ))}
-          </View>
-        </View>
-
-        {/* Product Info */}
-        <View style={styles.productInfo}>
-          <Text style={styles.productTitle}>{item.title}</Text>
-          <EngagementStats />
-          <Text style={styles.productDescription}>{item.description}</Text>
-          
-          {/* Location Map */}
-          {item.location && (
-            <View style={styles.mapSection}>
-              <Text style={styles.sectionTitle}>Localisation</Text>
-              <TouchableOpacity style={styles.mapContainer} onPress={handleOpenMap}>
-                <View style={styles.mapPlaceholder}>
-                  <Ionicons name="location" size={48} color={theme.colors.primary} />
-                  <Text style={styles.mapPlaceholderText}>Appuyez pour voir sur la carte</Text>
-                  <Text style={styles.mapCoordinates}>
-                    {item.location.latitude.toFixed(4)}, {item.location.longitude.toFixed(4)}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-              <Text style={styles.locationAddress}>{item.location.address}</Text>
+              <View style={styles.paginationContainer}>
+                {imageUrls.map((_, index) => (
+                  <View
+                    key={index}
+                    style={[
+                      styles.paginationDot,
+                      index === currentImageIndex && styles.paginationDotActive,
+                    ]}
+                  />
+                ))}
+              </View>
+            </>
+          ) : (
+            <View style={styles.imagePlaceholder}>
+              <Ionicons name="image-outline" size={56} color="#ccc" />
             </View>
           )}
         </View>
 
-        {/* Suggested Items */}
-        <View style={styles.suggestedSection}>
-          <Text style={styles.sectionTitle}>Articles similaires</Text>
-          <FlatList
-            data={suggestedItems}
-            renderItem={renderSuggestedItem}
-            keyExtractor={(item) => item.id}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.suggestedList}
-          />
+        {/* Product Info */}
+        <View style={styles.productInfo}>
+          <Text style={styles.productTitle}>{post.title}</Text>
+
+          <View style={styles.engagementContainer}>
+            <View style={styles.engagementItem}>
+              <Ionicons name="heart" size={16} color="#FF6B6B" />
+              <Text style={styles.engagementText}>{post.likes_count}</Text>
+            </View>
+            <View style={styles.engagementItem}>
+              <Ionicons name="eye" size={16} color="#666" />
+              <Text style={styles.engagementText}>{post.views_count}</Text>
+            </View>
+            <View style={styles.engagementItem}>
+              <Ionicons name="pricetag" size={16} color="#666" />
+              <Text style={styles.engagementText}>{post.offer_count}</Text>
+            </View>
+          </View>
+
+          <Text style={styles.productDescription}>{post.description}</Text>
+
+          {/* Location */}
+          {(locationText || post.pickup_location_note) && (
+            <View style={styles.locationSection}>
+              <Text style={styles.sectionTitle}>Localisation</Text>
+              <View style={styles.locationCard}>
+                <Ionicons name="location" size={20} color={theme.colors.primary} />
+                <View style={styles.locationTextWrap}>
+                  {!!locationText && (
+                    <Text style={styles.locationPrimary}>{locationText}</Text>
+                  )}
+                  {!!post.pickup_location_note && (
+                    <Text style={styles.locationNote}>{post.pickup_location_note}</Text>
+                  )}
+                </View>
+              </View>
+            </View>
+          )}
         </View>
       </ScrollView>
 
       {/* Bottom Action Bar */}
       <View style={styles.bottomBar}>
         <View style={styles.bottomLeft}>
-          <TouchableOpacity style={styles.actionButton} onPress={handleLike}>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => setIsLiked((v) => !v)}>
             <Ionicons
               name={isLiked ? 'heart' : 'heart-outline'}
               size={24}
               color={isLiked ? '#FF6B6B' : '#666'}
             />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actionButton} onPress={handleShare}>
-            <Ionicons name="share-outline" size={24} color="#666" />
-          </TouchableOpacity>
         </View>
 
         <View style={styles.bottomCenter}>
-          <Text style={styles.price}>{item.price}</Text>
-          <TouchableOpacity onPress={handleNegotiate}>
-            <Text style={styles.negotiateText}>Negotier</Text>
-          </TouchableOpacity>
+          <Text style={styles.price}>{priceLabel}</Text>
+          {post.allow_negotiation && !isOwner && (
+            <TouchableOpacity onPress={handleNegotiate}>
+              <Text style={styles.negotiateText}>Negotier</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
-        <TouchableOpacity style={styles.contactButton} onPress={handleContact}>
-          <Text style={styles.contactButtonText}>Contacter</Text>
-        </TouchableOpacity>
+        {isOwner ? (
+          <View style={[styles.contactButton, styles.contactButtonDisabled]}>
+            <Text style={styles.contactButtonText}>Votre annonce</Text>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.contactButton}
+            onPress={() => contactMutation.mutate()}
+            disabled={contactMutation.isPending}>
+            {contactMutation.isPending ? (
+              <ActivityIndicator color={theme.colors.white} />
+            ) : (
+              <Text style={styles.contactButtonText}>Contacter</Text>
+            )}
+          </TouchableOpacity>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -374,6 +300,31 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.white,
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: theme.spacing.xl,
+    backgroundColor: theme.colors.white,
+  },
+  stateText: {
+    fontSize: 16,
+    color: '#666',
+    marginTop: theme.spacing.md,
+    textAlign: 'center',
+  },
+  stateButton: {
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
+    borderRadius: 8,
+    marginTop: theme.spacing.lg,
+  },
+  stateButtonText: {
+    color: theme.colors.white,
+    fontSize: 16,
+    fontWeight: '600',
   },
   header: {
     flexDirection: 'row',
@@ -398,6 +349,9 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 20,
     marginRight: theme.spacing.sm,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   sellerDetails: {
     flex: 1,
@@ -431,6 +385,13 @@ const styles = StyleSheet.create({
     height: 300,
     resizeMode: 'cover',
   },
+  imagePlaceholder: {
+    width: screenWidth,
+    height: 300,
+    backgroundColor: '#F8F9FA',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   paginationContainer: {
     position: 'absolute',
     bottom: 16,
@@ -452,7 +413,6 @@ const styles = StyleSheet.create({
   },
   productInfo: {
     paddingHorizontal: theme.spacing.lg,
-    // paddingBottom: 100, // Space for bottom bar
   },
   productTitle: {
     fontSize: 24,
@@ -482,11 +442,40 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     color: '#333',
   },
+  locationSection: {
+    marginTop: theme.spacing.lg,
+    marginBottom: theme.spacing.lg,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: theme.spacing.md,
+  },
+  locationCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: theme.spacing.sm,
+    borderRadius: 12,
+    padding: theme.spacing.md,
+    backgroundColor: '#F8F9FA',
+    borderWidth: 1,
+    borderColor: theme.colors.grayLight,
+  },
+  locationTextWrap: {
+    flex: 1,
+  },
+  locationPrimary: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#333',
+  },
+  locationNote: {
+    fontSize: 13,
+    color: theme.colors.gray,
+    marginTop: 2,
+  },
   bottomBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: theme.spacing.lg,
@@ -523,6 +512,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.md,
     borderRadius: 8,
+    minWidth: 120,
+    alignItems: 'center',
+  },
+  contactButtonDisabled: {
+    backgroundColor: '#B0B0B0',
   },
   contactButtonText: {
     color: theme.colors.white,
@@ -581,109 +575,4 @@ const styles = StyleSheet.create({
   fullscreenPaginationDotActive: {
     backgroundColor: 'white',
   },
-  // Map styles
-  mapSection: {
-    marginTop: theme.spacing.lg,
-    marginBottom: theme.spacing.lg,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#333',
-    marginBottom: theme.spacing.md,
-    paddingHorizontal: theme.spacing.lg,
-  },
-  mapContainer: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginBottom: theme.spacing.sm,
-    backgroundColor: '#F8F9FA',
-    borderWidth: 1,
-    borderColor: theme.colors.grayLight,
-  },
-  mapPlaceholder: {
-    height: 200,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-  },
-  mapPlaceholderText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: theme.colors.primary,
-    marginTop: theme.spacing.sm,
-    marginBottom: theme.spacing.xs,
-  },
-  mapCoordinates: {
-    fontSize: 12,
-    color: theme.colors.gray,
-    fontWeight: '500',
-  },
-  locationAddress: {
-    fontSize: 14,
-    color: theme.colors.gray,
-    fontWeight: '500',
-  },
-  // Suggested items styles
-  suggestedSection: {
-    marginTop: theme.spacing.lg,
-    marginBottom: theme.spacing.xxxxxxxl,
-  },
-  suggestedList: {
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.lg,
-  },
-  suggestedItem: {
-    width: 160,
-    marginRight: theme.spacing.md,
-    backgroundColor: theme.colors.white,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    overflow: 'hidden',
-  },
-  suggestedImageContainer: {
-    position: 'relative',
-  },
-  suggestedImage: {
-    width: '100%',
-    height: 120,
-  },
-  suggestedStatusBadge: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  suggestedStatusText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  suggestedContent: {
-    padding: theme.spacing.sm,
-  },
-  suggestedTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-    lineHeight: 18,
-  },
-  suggestedLocation: {
-    fontSize: 12,
-    color: theme.colors.gray,
-    marginBottom: 4,
-  },
-  suggestedPrice: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: theme.colors.primary,
-  },
 });
-

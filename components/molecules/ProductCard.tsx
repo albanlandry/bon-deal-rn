@@ -1,7 +1,7 @@
 // components/molecules/ProductCard.tsx - Reusable Product Card
 import React from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import Icon from '@expo/vector-icons/MaterialIcons';
 import { theme } from '../../utils/theme';
 
 interface ProductCardProps {
@@ -13,7 +13,7 @@ interface ProductCardProps {
   likes: number;
   views: number;
   comments: number;
-  status?: 'available' | 'sold';
+  status?: string;
   onPress?: () => void;
 }
 
@@ -57,7 +57,7 @@ const ProductCard: React.FC<ProductCardProps> = React.memo(
               />
               {/* Status Badge */}
               <View style={[styles.statusBadge, { backgroundColor: statusConfig.backgroundColor }]}>
-                <Icon name={statusConfig.icon} size={12} color={statusConfig.textColor} />
+                <Icon name={statusConfig.icon as any} size={12} color={statusConfig.textColor} />
                 <Text style={[styles.statusText, { color: statusConfig.textColor }]}>
                   {statusConfig.text}
                 </Text>

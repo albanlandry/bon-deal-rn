@@ -121,7 +121,9 @@ export default function OTPInput({
                 focusedIndex === index && styles.inputBoxFocused,
               ]}>
               <TextInput
-                ref={(ref) => (inputRefs.current[index] = ref)}
+                ref={(ref) => {
+                  inputRefs.current[index] = ref;
+                }}
                 style={styles.input}
                 maxLength={1}
                 keyboardType="number-pad"
