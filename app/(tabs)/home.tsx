@@ -306,7 +306,7 @@ export default function HomeScreen() {
   };
 
   const handleProductPress = (item: any) => {
-    router.push('/item-details');
+    router.push({ pathname: '/item-details', params: { id: String(item.id) } });
   };
 
   const handlePostItem = () => {

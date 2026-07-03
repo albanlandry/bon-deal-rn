@@ -69,6 +69,17 @@ module.exports = {
           },
         },
       ],
+      // Allow cleartext (http://) traffic on Android so the app can reach the
+      // non-TLS backend (10.0.2.2:8000 emulator-to-host, or 150.230.114.9:8000).
+      // Remove once the backend is served over HTTPS.
+      [
+        'expo-build-properties',
+        {
+          android: {
+            usesCleartextTraffic: true,
+          },
+        },
+      ],
       // Uncomment to use custom config plugin
       // './plugins/withCustomConfig.js',
     ],
