@@ -53,12 +53,10 @@ cd C:\DEV\bondeal_app\bon-deal-rn
 copy \\wsl.localhost\Ubuntu\home\mbmk92\DEV\bondeal_app\bon-deal-rn\.env.local .env.local
 
 npm install                            # install dependencies
-npx expo install expo-build-properties # SDK-matched version of the cleartext-HTTP plugin
 npm run prebuild:clean                 # generate the native android/ project (applies all config plugins)
 ```
 
 - [ ] `npm install` finishes without a fatal error.
-- [ ] `npx expo install expo-build-properties` adds the package.
 - [ ] `npm run prebuild:clean` creates an `android/` folder.
 
 > **OneDrive note:** with the repo cloned at `C:\DEV` (outside OneDrive), no
@@ -69,7 +67,7 @@ npm run prebuild:clean                 # generate the native android/ project (a
 ## 3. Run the app
 
 1. [ ] **Start the emulator** (Android Studio → Device Manager → ▶) and wait until the Android home screen is showing.
-2. [ ] **Make sure the backend is running.** It runs in Docker under WSL. In a WSL terminal: `cd bon-deal-fastapi && docker compose up -d` (or it may already be up).
+2. [ ] **Make sure the backend is running.** It runs in Docker under WSL. In a WSL terminal: `cd ~/DEV/bondeal_app/bon-deal-fastapi && docker compose up -d backend` (or it may already be up).
 3. [ ] **Build & launch** (PowerShell, in the project folder):
 
    ```powershell
@@ -149,10 +147,9 @@ So a meaningful end-to-end test is: **login (test number) → make/receive an of
 ## 7. Troubleshooting
 
 - **`npm run android:local` says "No connected devices"** → the emulator isn't running. Start it in Android Studio first, confirm with `adb devices` (should list an `emulator-5554  device`).
-- **Build fails on `expo-build-properties` "cannot find module"** → you skipped `npx expo install expo-build-properties` before `prebuild:clean`. Run it, then `npm run prebuild:clean` again.
 - **App loads but every backend call fails / "Network request failed"** → (a) backend not running, (b) `curl http://localhost:8000/` fails from Windows → use the prod URL fallback in §4, or in PowerShell run `adb reverse tcp:8000 tcp:8000` and set `API_BASE_URL=http://localhost:8000`. Rebuild after any `.env.local` change.
 - **Login OTP screen works but "login" then does nothing / 503** → that's the backend Firebase Admin key (§5a) not yet installed.
-- **Gradle/Metro extremely slow or files locked** → OneDrive is syncing the build output. Pause OneDrive (§2 warning).
+- **Gradle/Metro extremely slow or files locked** → you're building from the old OneDrive copy. Use the `C:\DEV\bondeal_app\bon-deal-rn` clone (see the note at the top).
 - **Emulator has no Play Store / Firebase auth errors about Google Play services** → your AVD used a non-Play image. Recreate the AVD with a "Google Play" system image (§1).
 - **Metro stuck / stale cache** → stop it (Ctrl-C) and run `npm run start:local -- --clear`.
 
@@ -163,7 +160,6 @@ So a meaningful end-to-end test is: **login (test number) → make/receive an of
 ```powershell
 # one-time
 npm install
-npx expo install expo-build-properties
 npm run prebuild:clean
 
 # every run (emulator must be booted first)
