@@ -8,10 +8,19 @@ emulator. Follow the sections in order. Checkboxes mark the things **you** do.
 > build* instead. It's a one-time extra step; after that, JS changes hot-reload
 > normally.
 
-> **Why run from Windows, not WSL?** The project files live on the Windows side
-> (`C:\Users\user\OneDrive\Documents\DEV\bondeal_app\bon-deal-rn`), and the
-> emulator, `adb`, and Gradle all run on Windows. Driving a Windows emulator from
-> WSL is painful — so run every command below in **Windows PowerShell**.
+> **Why run from Windows, not WSL?** The emulator, `adb`, and Gradle all run on
+> Windows, and driving a Windows emulator from WSL is painful — so run every
+> command below in **Windows PowerShell**, against a Windows-side clone of the
+> repo at `C:\DEV\bondeal_app\bon-deal-rn` (**outside OneDrive** — OneDrive
+> locks files mid-build). Create it once:
+>
+> ```powershell
+> mkdir C:\DEV\bondeal_app; cd C:\DEV\bondeal_app
+> git clone https://github.com/albanlandry/bon-deal-rn.git
+> ```
+>
+> (The WSL-side copy at `~/DEV/bondeal_app/bon-deal-rn` is where backend-adjacent
+> edits happen; the two sync through git push/pull.)
 
 ---
 
@@ -38,7 +47,10 @@ emulator. Follow the sections in order. Checkboxes mark the things **you** do.
 Open **Windows PowerShell** and run:
 
 ```powershell
-cd C:\Users\user\OneDrive\Documents\DEV\bondeal_app\bon-deal-rn
+cd C:\DEV\bondeal_app\bon-deal-rn
+
+# one-time: copy the untracked env file from the WSL clone
+copy \\wsl.localhost\Ubuntu\home\mbmk92\DEV\bondeal_app\bon-deal-rn\.env.local .env.local
 
 npm install                            # install dependencies
 npx expo install expo-build-properties # SDK-matched version of the cleartext-HTTP plugin
@@ -49,10 +61,8 @@ npm run prebuild:clean                 # generate the native android/ project (a
 - [ ] `npx expo install expo-build-properties` adds the package.
 - [ ] `npm run prebuild:clean` creates an `android/` folder.
 
-> **OneDrive warning:** OneDrive tries to sync the thousands of files that
-> `prebuild` and Gradle generate, which causes locks and slowness. **Pause
-> OneDrive syncing while you build** (OneDrive tray icon → Pause syncing → 2 hours).
-> Long term, consider moving the repo out of the OneDrive folder.
+> **OneDrive note:** with the repo cloned at `C:\DEV` (outside OneDrive), no
+> sync-pausing is needed. Don't build from the old OneDrive copy.
 
 ---
 
