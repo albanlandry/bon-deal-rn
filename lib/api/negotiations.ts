@@ -1,5 +1,5 @@
 import { apiFetch } from '@/lib/api';
-import type { BdNegotiation } from '@/constants/types';
+import type { BdCoachVerdict, BdNegotiation } from '@/constants/types';
 
 interface NegotiationResponse {
   success: boolean;
@@ -54,4 +54,13 @@ export async function rejectOffer(negotiationId: number): Promise<BdNegotiation>
     { method: 'POST' },
   );
   return res.negotiation;
+}
+
+/** Ephemeral Négo-Coach advice for a pending negotiation (requester's turn only). */
+export async function coachAdvice(negotiationId: number): Promise<BdCoachVerdict> {
+  const res = await apiFetch<{ success: boolean; coach: BdCoachVerdict }>(
+    `/negotiations/${negotiationId}/coach`,
+    { method: 'POST' },
+  );
+  return res.coach;
 }

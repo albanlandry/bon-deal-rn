@@ -115,6 +115,30 @@ export interface BdNegotiationOffer {
   created_at: string | null;
 }
 
+/** Ephemeral Négo-Coach verdict (POST /negotiations/{id}/coach) — never
+ *  persisted server-side; lives only in the response and local state. */
+export interface BdCoachVerdict {
+  negotiation_id: number;
+  role: 'buyer' | 'seller';
+  action: 'hold' | 'counter' | 'accept';
+  suggested_amount: number | null;
+  rationale_fr: string;
+  confidence: number;
+  warning: string | null;
+  market: {
+    suggested: number;
+    range_min: number;
+    range_max: number;
+    comparable_count: number;
+  } | null;
+  source: 'similar_items' | 'ladder_only';
+  counterparty: BdUserBriefFull | null;
+  as_of_amount: number;
+  as_of_last_offer_by_id: number;
+  stale: boolean;
+  generated_at: string;
+}
+
 export interface BdNegotiation {
   id: number;
   post_id: number;

@@ -25,9 +25,10 @@ import {
   messagesQuery,
   sendMessage,
 } from '@/lib/api/conversations';
-import { acceptOffer, rejectOffer } from '@/lib/api/negotiations';
+import { acceptOffer, coachAdvice, counterOffer, rejectOffer } from '@/lib/api/negotiations';
+import { ApiError } from '@/lib/api';
 import { formatAmount, formatClock } from '@/lib/format';
-import type { BdChatMessage, BdConversation } from '@/constants/types';
+import type { BdChatMessage, BdCoachVerdict, BdConversation } from '@/constants/types';
 
 // --- System message rendering (French, mirrors the admin dashboard) --------
 
@@ -85,6 +86,125 @@ function SystemPill({ text }: { text: string }) {
   );
 }
 
+// --- Négo-Coach (ephemeral verdict card) ------------------------------------
+
+function coachErrorMessage(e: unknown): string {
+  const status = e instanceof ApiError ? e.status : 0;
+  if (status === 503) return "Le coach n'est pas disponible pour le moment.";
+  if (status === 429) return 'Trop de demandes au coach — réessayez plus tard.';
+  if (status === 409) return "L'offre a changé, actualisation…";
+  return 'Impossible de contacter le coach. Réessayez.';
+}
+
+function confidenceLabel(c: number): string {
+  if (c >= 0.7) return 'Conseil fiable';
+  if (c >= 0.4) return 'Conseil indicatif';
+  return 'À prendre avec prudence';
+}
+
+function CoachCard({
+  coach,
+  ctaEnabled,
+  sending,
+  onSendCounter,
+  onAccept,
+  onDismiss,
+}: {
+  coach: BdCoachVerdict;
+  ctaEnabled: boolean;
+  sending: boolean;
+  onSendCounter: () => void;
+  onAccept: () => void;
+  onDismiss: () => void;
+}) {
+  const title =
+    coach.action === 'counter'
+      ? `Proposez ${formatAmount(coach.suggested_amount)}`
+      : coach.action === 'accept'
+        ? 'Bonne affaire — vous pouvez accepter'
+        : "Patientez — ne changez rien pour l'instant";
+
+  const m = coach.market;
+  const span = m ? m.range_max - m.range_min : 0;
+  const dotPos = m
+    ? Math.min(Math.max(span > 0 ? ((coach.suggested_amount ?? m.suggested) - m.range_min) / span : 0.5, 0), 1)
+    : 0.5;
+
+  const cp = coach.counterparty;
+  const cpLabel = coach.role === 'buyer' ? 'Vendeur' : 'Acheteur';
+  const trust =
+    cp && cp.review_count && cp.avg_rating != null
+      ? `${cpLabel} : ★ ${cp.avg_rating.toFixed(1).replace('.', ',')} · ${cp.review_count} avis`
+      : `${cpLabel} : nouveau membre, pas encore d'avis`;
+
+  return (
+    <View style={styles.coachCard}>
+      <View style={styles.coachTitleRow}>
+        <Text style={styles.coachTitle}>💡 Négo-Coach</Text>
+        <Text style={styles.coachPrivate}>Visible par vous seul</Text>
+      </View>
+      <Text style={styles.coachVerdict}>{title}</Text>
+      <Text style={styles.coachRationale}>{coach.rationale_fr}</Text>
+      {m ? (
+        <>
+          <Text style={styles.coachMeta}>
+            Marché : {formatAmount(m.range_min)} – {formatAmount(m.range_max)} ·{' '}
+            {m.comparable_count} annonce{m.comparable_count > 1 ? 's' : ''} similaire
+            {m.comparable_count > 1 ? 's' : ''}
+          </Text>
+          <View style={styles.coachBarTrack}>
+            <View style={[styles.coachBarDot, { left: `${dotPos * 100}%` }]} />
+          </View>
+        </>
+      ) : (
+        <Text style={styles.coachMeta}>
+          Peu d'annonces similaires — conseil basé sur vos échanges
+        </Text>
+      )}
+      <Text style={styles.coachMeta}>{trust}</Text>
+      <Text style={styles.coachMeta}>{confidenceLabel(coach.confidence)}</Text>
+      {!!coach.warning && <Text style={styles.coachWarning}>{coach.warning}</Text>}
+      <View style={styles.coachActions}>
+        {coach.action === 'counter' && (
+          <TouchableOpacity
+            style={[styles.coachCta, (!ctaEnabled || sending) && styles.coachCtaDisabled]}
+            onPress={onSendCounter}
+            disabled={!ctaEnabled || sending}>
+            {sending ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.coachCtaText}>
+                Envoyer {formatAmount(coach.suggested_amount)}
+              </Text>
+            )}
+          </TouchableOpacity>
+        )}
+        {coach.action === 'accept' && (
+          <TouchableOpacity
+            style={[styles.coachCta, styles.coachCtaAccept, !ctaEnabled && styles.coachCtaDisabled]}
+            onPress={onAccept}
+            disabled={!ctaEnabled}>
+            <Text style={styles.coachCtaText}>Accepter l'offre</Text>
+          </TouchableOpacity>
+        )}
+        <TouchableOpacity style={styles.coachDismiss} onPress={onDismiss}>
+          <Text style={styles.coachDismissText}>
+            {coach.action === 'hold' ? 'Compris' : 'Ignorer'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+      {coach.action === 'hold' && (
+        <Text style={styles.coachMeta}>
+          Vous pouvez attendre, ou faire une autre contre-offre vous-même.
+        </Text>
+      )}
+      <Text style={styles.coachFooter}>
+        Le coach utilise les mêmes données pour l'acheteur et le vendeur.
+      </Text>
+    </View>
+  );
+}
+
 // --- Inline negotiation banner --------------------------------------------
 
 function NegotiationBanner({
@@ -93,6 +213,9 @@ function NegotiationBanner({
   onAccept,
   onReject,
   onCounter,
+  onCoach,
+  coachLoading,
+  coachVisible,
   busy,
 }: {
   conv: BdConversation;
@@ -100,6 +223,9 @@ function NegotiationBanner({
   onAccept: () => void;
   onReject: () => void;
   onCounter: () => void;
+  onCoach: () => void;
+  coachLoading: boolean;
+  coachVisible: boolean;
   busy: boolean;
 }) {
   const neg = conv.latest_negotiation;
@@ -120,6 +246,21 @@ function NegotiationBanner({
     return (
       <View style={styles.banner}>
         <Text style={styles.bannerLabel}>Offre en cours : {amount}</Text>
+        {!coachVisible && (
+          <TouchableOpacity
+            style={styles.coachPill}
+            onPress={onCoach}
+            disabled={coachLoading || busy}>
+            {coachLoading ? (
+              <View style={styles.coachPillRow}>
+                <ActivityIndicator size="small" color="#6B4FA1" />
+                <Text style={styles.coachPillText}> Le coach regarde le marché…</Text>
+              </View>
+            ) : (
+              <Text style={styles.coachPillText}>💡 Avis du coach</Text>
+            )}
+          </TouchableOpacity>
+        )}
         <View style={styles.bannerActions}>
           <TouchableOpacity
             style={[styles.bannerBtn, styles.bannerAccept]}
@@ -177,6 +318,7 @@ export default function ChatroomScreen() {
   const enabled = isAuthenticated && Number.isFinite(cid) && cid > 0;
 
   const [messageText, setMessageText] = useState('');
+  const [coach, setCoach] = useState<BdCoachVerdict | null>(null);
   const listRef = useRef<FlatList<BdChatMessage>>(null);
 
   const convQuery = useQuery({ ...conversationQuery(cid), enabled });
@@ -233,6 +375,64 @@ export default function ChatroomScreen() {
   });
 
   const negBusy = acceptMutation.isPending || rejectMutation.isPending;
+
+  // --- Négo-Coach (ephemeral: verdict lives only in local state) -----------
+  const ln = conv?.latest_negotiation;
+
+  // Clear stale advice whenever the ladder moves (counter/accept/close).
+  const ladderKey = ln
+    ? `${ln.id}:${ln.status}:${ln.current_offer_amount}:${ln.last_offer_by_id}`
+    : 'none';
+  useEffect(() => {
+    setCoach(null);
+  }, [ladderKey]);
+
+  const coachMutation = useMutation({
+    mutationFn: () => coachAdvice(conv!.latest_negotiation!.id),
+    onSuccess: setCoach,
+    onError: (e: any) => showToast.error('Négo-Coach', coachErrorMessage(e)),
+  });
+
+  const sendCoachCounter = useMutation({
+    mutationFn: () =>
+      counterOffer(coach!.negotiation_id, { amount: coach!.suggested_amount! }),
+    onSuccess: () => {
+      setCoach(null);
+      showToast.success('Contre-offre envoyée');
+      invalidateThread();
+      queryClient.invalidateQueries({ queryKey: ['conversation', cid, 'messages'] });
+    },
+    onError: () => {
+      // 409 race: the ladder moved — the backend is the authority.
+      setCoach(null);
+      showToast.error('Négo-Coach', "L'offre a changé, actualisation…");
+      invalidateThread();
+    },
+  });
+
+  // Mirror of the server rules + snapshot gate: only fire the CTA against the
+  // exact ladder state the verdict was computed for.
+  const coachCtaEnabled =
+    !!coach &&
+    !coach.stale &&
+    !!ln &&
+    ln.id === coach.negotiation_id &&
+    ln.status === 'pending' &&
+    ln.last_offer_by_id !== user?.id &&
+    ln.current_offer_amount === coach.as_of_amount &&
+    ln.last_offer_by_id === coach.as_of_last_offer_by_id;
+
+  const handleCoachSend = () => {
+    if (!coach?.suggested_amount) return;
+    Alert.alert(
+      'Envoyer la contre-offre ?',
+      `Proposer ${formatAmount(coach.suggested_amount)} à ${conv?.counterparty?.username} ?`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        { text: 'Envoyer', onPress: () => sendCoachCounter.mutate() },
+      ],
+    );
+  };
 
   const handleAccept = () => {
     Alert.alert(
@@ -319,7 +519,21 @@ export default function ChatroomScreen() {
           onAccept={handleAccept}
           onReject={handleReject}
           onCounter={handleCounter}
+          onCoach={() => coachMutation.mutate()}
+          coachLoading={coachMutation.isPending}
+          coachVisible={!!coach}
           busy={negBusy}
+        />
+      )}
+
+      {coach && (
+        <CoachCard
+          coach={coach}
+          ctaEnabled={coachCtaEnabled}
+          sending={sendCoachCounter.isPending}
+          onSendCounter={handleCoachSend}
+          onAccept={handleAccept}
+          onDismiss={() => setCoach(null)}
         />
       )}
 
@@ -604,6 +818,131 @@ const styles = StyleSheet.create({
   systemText: {
     fontSize: 12,
     color: '#555',
+    textAlign: 'center',
+  },
+  coachPill: {
+    alignSelf: 'center',
+    borderWidth: 1,
+    borderColor: '#E4D9F8',
+    borderRadius: 14,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 6,
+    marginTop: theme.spacing.sm,
+    backgroundColor: '#FFFFFF',
+  },
+  coachPillRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  coachPillText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B4FA1',
+  },
+  coachCard: {
+    backgroundColor: '#F5F0FF',
+    borderColor: '#E4D9F8',
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: theme.spacing.md,
+    marginTop: theme.spacing.sm,
+    marginHorizontal: theme.spacing.md,
+  },
+  coachTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  coachTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6B4FA1',
+  },
+  coachPrivate: {
+    fontSize: 10,
+    color: '#8a8a8a',
+  },
+  coachVerdict: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#222',
+    marginTop: 6,
+  },
+  coachRationale: {
+    fontSize: 13,
+    color: '#444',
+    marginTop: 4,
+    lineHeight: 18,
+  },
+  coachMeta: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 8,
+  },
+  coachBarTrack: {
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#E4D9F8',
+    marginTop: 6,
+  },
+  coachBarDot: {
+    position: 'absolute',
+    top: -3,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginLeft: -5,
+    backgroundColor: '#6B4FA1',
+  },
+  coachWarning: {
+    backgroundColor: '#FFF6E5',
+    color: '#B45309',
+    fontSize: 12,
+    borderRadius: 8,
+    padding: 8,
+    marginTop: 8,
+    overflow: 'hidden',
+  },
+  coachActions: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.sm,
+  },
+  coachCta: {
+    flex: 1,
+    backgroundColor: theme.colors.primary,
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  coachCtaAccept: {
+    backgroundColor: '#28A745',
+  },
+  coachCtaDisabled: {
+    opacity: 0.5,
+  },
+  coachCtaText: {
+    color: theme.colors.white,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  coachDismiss: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#CCC',
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  coachDismissText: {
+    color: '#666',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  coachFooter: {
+    fontSize: 11,
+    color: '#999',
+    marginTop: 8,
     textAlign: 'center',
   },
   inputContainer: {
