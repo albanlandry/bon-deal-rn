@@ -3,6 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
+    ActivityIndicator,
     FlatList,
     ScrollView,
     StatusBar,
@@ -12,208 +13,115 @@ import {
     View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { theme } from '../utils/theme';
 
 import ProductCard from '../components/molecules/ProductCard';
+import { postsInfiniteQuery, type PostSort } from '@/lib/api/posts';
+import { toCardProps } from '@/lib/mapPost';
+import { CATEGORIES } from '@/constants/catalog';
+import type { BdPost } from '@/constants/types';
 
-// Filter types
-type FilterType = 'category' | 'price' | 'location' | 'condition' | 'status';
-type SortType = 'relevance' | 'price_low' | 'price_high' | 'date_new' | 'date_old' | 'distance';
+type PriceBucket = 'under50' | '50to100' | 'over100';
+type ConditionMode = 'all' | 'like_new' | 'used';
 
-interface Filter {
-    id: string;
-    label: string;
-    type: FilterType;
-    active: boolean;
-}
-
-interface SortOption {
-    id: SortType;
-    label: string;
-    active: boolean;
-}
-
-// Mock search results data
-const mockSearchResults = [
-    {
-        id: '1',
-        imageUrl: 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=300&h=200&fit=crop&crop=center',
-        title: 'Macbook Pro 2020 (256 GB)',
-        location: 'Kinguele - 25 min',
-        price: '350000 FCFA',
-        likes: 12,
-        views: 45,
-        comments: 3,
-        category: 'Electronics',
-        condition: 'Used',
-        seller: 'Jean Baptiste',
-        postedDate: '2 jours',
-        distance: '2.5 km',
-        status: 'available',
-    },
-    {
-        id: '2',
-        imageUrl: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=300&h=200&fit=crop&crop=center',
-        title: 'Nike Air Max 270 - Taille 42',
-        location: 'Libreville Centre - 15 min',
-        price: '45000 FCFA',
-        likes: 8,
-        views: 23,
-        comments: 1,
-        category: 'Fashion',
-        condition: 'New',
-        seller: 'Marie Claire',
-        postedDate: '1 jour',
-        distance: '1.2 km',
-        status: 'available',
-    },
-    {
-        id: '3',
-        imageUrl: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=300&h=200&fit=crop&crop=center',
-        title: 'iPhone 12 Pro Max 128GB',
-        location: 'Akebe - 30 min',
-        price: '280000 FCFA',
-        likes: 25,
-        views: 89,
-        comments: 7,
-        category: 'Electronics',
-        condition: 'Used',
-        seller: 'Paul Mba',
-        postedDate: '3 jours',
-        distance: '3.8 km',
-        status: 'sold',
-    },
-    {
-        id: '4',
-        imageUrl: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=300&h=200&fit=crop&crop=center',
-        title: 'Sac à dos Adidas Originals',
-        location: 'Nkembo - 20 min',
-        price: '25000 FCFA',
-        likes: 6,
-        views: 18,
-        comments: 2,
-        category: 'Fashion',
-        condition: 'Used',
-        seller: 'Sarah Nguema',
-        postedDate: '5 jours',
-        distance: '2.1 km',
-        status: 'available',
-    },
-    {
-        id: '5',
-        imageUrl: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=300&h=200&fit=crop&crop=center',
-        title: 'Table en bois massif',
-        location: 'Montagne Sainte - 45 min',
-        price: '120000 FCFA',
-        likes: 4,
-        views: 12,
-        comments: 0,
-        category: 'Home',
-        condition: 'Used',
-        seller: 'Pierre Obiang',
-        postedDate: '1 semaine',
-        distance: '8.5 km',
-        status: 'sold',
-    },
+const PRICE_BUCKETS: { id: PriceBucket; label: string }[] = [
+    { id: 'under50', label: '< 50 000 FCFA' },
+    { id: '50to100', label: '50 000 – 100 000' },
+    { id: 'over100', label: '> 100 000 FCFA' },
 ];
 
-// Filter options
-const filterOptions: Filter[] = [
-    { id: 'all', label: 'Tout', type: 'category', active: true },
-    { id: 'electronics', label: 'Électronique', type: 'category', active: false },
-    { id: 'fashion', label: 'Mode', type: 'category', active: false },
-    { id: 'home', label: 'Maison', type: 'category', active: false },
-    { id: 'transport', label: 'Transport', type: 'category', active: false },
-    { id: 'under_50k', label: '< 50k FCFA', type: 'price', active: false },
-    { id: '50k_100k', label: '50k - 100k', type: 'price', active: false },
-    { id: 'over_100k', label: '> 100k FCFA', type: 'price', active: false },
-    { id: 'new', label: 'Neuf', type: 'condition', active: false },
-    { id: 'used', label: 'Occasion', type: 'condition', active: false },
-    { id: 'available', label: 'Disponible', type: 'status', active: false },
-    { id: 'sold', label: 'Vendu', type: 'status', active: false },
+const CONDITION_MODES: { id: ConditionMode; label: string }[] = [
+    { id: 'all', label: 'Tous états' },
+    { id: 'like_new', label: 'Comme neuf' },
+    { id: 'used', label: 'Occasion' },
 ];
 
-// Sort options
-const defaultSortOptions: SortOption[] = [
-    { id: 'relevance', label: 'Pertinence', active: true },
-    { id: 'price_low', label: 'Prix croissant', active: false },
-    { id: 'price_high', label: 'Prix décroissant', active: false },
-    { id: 'date_new', label: 'Plus récent', active: false },
-    { id: 'date_old', label: 'Plus ancien', active: false },
-    { id: 'distance', label: 'Plus proche', active: false },
+const SORT_OPTIONS: { id: PostSort; label: string }[] = [
+    { id: 'date_new', label: 'Pertinence' },
+    { id: 'price_low', label: 'Prix croissant' },
+    { id: 'price_high', label: 'Prix décroissant' },
+    { id: 'date_old', label: 'Plus ancien' },
+];
+
+// "Tout" + the 10 catalog buckets, for the top filter row.
+const CATEGORY_CHIPS: { id: string | null; label: string }[] = [
+    { id: null, label: 'Tout' },
+    ...CATEGORIES.map((c) => ({ id: c.value, label: c.label })),
 ];
 
 export default function SearchResultsScreen() {
     const router = useRouter();
-    const { query } = useLocalSearchParams<{ query: string }>();
-    const [searchResults, setSearchResults] = useState(mockSearchResults);
-    const [filters, setFilters] = useState(filterOptions);
-    const [sortOptions, setSortOptions] = useState(defaultSortOptions);
-    const [activeSort, setActiveSort] = useState<SortType>('relevance');
+    const params = useLocalSearchParams<{ query?: string; category?: string }>();
+    const query = params.query ?? '';
+
+    const [category, setCategory] = useState<string | null>(params.category ?? null);
+    const [priceBucket, setPriceBucket] = useState<PriceBucket | null>(null);
+    const [conditionMode, setConditionMode] = useState<ConditionMode>('all');
+    const [sort, setSort] = useState<PostSort>('date_new');
     const [showDrawer, setShowDrawer] = useState(false);
 
-    // Handle filter selection
-    const handleFilterPress = (filterId: string) => {
-        setFilters(prev => 
-            prev.map(filter => ({
-                ...filter,
-                active: filter.id === filterId
-            }))
-        );
-        
-        // Apply filter logic here
-        console.log('Filter applied:', filterId);
+    const minPrice =
+        priceBucket === '50to100' ? 50000 : priceBucket === 'over100' ? 100000 : undefined;
+    const maxPrice =
+        priceBucket === 'under50' ? 50000 : priceBucket === '50to100' ? 100000 : undefined;
+    const condition =
+        conditionMode === 'like_new'
+            ? ['excellent']
+            : conditionMode === 'used'
+              ? ['good', 'fair', 'poor']
+              : undefined;
+
+    const feed = useInfiniteQuery(
+        postsInfiniteQuery({
+            search: query || undefined,
+            categories: category ? [category] : undefined,
+            minPrice,
+            maxPrice,
+            condition,
+            sort,
+        }),
+    );
+    const results = feed.data?.pages.flatMap((p) => p.posts) ?? [];
+    const total = feed.data?.pages[0]?.total_posts ?? 0;
+
+    const resetFilters = () => {
+        setCategory(null);
+        setPriceBucket(null);
+        setConditionMode('all');
+        setSort('date_new');
     };
 
-    // Handle sort selection
-    const handleSortPress = (sortId: SortType) => {
-        setSortOptions(prev => 
-            prev.map(option => ({
-                ...option,
-                active: option.id === sortId
-            }))
-        );
-        setActiveSort(sortId);
-        
-        // Apply sort logic here
-        console.log('Sort applied:', sortId);
-    };
-
-    // Render filter item
-    const renderFilterItem = ({ item }: { item: Filter }) => (
-        <TouchableOpacity
-            style={[
-                styles.filterItem,
-                item.active && styles.filterItemActive
-            ]}
-            onPress={() => handleFilterPress(item.id)}
-        >
-            <Text
-                style={[
-                    styles.filterText,
-                    item.active && styles.filterTextActive
-                ]}
+    const renderCategoryChip = ({ item }: { item: (typeof CATEGORY_CHIPS)[0] }) => {
+        const active = category === item.id;
+        return (
+            <TouchableOpacity
+                style={[styles.filterItem, active && styles.filterItemActive]}
+                onPress={() => setCategory(item.id)}
             >
-                {item.label}
-            </Text>
-        </TouchableOpacity>
-    );
-
-    // Render product item
-    const renderProductItem = ({ item }: { item: any }) => (
-        <ProductCard {...item} onPress={() => router.push('/item-details')} />
-    );
-
-    // Get active sort label
-    const getActiveSortLabel = () => {
-        const activeOption = sortOptions.find(option => option.active);
-        return activeOption?.label || 'Pertinence';
+                <Text style={[styles.filterText, active && styles.filterTextActive]}>{item.label}</Text>
+            </TouchableOpacity>
+        );
     };
+
+    const renderProductItem = ({ item }: { item: BdPost }) => {
+        const card = toCardProps(item);
+        return (
+            <ProductCard
+                {...card}
+                onPress={() =>
+                    router.push({ pathname: '/item-details', params: { id: String(item.id) } })
+                }
+            />
+        );
+    };
+
+    const showError = feed.isError && results.length === 0 && !feed.isLoading;
 
     return (
         <SafeAreaView style={styles.container}>
             <StatusBar barStyle="dark-content" backgroundColor={theme.colors.white} />
-            
+
             {/* Header */}
             <View style={styles.header}>
                 <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
@@ -221,7 +129,9 @@ export default function SearchResultsScreen() {
                 </TouchableOpacity>
                 <View style={styles.headerContent}>
                     <Text style={styles.headerTitle}>Résultats de recherche</Text>
-                    <Text style={styles.searchQuery}>"{query || 'Recherche'}"</Text>
+                    <Text style={styles.searchQuery}>
+                        {query ? `« ${query} »` : 'Parcourir les annonces'}
+                    </Text>
                 </View>
                 <TouchableOpacity style={styles.filterButton} onPress={() => setShowDrawer(true)}>
                     <Ionicons name="options-outline" size={24} color={theme.colors.gray} />
@@ -231,16 +141,18 @@ export default function SearchResultsScreen() {
             {/* Results Count */}
             <View style={styles.resultsCount}>
                 <Text style={styles.resultsCountText}>
-                    {searchResults.length} résultat{searchResults.length > 1 ? 's' : ''} trouvé{searchResults.length > 1 ? 's' : ''}
+                    {feed.isLoading
+                        ? 'Recherche…'
+                        : `${total} résultat${total > 1 ? 's' : ''}`}
                 </Text>
             </View>
 
-            {/* Filters Row */}
+            {/* Category chips */}
             <View style={styles.filtersContainer}>
                 <FlatList
-                    data={filters}
-                    renderItem={renderFilterItem}
-                    keyExtractor={(item) => item.id}
+                    data={CATEGORY_CHIPS}
+                    renderItem={renderCategoryChip}
+                    keyExtractor={(item) => item.id ?? 'all'}
                     horizontal
                     showsHorizontalScrollIndicator={false}
                     contentContainerStyle={styles.filtersList}
@@ -248,28 +160,59 @@ export default function SearchResultsScreen() {
             </View>
 
             {/* Search Results */}
-            <FlatList
-                data={searchResults}
-                renderItem={renderProductItem}
-                keyExtractor={(item) => item.id}
-                contentContainerStyle={styles.resultsList}
-                showsVerticalScrollIndicator={false}
-                ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
-                ListEmptyComponent={
-                    <View style={styles.emptyContainer}>
-                        <Ionicons name="search-outline" size={64} color={theme.colors.gray} />
-                        <Text style={styles.emptyTitle}>Aucun résultat</Text>
-                        <Text style={styles.emptyMessage}>
-                            Essayez de modifier vos critères de recherche ou vos filtres.
-                        </Text>
-                    </View>
-                }
-            />
+            {feed.isLoading ? (
+                <View style={styles.emptyContainer}>
+                    <ActivityIndicator color={theme.colors.primary} />
+                </View>
+            ) : showError ? (
+                <View style={styles.emptyContainer}>
+                    <Ionicons name="alert-circle-outline" size={56} color="#FF6B6B" />
+                    <Text style={styles.emptyTitle}>Erreur de recherche</Text>
+                    <TouchableOpacity style={styles.resetButton} onPress={() => feed.refetch()}>
+                        <Text style={styles.resetButtonText}>Réessayer</Text>
+                    </TouchableOpacity>
+                </View>
+            ) : (
+                <FlatList
+                    data={results}
+                    renderItem={renderProductItem}
+                    keyExtractor={(item) => String(item.id)}
+                    contentContainerStyle={[
+                        styles.resultsList,
+                        results.length === 0 && styles.emptyListContainer,
+                    ]}
+                    showsVerticalScrollIndicator={false}
+                    ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
+                    onEndReached={() => {
+                        if (feed.hasNextPage && !feed.isFetchingNextPage) feed.fetchNextPage();
+                    }}
+                    onEndReachedThreshold={0.5}
+                    ListFooterComponent={
+                        feed.isFetchingNextPage ? (
+                            <ActivityIndicator style={styles.footerSpinner} color={theme.colors.primary} />
+                        ) : null
+                    }
+                    ListEmptyComponent={
+                        <View style={styles.emptyContainer}>
+                            <Ionicons name="search-outline" size={64} color={theme.colors.gray} />
+                            <Text style={styles.emptyTitle}>Aucun résultat</Text>
+                            <Text style={styles.emptyMessage}>
+                                {query
+                                    ? `Aucune annonce pour « ${query} ».`
+                                    : 'Aucune annonce ne correspond à ces filtres.'}
+                            </Text>
+                            <TouchableOpacity style={styles.resetButton} onPress={resetFilters}>
+                                <Text style={styles.resetButtonText}>Réinitialiser les filtres</Text>
+                            </TouchableOpacity>
+                        </View>
+                    }
+                />
+            )}
 
             {/* Right Drawer Menu */}
             {showDrawer && (
                 <View style={styles.drawerOverlay}>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={styles.drawerBackdrop}
                         onPress={() => setShowDrawer(false)}
                     />
@@ -282,31 +225,30 @@ export default function SearchResultsScreen() {
                             </TouchableOpacity>
                         </View>
 
-                        {/* Scrollable Content */}
-                        <ScrollView 
+                        <ScrollView
                             style={styles.drawerContent}
                             showsVerticalScrollIndicator={false}
                             bounces={false}
                         >
-                            {/* Sort Section */}
+                            {/* Sort */}
                             <View style={styles.drawerSection}>
                                 <Text style={styles.drawerSectionTitle}>Trier par</Text>
                                 <View style={styles.drawerOptions}>
-                                    {sortOptions.map((option) => (
+                                    {SORT_OPTIONS.map((option) => (
                                         <TouchableOpacity
                                             key={option.id}
                                             style={styles.drawerOption}
-                                            onPress={() => handleSortPress(option.id)}
+                                            onPress={() => setSort(option.id)}
                                         >
                                             <Text
                                                 style={[
                                                     styles.drawerOptionText,
-                                                    option.active && styles.drawerOptionActive
+                                                    sort === option.id && styles.drawerOptionActive,
                                                 ]}
                                             >
                                                 {option.label}
                                             </Text>
-                                            {option.active && (
+                                            {sort === option.id && (
                                                 <Ionicons name="checkmark" size={20} color={theme.colors.primary} />
                                             )}
                                         </TouchableOpacity>
@@ -314,25 +256,53 @@ export default function SearchResultsScreen() {
                                 </View>
                             </View>
 
-                            {/* Advanced Filters Section */}
+                            {/* Price */}
                             <View style={styles.drawerSection}>
-                                <Text style={styles.drawerSectionTitle}>Filtres avancés</Text>
+                                <Text style={styles.drawerSectionTitle}>Prix</Text>
                                 <View style={styles.drawerOptions}>
-                                    {filters.map((filter) => (
+                                    {PRICE_BUCKETS.map((bucket) => (
                                         <TouchableOpacity
-                                            key={filter.id}
+                                            key={bucket.id}
                                             style={styles.drawerOption}
-                                            onPress={() => handleFilterPress(filter.id)}
+                                            onPress={() =>
+                                                setPriceBucket((prev) => (prev === bucket.id ? null : bucket.id))
+                                            }
                                         >
                                             <Text
                                                 style={[
                                                     styles.drawerOptionText,
-                                                    filter.active && styles.drawerOptionActive
+                                                    priceBucket === bucket.id && styles.drawerOptionActive,
                                                 ]}
                                             >
-                                                {filter.label}
+                                                {bucket.label}
                                             </Text>
-                                            {filter.active && (
+                                            {priceBucket === bucket.id && (
+                                                <Ionicons name="checkmark" size={20} color={theme.colors.primary} />
+                                            )}
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            </View>
+
+                            {/* Condition */}
+                            <View style={styles.drawerSection}>
+                                <Text style={styles.drawerSectionTitle}>État</Text>
+                                <View style={styles.drawerOptions}>
+                                    {CONDITION_MODES.map((mode) => (
+                                        <TouchableOpacity
+                                            key={mode.id}
+                                            style={styles.drawerOption}
+                                            onPress={() => setConditionMode(mode.id)}
+                                        >
+                                            <Text
+                                                style={[
+                                                    styles.drawerOptionText,
+                                                    conditionMode === mode.id && styles.drawerOptionActive,
+                                                ]}
+                                            >
+                                                {mode.label}
+                                            </Text>
+                                            {conditionMode === mode.id && (
                                                 <Ionicons name="checkmark" size={20} color={theme.colors.primary} />
                                             )}
                                         </TouchableOpacity>
@@ -343,18 +313,10 @@ export default function SearchResultsScreen() {
 
                         {/* Drawer Actions */}
                         <View style={styles.drawerActions}>
-                            <TouchableOpacity 
-                                style={styles.drawerActionButton}
-                                onPress={() => {
-                                    // Reset all filters
-                                    setFilters(filterOptions);
-                                    setSortOptions(defaultSortOptions);
-                                    setActiveSort('relevance');
-                                }}
-                            >
+                            <TouchableOpacity style={styles.drawerActionButton} onPress={resetFilters}>
                                 <Text style={styles.drawerActionText}>Réinitialiser</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity 
+                            <TouchableOpacity
                                 style={[styles.drawerActionButton, styles.drawerActionPrimary]}
                                 onPress={() => setShowDrawer(false)}
                             >
@@ -551,6 +513,25 @@ const styles = StyleSheet.create({
     resultsList: {
         paddingTop: theme.spacing.md,
         paddingBottom: theme.spacing.xl,
+    },
+    emptyListContainer: {
+        flexGrow: 1,
+        justifyContent: 'center',
+    },
+    footerSpinner: {
+        paddingVertical: theme.spacing.lg,
+    },
+    resetButton: {
+        marginTop: theme.spacing.lg,
+        backgroundColor: theme.colors.primary,
+        paddingHorizontal: theme.spacing.xl,
+        paddingVertical: theme.spacing.md,
+        borderRadius: 24,
+    },
+    resetButtonText: {
+        color: theme.colors.white,
+        fontWeight: '700',
+        fontSize: 15,
     },
     itemSeparator: {
         height: 1,

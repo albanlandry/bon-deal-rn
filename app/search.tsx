@@ -3,7 +3,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   FlatList,
   StatusBar,
   StyleSheet,
@@ -14,38 +13,14 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../utils/theme';
+import { CATEGORIES } from '@/constants/catalog';
 
 // AsyncStorage key for recent searches
 const RECENT_SEARCHES_KEY = '@bondeal_recent_searches';
 
-// Mock data for recent searches and suggestions
-const recentSearches = [
-  'shoes',
-  'cartables',
-  'iphone xs',
-  'montres',
-  'chambre amis'
-];
+// Voice search ("Trouve-moi ça") ships in W6; gated off until then.
+const VOICE_SEARCH_ENABLED = false;
 
-const suggestions = [
-  { id: '1', text: 'iPhone 12 Pro Max', category: 'Électronique', type: 'product' },
-  { id: '2', text: 'iPhone 12 mini', category: 'Électronique', type: 'product' },
-  { id: '3', text: 'iPhone 11', category: 'Électronique', type: 'product' },
-  { id: '4', text: 'MacBook Pro 2020', category: 'Électronique', type: 'product' },
-  { id: '5', text: 'MacBook Air M1', category: 'Électronique', type: 'product' },
-  { id: '6', text: 'Nike Air Max 270', category: 'Mode', type: 'product' },
-  { id: '7', text: 'Nike Air Force 1', category: 'Mode', type: 'product' },
-  { id: '8', text: 'Adidas Originals', category: 'Mode', type: 'brand' },
-  { id: '9', text: 'Sac à dos Nike', category: 'Mode', type: 'product' },
-  { id: '10', text: 'Sac à dos Adidas', category: 'Mode', type: 'product' },
-  { id: '11', text: 'Table en bois massif', category: 'Maison', type: 'product' },
-  { id: '12', text: 'Chaise en bois', category: 'Maison', type: 'product' },
-  { id: '13', text: 'Libreville Centre', category: 'Lieu', type: 'location' },
-  { id: '14', text: 'Montagne Sainte', category: 'Lieu', type: 'location' },
-  { id: '15', text: 'Akebe', category: 'Lieu', type: 'location' },
-];
-
-// AsyncStorage helper functions
 const saveRecentSearches = async (searches: string[]) => {
   try {
     await AsyncStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(searches));
@@ -75,92 +50,30 @@ const clearRecentSearches = async (): Promise<void> => {
 export default function SearchScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [recentItems, setRecentItems] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [filteredSuggestions, setFilteredSuggestions] = useState<any[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
   const router = useRouter();
 
   // Load recent searches on component mount
   useEffect(() => {
-    const loadSearches = async () => {
-      const storedSearches = await loadRecentSearches();
-      setRecentItems(storedSearches);
-    };
-    loadSearches();
+    loadRecentSearches().then(setRecentItems);
   }, []);
 
-  const handleSearch = async () => {
-    if (searchQuery.trim()) {
-      setIsLoading(true);
-      setShowSuggestions(false);
-      
-      // Add to recent searches if not already present
-      const trimmedQuery = searchQuery.trim();
-      if (!recentItems.includes(trimmedQuery)) {
-        const updatedSearches = [trimmedQuery, ...recentItems.slice(0, 9)]; // Keep max 10 items
-        setRecentItems(updatedSearches);
-        await saveRecentSearches(updatedSearches);
-      }
-      
-      // Simulate search API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Navigate to search results
-      router.push({
-        pathname: '/search-results',
-        params: { query: trimmedQuery }
-      });
-      setIsLoading(false);
-    }
+  // Synchronous: persist the term (dedupe, move-to-top, max 10) then navigate.
+  const runSearch = (raw: string) => {
+    const q = raw.trim();
+    if (!q) return;
+    const updated = [q, ...recentItems.filter((x) => x !== q)].slice(0, 10);
+    setRecentItems(updated);
+    saveRecentSearches(updated);
+    router.push({ pathname: '/search-results', params: { query: q } });
   };
 
-  // Handle search query change
-  const handleSearchQueryChange = (text: string) => {
-    setSearchQuery(text);
-    
-    if (text.trim().length > 0) {
-      // Filter suggestions based on search query
-      const filtered = suggestions.filter(suggestion =>
-        suggestion.text.toLowerCase().includes(text.toLowerCase()) ||
-        suggestion.category.toLowerCase().includes(text.toLowerCase())
-      );
-      setFilteredSuggestions(filtered.slice(0, 8)); // Limit to 8 suggestions
-      setShowSuggestions(true);
-    } else {
-      setShowSuggestions(false);
-      setFilteredSuggestions([]);
-    }
-  };
-
-  // Handle suggestion selection
-  const handleSuggestionSelect = (suggestion: any) => {
-    setSearchQuery(suggestion.text);
-    setShowSuggestions(false);
-    handleSearch();
-  };
-
-  const handleRecentSearch = async (item: string) => {
+  const handleRecentSearch = (item: string) => {
     setSearchQuery(item);
-    
-    // Add to recent searches if not already present (move to top)
-    if (!recentItems.includes(item)) {
-      const updatedSearches = [item, ...recentItems.slice(0, 9)];
-      setRecentItems(updatedSearches);
-      await saveRecentSearches(updatedSearches);
-    } else {
-      // Move existing item to top
-      const filteredSearches = recentItems.filter(search => search !== item);
-      const updatedSearches = [item, ...filteredSearches];
-      setRecentItems(updatedSearches);
-      await saveRecentSearches(updatedSearches);
-    }
-    
-    handleSearch();
+    runSearch(item);
   };
 
-  const handleSuggestionPress = (suggestion: string) => {
-    setSearchQuery(suggestion);
-    handleSearch();
+  const browseCategory = (value: string) => {
+    router.push({ pathname: '/search-results', params: { category: value } });
   };
 
   const handleClearRecentSearches = async () => {
@@ -168,52 +81,10 @@ export default function SearchScreen() {
     await clearRecentSearches();
   };
 
-  const handleCancel = () => {
-    router.back();
-  };
+  const handleCancel = () => router.back();
 
   const renderRecentItem = ({ item }: { item: string }) => (
-    <TouchableOpacity 
-      style={styles.tagButton} 
-      onPress={() => handleRecentSearch(item)}
-    >
-      <Text style={styles.tagText}>{item}</Text>
-    </TouchableOpacity>
-  );
-
-  // Render suggestion item
-  const renderSuggestionItem = ({ item }: { item: any }) => (
-    <TouchableOpacity 
-      style={styles.suggestionItem}
-      onPress={() => handleSuggestionSelect(item)}
-    >
-      <View style={styles.suggestionContent}>
-        <View style={styles.suggestionIconContainer}>
-          <Ionicons 
-            name={
-              item.type === 'product' ? 'cube-outline' :
-              item.type === 'brand' ? 'star-outline' :
-              item.type === 'location' ? 'location-outline' :
-              'search-outline'
-            } 
-            size={20} 
-            color={theme.colors.gray} 
-          />
-        </View>
-        <View style={styles.suggestionTextContainer}>
-          <Text style={styles.suggestionText}>{item.text}</Text>
-          <Text style={styles.suggestionCategory}>{item.category}</Text>
-        </View>
-      </View>
-      <Ionicons name="arrow-up-left-box" size={16} color={theme.colors.gray} />
-    </TouchableOpacity>
-  );
-
-  const renderSuggestion = ({ item }: { item: string }) => (
-    <TouchableOpacity 
-      style={styles.tagButton} 
-      onPress={() => handleSuggestionPress(item)}
-    >
+    <TouchableOpacity style={styles.tagButton} onPress={() => handleRecentSearch(item)}>
       <Text style={styles.tagText}>{item}</Text>
     </TouchableOpacity>
   );
@@ -221,7 +92,7 @@ export default function SearchScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={theme.colors.white} />
-      
+
       {/* Search Bar */}
       <View style={styles.searchContainer}>
         <TouchableOpacity style={styles.backButton} onPress={handleCancel}>
@@ -233,17 +104,16 @@ export default function SearchScreen() {
             style={styles.searchInput}
             placeholder="Rechercher..."
             value={searchQuery}
-            onChangeText={handleSearchQueryChange}
-            onSubmitEditing={handleSearch}
+            onChangeText={setSearchQuery}
+            onSubmitEditing={() => runSearch(searchQuery)}
             autoFocus={true}
             returnKeyType="search"
           />
-          {isLoading && (
-            <ActivityIndicator 
-              size="small" 
-              color={theme.colors.primary} 
-              style={styles.loadingIndicator}
-            />
+          {/* TODO(W6): Trouve-moi ça — voice search mic button */}
+          {VOICE_SEARCH_ENABLED && (
+            <TouchableOpacity style={styles.micButton}>
+              <Ionicons name="mic-outline" size={20} color={theme.colors.primary} />
+            </TouchableOpacity>
           )}
         </View>
         <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
@@ -251,25 +121,11 @@ export default function SearchScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Search Suggestions */}
-      {showSuggestions && filteredSuggestions.length > 0 && (
-        <View style={styles.suggestionsContainer}>
-          <FlatList
-            data={filteredSuggestions}
-            renderItem={renderSuggestionItem}
-            keyExtractor={(item) => item.id}
-            showsVerticalScrollIndicator={false}
-            style={styles.suggestionsList}
-            ItemSeparatorComponent={() => <View style={styles.suggestionSeparator} />}
-          />
-        </View>
-      )}
-
       {/* Recent Searches Section */}
       {recentItems.length > 0 && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recents</Text>
+            <Text style={styles.sectionTitle}>Recherches récentes</Text>
             <TouchableOpacity onPress={handleClearRecentSearches}>
               <Text style={styles.clearAllText}>Tout supprimer</Text>
             </TouchableOpacity>
@@ -285,17 +141,20 @@ export default function SearchScreen() {
         </View>
       )}
 
-      {/* Suggestions Section */}
+      {/* Browse by category */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Suggestions</Text>
-        <FlatList
-          data={suggestions.map(s => s.text)}
-          renderItem={renderSuggestion}
-          keyExtractor={(item, index) => `suggestion-${index}`}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.tagsContainer}
-        />
+        <Text style={styles.sectionTitle}>Parcourir par catégorie</Text>
+        <View style={styles.categoryGrid}>
+          {CATEGORIES.map((c) => (
+            <TouchableOpacity
+              key={c.value}
+              style={styles.tagButton}
+              onPress={() => browseCategory(c.value)}
+            >
+              <Text style={styles.tagText}>{c.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -369,6 +228,15 @@ const styles = StyleSheet.create({
   },
   tagsContainer: {
     paddingRight: theme.spacing.lg,
+  },
+  categoryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+  },
+  micButton: {
+    padding: theme.spacing.xs,
+    marginLeft: theme.spacing.xs,
   },
   tagButton: {
     backgroundColor: '#F8F9FA',
