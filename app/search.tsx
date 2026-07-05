@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   StatusBar,
   StyleSheet,
@@ -12,14 +13,29 @@ import {
   View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useMutation } from '@tanstack/react-query';
 import { theme } from '../utils/theme';
+import { showToast } from '../components/atoms/Toast';
 import { CATEGORIES } from '@/constants/catalog';
+import { ApiError } from '@/lib/api';
+import { parseSearch } from '@/lib/api/ai';
+import type { BdParsedSearch } from '@/constants/types';
 
 // AsyncStorage key for recent searches
 const RECENT_SEARCHES_KEY = '@bondeal_recent_searches';
 
-// Voice search ("Trouve-moi ça") ships in W6; gated off until then.
-const VOICE_SEARCH_ENABLED = false;
+// "Trouve-moi ça": natural-language search. True voice capture needs
+// expo-speech-recognition (future); for now the search box is the utterance.
+const VOICE_SEARCH_ENABLED = true;
+
+function nlErrMessage(e: unknown): string {
+  if (e instanceof ApiError) {
+    if (e.status === 429) return 'Limite atteinte, réessayez plus tard.';
+    if (e.status === 502 || e.status === 503) return 'Recherche intelligente indisponible.';
+    return e.message;
+  }
+  return 'Recherche intelligente indisponible. Réessayez.';
+}
 
 const saveRecentSearches = async (searches: string[]) => {
   try {
@@ -58,13 +74,42 @@ export default function SearchScreen() {
   }, []);
 
   // Synchronous: persist the term (dedupe, move-to-top, max 10) then navigate.
-  const runSearch = (raw: string) => {
-    const q = raw.trim();
-    if (!q) return;
+  const rememberRecent = (q: string) => {
     const updated = [q, ...recentItems.filter((x) => x !== q)].slice(0, 10);
     setRecentItems(updated);
     saveRecentSearches(updated);
+  };
+
+  const runSearch = (raw: string) => {
+    const q = raw.trim();
+    if (!q) return;
+    rememberRecent(q);
     router.push({ pathname: '/search-results', params: { query: q } });
+  };
+
+  // Natural-language ("Trouve-moi ça"): parse the utterance → filtered results.
+  const nlSearch = useMutation({
+    mutationFn: (utter: string) => parseSearch(utter),
+    onSuccess: (parsed: BdParsedSearch, utter) => {
+      rememberRecent(utter.trim());
+      const params: Record<string, string> = { query: parsed.search || utter.trim() };
+      if (parsed.categories?.length) params.categories = parsed.categories.join(',');
+      if (parsed.min_price != null) params.minPrice = String(parsed.min_price);
+      if (parsed.max_price != null) params.maxPrice = String(parsed.max_price);
+      if (parsed.condition?.length) params.condition = parsed.condition.join(',');
+      if (parsed.sort) params.sort = parsed.sort;
+      router.push({ pathname: '/search-results', params });
+    },
+    onError: (e) => showToast.error('Recherche intelligente', nlErrMessage(e)),
+  });
+
+  const handleNlSearch = () => {
+    const utter = searchQuery.trim();
+    if (!utter) {
+      showToast.info('Recherche intelligente', 'Décrivez ce que vous cherchez, ex : « un frigo pas cher ».');
+      return;
+    }
+    nlSearch.mutate(utter);
   };
 
   const handleRecentSearch = (item: string) => {
@@ -109,10 +154,17 @@ export default function SearchScreen() {
             autoFocus={true}
             returnKeyType="search"
           />
-          {/* TODO(W6): Trouve-moi ça — voice search mic button */}
+          {/* Trouve-moi ça — natural-language search on the typed sentence */}
           {VOICE_SEARCH_ENABLED && (
-            <TouchableOpacity style={styles.micButton}>
-              <Ionicons name="mic-outline" size={20} color={theme.colors.primary} />
+            <TouchableOpacity
+              style={styles.micButton}
+              onPress={handleNlSearch}
+              disabled={nlSearch.isPending}>
+              {nlSearch.isPending ? (
+                <ActivityIndicator size="small" color={theme.colors.primary} />
+              ) : (
+                <Ionicons name="sparkles-outline" size={20} color={theme.colors.primary} />
+              )}
             </TouchableOpacity>
           )}
         </View>

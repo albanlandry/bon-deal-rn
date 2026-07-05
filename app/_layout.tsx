@@ -88,6 +88,7 @@ function RootLayoutNav() {
             <Stack.Screen name="splash" options={{ headerShown: false }} />
             <Stack.Screen name="edit-profile" options={{ headerShown: false }} />
             <Stack.Screen name="my-listings" options={{ headerShown: false }} />
+            <Stack.Screen name="boutique-eclair" options={{ headerShown: false }} />
             <Stack.Screen name="favorites" options={{ headerShown: false }} />
             <Stack.Screen name="settings" options={{ headerShown: false }} />
             <Stack.Screen name="notification-settings" options={{ headerShown: false }} />

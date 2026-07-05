@@ -50,27 +50,72 @@ const CATEGORY_CHIPS: { id: string | null; label: string }[] = [
     ...CATEGORIES.map((c) => ({ id: c.value, label: c.label })),
 ];
 
+// Which bucket a raw min/max range best corresponds to (for chip highlighting).
+function bucketFromRange(min?: number, max?: number): PriceBucket | null {
+    if (max != null && max <= 50000 && (min == null || min <= 0)) return 'under50';
+    if (min != null && min >= 100000 && max == null) return 'over100';
+    if (min === 50000 && max === 100000) return '50to100';
+    return null;
+}
+
+// Bucket → raw {min, max}.
+const BUCKET_RANGE: Record<PriceBucket, { min?: number; max?: number }> = {
+    under50: { max: 50000 },
+    '50to100': { min: 50000, max: 100000 },
+    over100: { min: 100000 },
+};
+
+function modeFromConds(conds: string[]): ConditionMode {
+    if (conds.length > 0 && conds.every((c) => c === 'excellent')) return 'like_new';
+    if (conds.some((c) => ['good', 'fair', 'poor'].includes(c))) return 'used';
+    return 'all';
+}
+
 export default function SearchResultsScreen() {
     const router = useRouter();
-    const params = useLocalSearchParams<{ query?: string; category?: string }>();
+    const params = useLocalSearchParams<{
+        query?: string;
+        category?: string;
+        categories?: string;
+        minPrice?: string;
+        maxPrice?: string;
+        condition?: string;
+        sort?: string;
+    }>();
     const query = params.query ?? '';
 
-    const [category, setCategory] = useState<string | null>(params.category ?? null);
-    const [priceBucket, setPriceBucket] = useState<PriceBucket | null>(null);
-    const [conditionMode, setConditionMode] = useState<ConditionMode>('all');
-    const [sort, setSort] = useState<PostSort>('date_new');
+    const initCategory = params.category ?? params.categories?.split(',')[0] ?? null;
+    const initMin = params.minPrice ? Number(params.minPrice) : undefined;
+    const initMax = params.maxPrice ? Number(params.maxPrice) : undefined;
+    const initMode = modeFromConds(params.condition ? params.condition.split(',') : []);
+    const initSort = SORT_OPTIONS.some((o) => o.id === params.sort)
+        ? (params.sort as PostSort)
+        : 'date_new';
+
+    const [category, setCategory] = useState<string | null>(initCategory);
+    const [minPrice, setMinPrice] = useState<number | undefined>(initMin);
+    const [maxPrice, setMaxPrice] = useState<number | undefined>(initMax);
+    const [conditionMode, setConditionMode] = useState<ConditionMode>(initMode);
+    const [sort, setSort] = useState<PostSort>(initSort);
     const [showDrawer, setShowDrawer] = useState(false);
 
-    const minPrice =
-        priceBucket === '50to100' ? 50000 : priceBucket === 'over100' ? 100000 : undefined;
-    const maxPrice =
-        priceBucket === 'under50' ? 50000 : priceBucket === '50to100' ? 100000 : undefined;
+    const activeBucket = bucketFromRange(minPrice, maxPrice);
     const condition =
         conditionMode === 'like_new'
             ? ['excellent']
             : conditionMode === 'used'
               ? ['good', 'fair', 'poor']
               : undefined;
+
+    const setBucket = (bucket: PriceBucket) => {
+        if (activeBucket === bucket) {
+            setMinPrice(undefined);
+            setMaxPrice(undefined);
+        } else {
+            setMinPrice(BUCKET_RANGE[bucket].min);
+            setMaxPrice(BUCKET_RANGE[bucket].max);
+        }
+    };
 
     const feed = useInfiniteQuery(
         postsInfiniteQuery({
@@ -87,7 +132,8 @@ export default function SearchResultsScreen() {
 
     const resetFilters = () => {
         setCategory(null);
-        setPriceBucket(null);
+        setMinPrice(undefined);
+        setMaxPrice(undefined);
         setConditionMode('all');
         setSort('date_new');
     };
@@ -264,19 +310,17 @@ export default function SearchResultsScreen() {
                                         <TouchableOpacity
                                             key={bucket.id}
                                             style={styles.drawerOption}
-                                            onPress={() =>
-                                                setPriceBucket((prev) => (prev === bucket.id ? null : bucket.id))
-                                            }
+                                            onPress={() => setBucket(bucket.id)}
                                         >
                                             <Text
                                                 style={[
                                                     styles.drawerOptionText,
-                                                    priceBucket === bucket.id && styles.drawerOptionActive,
+                                                    activeBucket === bucket.id && styles.drawerOptionActive,
                                                 ]}
                                             >
                                                 {bucket.label}
                                             </Text>
-                                            {priceBucket === bucket.id && (
+                                            {activeBucket === bucket.id && (
                                                 <Ionicons name="checkmark" size={20} color={theme.colors.primary} />
                                             )}
                                         </TouchableOpacity>

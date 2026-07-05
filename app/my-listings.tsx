@@ -205,7 +205,12 @@ export default function MyListingsScreen() {
           <Ionicons name="chevron-back" size={24} color="#000" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Mes annonces</Text>
-        <View style={{ width: 24 }} />
+        <TouchableOpacity
+          style={styles.eclairButton}
+          onPress={() => router.push('/boutique-eclair')}>
+          <Ionicons name="flash" size={16} color={theme.colors.primary} />
+          <Text style={styles.eclairButtonText}>Éclair</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Filters */}
@@ -288,6 +293,20 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     color: '#333',
+  },
+  eclairButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F3F0FB',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  eclairButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: theme.colors.primary,
   },
   filtersContainer: {
     borderBottomWidth: 1,

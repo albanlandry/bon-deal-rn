@@ -29,6 +29,7 @@ import {
     postByIdQuery,
 } from '@/lib/api/posts';
 import { quartiersQuery } from '@/lib/api/quartiers';
+import { uploadImages, aiDraft, priceSuggestion } from '@/lib/api/ai';
 import {
     CATEGORIES,
     CONDITIONS,
@@ -37,8 +38,9 @@ import {
     conditionLabel,
     AGE_LABELS,
 } from '@/constants/catalog';
+import { formatAmount } from '@/lib/format';
 import { useAuth } from '@/contexts/AuthContext';
-import type { BdPostImage } from '@/constants/types';
+import type { BdPostImage, BdPriceSuggestion } from '@/constants/types';
 
 // Renamed from FormData to avoid shadowing the global FormData used for uploads.
 interface ListingForm {
@@ -64,6 +66,17 @@ function errMessage(e: unknown): string {
         return e.message;
     }
     return 'Une erreur est survenue. Réessayez.';
+}
+
+/** ApiError → French message for the AI-assist actions. */
+function aiErrMessage(e: unknown): string {
+    if (e instanceof ApiError) {
+        if (e.status === 429) return 'Limite atteinte, réessayez plus tard.';
+        if (e.status === 401) return 'Session expirée. Reconnectez-vous.';
+        if (e.status === 502 || e.status === 503) return "L'assistant IA est indisponible.";
+        return e.message;
+    }
+    return 'Assistant IA indisponible. Réessayez.';
 }
 
 /** Strip non-digits from a price string → integer, or null if empty/zero. */
@@ -551,6 +564,52 @@ export default function PostItemScreen() {
 
     const saving = createMut.isPending || updateMut.isPending;
 
+    // --- AI assist (W6.2) ---------------------------------------------------
+    const [priceSug, setPriceSug] = useState<BdPriceSuggestion | null>(null);
+
+    const aiDraftMut = useMutation({
+        mutationFn: async () => {
+            const urls = await uploadImages(form.images);
+            return aiDraft(urls, form.title || undefined);
+        },
+        onSuccess: (draft) => {
+            setForm((prev) => ({
+                ...prev,
+                title: prev.title || draft.title,
+                description: prev.description || draft.description,
+                category: prev.category || draft.categories[0] || prev.category,
+            }));
+            setErrors({});
+            showToast.success(
+                'Suggestions IA',
+                `Champs pré-remplis (confiance ${Math.round(draft.confidence * 100)}%).`,
+            );
+        },
+        onError: (e) => showToast.error('Suggestions IA', aiErrMessage(e)),
+    });
+
+    const priceSugMut = useMutation({
+        mutationFn: () =>
+            priceSuggestion({
+                categories: form.category ? [form.category] : ['other'],
+                title: form.title.trim(),
+                condition: form.condition || null,
+                age_bucket: form.ageBucket || null,
+            }),
+        onSuccess: (sug) => {
+            setPriceSug(sug);
+            if (sug.source === 'no_data' || sug.suggested == null) {
+                showToast.info('Prix conseillé', sug.message || 'Pas de référence trouvée.');
+            } else {
+                updateForm('price', String(sug.suggested));
+                showToast.success('Prix conseillé', `Suggéré : ${formatAmount(sug.suggested)}`);
+            }
+        },
+        onError: (e) => showToast.error('Prix conseillé', aiErrMessage(e)),
+    });
+
+    const canPriceSuggest = !!form.title.trim() && !!form.category;
+
     const pickImage = async (fromCamera: boolean) => {
         const result = fromCamera
             ? await ImagePicker.launchCameraAsync({
@@ -720,7 +779,23 @@ export default function PostItemScreen() {
                     />
                     {errors.images && <Text style={styles.errorText}>{errors.images}</Text>}
 
-                    {/* TODO(W6): "Suggestions IA" button slot (enabled when ≥1 photo) — ai_draft */}
+                    {/* AI assist: draft title/description/category from photos */}
+                    {form.images.length > 0 && (
+                        <TouchableOpacity
+                            style={[styles.aiButton, aiDraftMut.isPending && styles.aiButtonDisabled]}
+                            onPress={() => aiDraftMut.mutate()}
+                            disabled={aiDraftMut.isPending}
+                        >
+                            {aiDraftMut.isPending ? (
+                                <ActivityIndicator color={theme.colors.primary} />
+                            ) : (
+                                <>
+                                    <Ionicons name="sparkles-outline" size={18} color={theme.colors.primary} />
+                                    <Text style={styles.aiButtonText}>Suggestions IA (photos)</Text>
+                                </>
+                            )}
+                        </TouchableOpacity>
+                    )}
 
                     {/* Category Field */}
                     <PickerField
@@ -771,6 +846,16 @@ export default function PostItemScreen() {
                     </View>
                 </ScrollView>
 
+                {/* AI price suggestion hint */}
+                {priceEditable && priceSug && priceSug.suggested != null && (
+                    <Text style={styles.priceSugHint}>
+                        💡 Suggéré : {formatAmount(priceSug.suggested)}
+                        {priceSug.range_min != null && priceSug.range_max != null
+                            ? ` (${formatAmount(priceSug.range_min)} – ${formatAmount(priceSug.range_max)})`
+                            : ''}
+                    </Text>
+                )}
+
                 {/* Bottom Bar */}
                 <View style={styles.bottomBar}>
                     {priceEditable ? (
@@ -790,7 +875,21 @@ export default function PostItemScreen() {
                             <Text style={styles.gratuitText}>Gratuit</Text>
                         </View>
                     )}
-                    {/* TODO(W6): "Prix conseillé" chip slot — price_suggestion */}
+
+                    {/* Prix conseillé — comparables-grounded price suggestion */}
+                    {priceEditable && (
+                        <TouchableOpacity
+                            style={[styles.priceSugButton, (!canPriceSuggest || priceSugMut.isPending) && styles.aiButtonDisabled]}
+                            onPress={() => priceSugMut.mutate()}
+                            disabled={!canPriceSuggest || priceSugMut.isPending}
+                        >
+                            {priceSugMut.isPending ? (
+                                <ActivityIndicator size="small" color={theme.colors.primary} />
+                            ) : (
+                                <Ionicons name="pricetag-outline" size={20} color={theme.colors.primary} />
+                            )}
+                        </TouchableOpacity>
+                    )}
 
                     <TouchableOpacity
                         style={[styles.publishButton, saving && styles.publishButtonDisabled]}
@@ -914,6 +1013,45 @@ const styles = StyleSheet.create({
     },
     publishButtonDisabled: {
         opacity: 0.6,
+    },
+    aiButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        marginHorizontal: theme.spacing.md,
+        marginTop: theme.spacing.md,
+        paddingVertical: theme.spacing.md,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: theme.colors.primary,
+        backgroundColor: '#F3F0FB',
+    },
+    aiButtonText: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: theme.colors.primary,
+    },
+    aiButtonDisabled: {
+        opacity: 0.5,
+    },
+    priceSugButton: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: theme.colors.primary,
+        backgroundColor: '#F3F0FB',
+        marginRight: theme.spacing.sm,
+    },
+    priceSugHint: {
+        paddingHorizontal: theme.spacing.md,
+        paddingBottom: 4,
+        fontSize: 13,
+        color: theme.colors.primary,
+        fontWeight: '600',
     },
     header: {
         flexDirection: 'row',

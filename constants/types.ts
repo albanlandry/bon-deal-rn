@@ -147,6 +147,51 @@ export interface BdPriceCheck {
   generated_at: string;
 }
 
+/** AI listing draft from photos (POST /posts/ai_draft). */
+export interface BdAiDraft {
+  categories: string[];
+  title: string;
+  description: string;
+  confidence: number;
+}
+
+/** Comparables-grounded price suggestion (POST /posts/price_suggestion). */
+export interface BdPriceSuggestion {
+  suggested: number | null;
+  range_min: number | null;
+  range_max: number | null;
+  source: 'similar_items' | 'depreciation_curve' | 'no_data';
+  currency: string;
+  comparable_count: number | null;
+  reference_retail_xaf: number | null;
+  message: string | null;
+}
+
+/** One Boutique Éclair draft (POST /posts/bulk_draft). */
+export interface BdBulkDraft {
+  categories: string[];
+  title: string;
+  description: string;
+  condition: string | null;
+  confidence: number;
+  price_suggestion: {
+    suggested: number | null;
+    range_min: number | null;
+    range_max: number | null;
+    comparable_count: number | null;
+  } | null;
+}
+
+/** Parsed natural-language search (POST /search/parse). */
+export interface BdParsedSearch {
+  search: string;
+  categories?: string[];
+  min_price?: number;
+  max_price?: number;
+  condition?: string[];
+  sort?: string;
+}
+
 /** Ephemeral Négo-Coach verdict (POST /negotiations/{id}/coach) — never
  *  persisted server-side; lives only in the response and local state. */
 export interface BdCoachVerdict {
