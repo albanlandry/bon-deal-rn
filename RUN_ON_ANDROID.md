@@ -109,18 +109,26 @@ The app is configured to reach the backend at **`http://10.0.2.2:8000`**
 
 ---
 
-## 5. Enable the wired flows (login → chat / offers)
+## 5. Enable login (Firebase → backend session)
 
-Out of the box you can browse the (mock) UI. To test the **real** authenticated
-flows (login, chat, offers, notifications), two things are needed:
+The whole app is now wired to the real backend (see §6). Every screen — browse,
+sell, search, favorites, profile — needs you to be **logged in**, which needs the
+`POST /auth/firebase` endpoint working.
 
-### 5a. Backend Firebase Admin key — *hand this to Milandu's assistant (me)*
-The backend endpoint that turns a Firebase login into a backend session
-(`POST /auth/firebase`) is currently **switched off** (returns 503) because the
-server has no Firebase Admin key yet.
+### 5a. Backend Firebase Admin key — ✅ done on prod
+The Firebase Admin key **is installed on the prod backend** (`150.230.114.9:8000`),
+so `POST /auth/firebase` works there and login goes through end-to-end.
 
-- [ ] **Firebase Console → ⚙ Project settings → Service accounts → Generate new private key** → download the JSON.
-- [ ] Send me that JSON; I'll mount it into the backend, set `FIREBASE_CREDENTIALS_PATH`, and restart. After that, login works end-to-end.
+⚠️ The **local** WSL Docker backend does **not** have a working Firebase key
+(`/auth/firebase` returns 503 there). So for anything past the login screen,
+**point the app at prod** — set `.env.local` to:
+
+```
+API_BASE_URL=http://150.230.114.9:8000
+```
+
+then rebuild (`npm run android:local`). Prod runs the latest code and the same
+Supabase database, so you get real listings, search, AI, everything.
 
 ### 5b. A Firebase test phone number — *you*
 So you don't have to fight real SMS + SHA-1 registration on the emulator:
@@ -131,16 +139,25 @@ So you don't have to fight real SMS + SHA-1 registration on the emulator:
 
 ---
 
-## 6. What works today vs. what's still mock
+## 6. What works today
+
+As of 2026-07-05 the mock data is gone — **every screen is wired to the real
+backend** (deployed to prod). Once you're logged in (§5, pointed at prod):
 
 | Area | State |
 |---|---|
-| Home feed, Search, Post-item, Profile, Favorites | **Mock data** — render only, not wired to the backend yet (Milestone 3 in the audit plan) |
-| Login / OTP (Firebase) | Wired — works once 5a + 5b are done |
-| Chat, Offers/Negotiation, Notifications | **Wired** to the backend — work once 5a is done |
-| Item details | Wired — opens with a real post id (e.g. from a chat/offer); from the mock home feed it uses a mock id |
+| Login / OTP (Firebase) | **Wired** — works on prod (§5a) once you add a test number (§5b) |
+| Home feed | **Wired** — real listings in your city, category chips, infinite scroll, pull-to-refresh |
+| Search + results | **Wired** — keyword + category/price/condition filters + sort; item cards tap through |
+| Post / edit item, My listings | **Wired** — create (with photo upload), edit, mark sold, delete |
+| Favorites, Profile, Edit profile | **Wired** — like/unlike, live stats, avatar upload, profile edit |
+| Chat, Offers/Negotiation, Notifications | **Wired** |
+| Item details | **Wired** — real post id from any list |
+| **AI:** Suggestions IA (photo→draft), Prix conseillé, Boutique Éclair ⚡, Trouve-moi ça (smart search) | **Wired** — all run on Gemini |
 
-So a meaningful end-to-end test is: **login (test number) → make/receive an offer → chat**, not the browse/sell screens.
+A good end-to-end test now: **login → browse the feed → open an item → post an
+item (try "Suggestions IA" + "Prix conseillé") → search "un frigo pas cher" via
+the ✨ button → favorite something → check your profile.**
 
 ---
 
@@ -148,7 +165,7 @@ So a meaningful end-to-end test is: **login (test number) → make/receive an of
 
 - **`npm run android:local` says "No connected devices"** → the emulator isn't running. Start it in Android Studio first, confirm with `adb devices` (should list an `emulator-5554  device`).
 - **App loads but every backend call fails / "Network request failed"** → (a) backend not running, (b) `curl http://localhost:8000/` fails from Windows → use the prod URL fallback in §4, or in PowerShell run `adb reverse tcp:8000 tcp:8000` and set `API_BASE_URL=http://localhost:8000`. Rebuild after any `.env.local` change.
-- **Login OTP screen works but "login" then does nothing / 503** → that's the backend Firebase Admin key (§5a) not yet installed.
+- **Login OTP screen works but "login" then does nothing / 503** → you're pointed at the **local** backend, which has no working Firebase key. Set `API_BASE_URL=http://150.230.114.9:8000` in `.env.local` and rebuild (§5a).
 - **Gradle/Metro extremely slow or files locked** → you're building from the old OneDrive copy. Use the `C:\DEV\bondeal_app\bon-deal-rn` clone (see the note at the top).
 - **Emulator has no Play Store / Firebase auth errors about Google Play services** → your AVD used a non-Play image. Recreate the AVD with a "Google Play" system image (§1).
 - **Metro stuck / stale cache** → stop it (Ctrl-C) and run `npm run start:local -- --clear`.
