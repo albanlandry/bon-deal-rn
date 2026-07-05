@@ -1,9 +1,10 @@
 // app/post-item.tsx - Post/Edit Item Screen
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { router } from 'expo-router';
-import React, { useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import React, { useEffect, useState } from 'react';
 import {
+    ActivityIndicator,
     Alert,
     Dimensions,
     Image,
@@ -17,63 +18,75 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { showToast } from '../components/atoms/Toast';
 import { theme } from '../utils/theme';
+import { ApiError } from '@/lib/api';
+import {
+    createPost,
+    updatePost,
+    deletePostImage,
+    postByIdQuery,
+} from '@/lib/api/posts';
+import { quartiersQuery } from '@/lib/api/quartiers';
+import {
+    CATEGORIES,
+    CONDITIONS,
+    AGE_BUCKETS,
+    categoryLabel,
+    conditionLabel,
+    AGE_LABELS,
+} from '@/constants/catalog';
+import { useAuth } from '@/contexts/AuthContext';
+import type { BdPostImage } from '@/constants/types';
 
-interface FormData {
+// Renamed from FormData to avoid shadowing the global FormData used for uploads.
+interface ListingForm {
     title: string;
     description: string;
     price: string;
-    category: string;
-    condition: string;
+    category: string;        // enum value (electronics, ...)
+    condition: string;       // enum value (excellent, ...)
+    ageBucket: string;       // enum value or ''
     listingType: 'sell' | 'share' | 'exchange';
-    tags: string[];
-    images: string[];
+    exchangeItems: string;   // csv, "Contre quoi ?"
+    pickupQuartier: string;
+    pickupNote: string;
+    images: string[];        // new local URIs to upload (create only)
 }
 
-const categories = [
-    'Électronique',
-    'Vêtements',
-    'Maison & Jardin',
-    'Véhicules',
-    'Immobilier',
-    'Sports & Loisirs',
-    'Livres & Médias',
-    'Autres',
-];
+/** ApiError → French toast message. */
+function errMessage(e: unknown): string {
+    if (e instanceof ApiError) {
+        if (e.status === 401) return 'Session expirée. Reconnectez-vous.';
+        if (e.status === 413) return 'Image trop lourde.';
+        if (e.status >= 500) return 'Erreur serveur. Réessayez.';
+        return e.message;
+    }
+    return 'Une erreur est survenue. Réessayez.';
+}
 
-const conditions = [
-    'Neuf',
-    'Très bon état',
-    'Bon état',
-    'État correct',
-    'À réparer',
-];
+/** Strip non-digits from a price string → integer, or null if empty/zero. */
+function parsePrice(raw: string): number | null {
+    const digits = raw.replace(/[^\d]/g, '');
+    if (!digits) return null;
+    const n = parseInt(digits, 10);
+    return n > 0 ? n : null;
+}
 
-const popularTags = [
-    'Urgent',
-    'Bon prix',
-    'Négociable',
-    'Livraison',
-    'Échange possible',
-    'Comme neuf',
-    'Rare',
-    'Collection',
-    'Vintage',
-    'Moderne',
-];
-
-const FormHeader = ({ onSaveDraft }: { onSaveDraft: () => void }) => (
+const FormHeader = ({ title, onSaveDraft, saving }: { title: string; onSaveDraft: () => void; saving: boolean }) => (
     <View style={styles.header}>
-        <TouchableOpacity 
+        <TouchableOpacity
             style={styles.headerButton}
             onPress={() => router.back()}
         >
             <Ionicons name="chevron-back" size={24} color="#000" />
         </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.saveButton} onPress={onSaveDraft}>
-            <Text style={styles.saveButtonText}>Enregistrer</Text>
+
+        <Text style={styles.headerTitle} numberOfLines={1}>{title}</Text>
+
+        <TouchableOpacity style={styles.saveButton} onPress={onSaveDraft} disabled={saving}>
+            <Text style={styles.saveButtonText}>Brouillon</Text>
         </TouchableOpacity>
     </View>
 );
@@ -133,40 +146,63 @@ const ListingTypeSelector = ({
     </View>
 );
 
-const ImageUploadSection = ({ images, onAddImage, onRemoveImage, onImagePress }: {
+const ImageUploadSection = ({
+    existingImages,
+    images,
+    onAddImage,
+    onRemoveImage,
+    onRemoveExisting,
+    onImagePress,
+}: {
+    existingImages: BdPostImage[];
     images: string[];
     onAddImage: () => void;
     onRemoveImage: (index: number) => void;
+    onRemoveExisting: (image: BdPostImage) => void;
     onImagePress: (index: number) => void;
-}) => (
-    <View style={styles.imageSection}>
-        <View style={styles.imageGrid}>
-            {images.map((image, index) => (
-                <View key={index} style={styles.imageContainer}>
-                    <TouchableOpacity 
-                        onPress={() => onImagePress(index)}
-                        activeOpacity={0.9}
-                    >
-                        <Image source={{ uri: image }} style={styles.uploadedImage} />
+}) => {
+    const total = existingImages.length + images.length;
+    return (
+        <View style={styles.imageSection}>
+            <View style={styles.imageGrid}>
+                {/* Already-uploaded images (edit mode) — delete hits the backend */}
+                {existingImages.map((img) => (
+                    <View key={`ex-${img.id}`} style={styles.imageContainer}>
+                        <Image source={{ uri: img.url }} style={styles.uploadedImage} />
+                        <TouchableOpacity
+                            style={styles.removeImageButton}
+                            onPress={() => onRemoveExisting(img)}
+                        >
+                            <Ionicons name="close" size={16} color="#FF6B6B" />
+                        </TouchableOpacity>
+                    </View>
+                ))}
+
+                {/* Newly-picked local images (create mode) */}
+                {images.map((image, index) => (
+                    <View key={`new-${index}`} style={styles.imageContainer}>
+                        <TouchableOpacity onPress={() => onImagePress(index)} activeOpacity={0.9}>
+                            <Image source={{ uri: image }} style={styles.uploadedImage} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={styles.removeImageButton}
+                            onPress={() => onRemoveImage(index)}
+                        >
+                            <Ionicons name="close" size={16} color="#FF6B6B" />
+                        </TouchableOpacity>
+                    </View>
+                ))}
+
+                {total < 10 && (
+                    <TouchableOpacity style={styles.addImageButton} onPress={onAddImage}>
+                        <Ionicons name="camera" size={24} color="#666" />
+                        <Text style={styles.addImageText}>{total + 1}/10</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity 
-                        style={styles.removeImageButton}
-                        onPress={() => onRemoveImage(index)}
-                    >
-                        <Ionicons name="close" size={16} color="#FF6B6B" />
-                    </TouchableOpacity>
-                </View>
-            ))}
-            
-            {images.length < 10 && (
-                <TouchableOpacity style={styles.addImageButton} onPress={onAddImage}>
-                    <Ionicons name="camera" size={24} color="#666" />
-                    <Text style={styles.addImageText}>{images.length + 1}/10</Text>
-                </TouchableOpacity>
-            )}
+                )}
+            </View>
         </View>
-    </View>
-);
+    );
+};
 
 const FormField = ({ 
     label, 
@@ -227,89 +263,6 @@ const PickerField = ({
     </View>
 );
 
-const TagsSection = ({ 
-    selectedTags, 
-    onAddTag, 
-    onRemoveTag 
-}: {
-    selectedTags: string[];
-    onAddTag: (tag: string) => void;
-    onRemoveTag: (tag: string) => void;
-}) => {
-    const [newTag, setNewTag] = useState('');
-    const [showSuggestions, setShowSuggestions] = useState(false);
-
-    const handleAddTag = () => {
-        if (newTag.trim() && selectedTags.length < 5 && !selectedTags.includes(newTag.trim())) {
-            onAddTag(newTag.trim());
-            setNewTag('');
-            setShowSuggestions(false);
-        }
-    };
-
-    const availableSuggestions = popularTags.filter(tag => 
-        !selectedTags.includes(tag) && 
-        tag.toLowerCase().includes(newTag.toLowerCase())
-    );
-
-    return (
-        <View style={styles.tagsSection}>
-            <Text style={styles.sectionTitle}>Tags</Text>
-            <Text style={styles.sectionSubtitle}>Maximum 5 tags ({selectedTags.length}/5)</Text>
-            
-            {/* Selected Tags */}
-            <View style={styles.selectedTagsContainer}>
-                {selectedTags.map((tag, index) => (
-                    <View key={index} style={styles.selectedTag}>
-                        <Text style={styles.selectedTagText}>{tag}</Text>
-                        <TouchableOpacity onPress={() => onRemoveTag(tag)}>
-                            <Ionicons name="close" size={16} color="#666" />
-                        </TouchableOpacity>
-                    </View>
-                ))}
-            </View>
-
-            {/* Add New Tag */}
-            {selectedTags.length < 5 && (
-                <View style={styles.addTagContainer}>
-                    <TextInput
-                        style={styles.tagInput}
-                        value={newTag}
-                        onChangeText={(text) => {
-                            setNewTag(text);
-                            setShowSuggestions(text.length > 0);
-                        }}
-                        placeholder="Ajouter un tag..."
-                        placeholderTextColor="#999"
-                        onSubmitEditing={handleAddTag}
-                    />
-                    <TouchableOpacity style={styles.addTagButton} onPress={handleAddTag}>
-                        <Ionicons name="add" size={20} color={theme.colors.primary} />
-                    </TouchableOpacity>
-                </View>
-            )}
-
-            {/* Tag Suggestions */}
-            {showSuggestions && availableSuggestions.length > 0 && (
-                <View style={styles.suggestionsContainer}>
-                    {availableSuggestions.slice(0, 3).map((tag, index) => (
-                        <TouchableOpacity
-                            key={index}
-                            style={styles.suggestionTag}
-                            onPress={() => {
-                                onAddTag(tag);
-                                setNewTag('');
-                                setShowSuggestions(false);
-                            }}
-                        >
-                            <Text style={styles.suggestionTagText}>{tag}</Text>
-                        </TouchableOpacity>
-                    ))}
-                </View>
-            )}
-        </View>
-    );
-};
 
 const FullscreenCarousel = ({ 
     visible, 
@@ -368,16 +321,23 @@ const FullscreenCarousel = ({
     );
 };
 
-const CategoryModal = ({ 
-    visible, 
-    onClose, 
-    onSelect, 
-    selectedCategory 
+/** Generic bottom-sheet single-select over {value,label} options. */
+const OptionModal = ({
+    visible,
+    title,
+    options,
+    selectedValue,
+    emptyText,
+    onClose,
+    onSelect,
 }: {
     visible: boolean;
+    title: string;
+    options: { value: string; label: string }[];
+    selectedValue: string;
+    emptyText?: string;
     onClose: () => void;
-    onSelect: (category: string) => void;
-    selectedCategory: string;
+    onSelect: (value: string) => void;
 }) => {
     if (!visible) return null;
 
@@ -385,85 +345,35 @@ const CategoryModal = ({
         <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
                 <View style={styles.modalHeader}>
-                    <Text style={styles.modalTitle}>Sélectionner une catégorie</Text>
+                    <Text style={styles.modalTitle}>{title}</Text>
                     <TouchableOpacity onPress={onClose}>
                         <Ionicons name="close" size={24} color="#000" />
                     </TouchableOpacity>
                 </View>
-                
+
                 <ScrollView style={styles.modalList}>
-                    {categories.map((category) => (
+                    {options.length === 0 && (
+                        <Text style={styles.modalEmptyText}>{emptyText || 'Aucune option.'}</Text>
+                    )}
+                    {options.map((opt) => (
                         <TouchableOpacity
-                            key={category}
+                            key={opt.value}
                             style={[
                                 styles.modalItem,
-                                selectedCategory === category && styles.modalItemSelected
+                                selectedValue === opt.value && styles.modalItemSelected,
                             ]}
                             onPress={() => {
-                                onSelect(category);
+                                onSelect(opt.value);
                                 onClose();
                             }}
                         >
                             <Text style={[
                                 styles.modalItemText,
-                                selectedCategory === category && styles.modalItemTextSelected
+                                selectedValue === opt.value && styles.modalItemTextSelected,
                             ]}>
-                                {category}
+                                {opt.label}
                             </Text>
-                            {selectedCategory === category && (
-                                <Ionicons name="checkmark" size={20} color={theme.colors.primary} />
-                            )}
-                        </TouchableOpacity>
-                    ))}
-                </ScrollView>
-            </View>
-        </View>
-    );
-};
-
-const ConditionModal = ({ 
-    visible, 
-    onClose, 
-    onSelect, 
-    selectedCondition 
-}: {
-    visible: boolean;
-    onClose: () => void;
-    onSelect: (condition: string) => void;
-    selectedCondition: string;
-}) => {
-    if (!visible) return null;
-
-    return (
-        <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-                <View style={styles.modalHeader}>
-                    <Text style={styles.modalTitle}>État de l'article</Text>
-                    <TouchableOpacity onPress={onClose}>
-                        <Ionicons name="close" size={24} color="#000" />
-                    </TouchableOpacity>
-                </View>
-                
-                <ScrollView style={styles.modalList}>
-                    {conditions.map((condition) => (
-                        <TouchableOpacity
-                            key={condition}
-                            style={[
-                                styles.modalItem,
-                                selectedCondition === condition && styles.modalItemSelected
-                            ]}
-                            onPress={() => {
-                                onSelect(condition);
-                                onClose();
-                            }}
-                        >
-                            <Text style={[
-                                styles.modalItemText,
-                                selectedCondition === condition && styles.modalItemTextSelected
-                            ]}>
-                                {condition}
-                            </Text>
-                            {selectedCondition === condition && (
+                            {selectedValue === opt.value && (
                                 <Ionicons name="checkmark" size={20} color={theme.colors.primary} />
                             )}
                         </TouchableOpacity>
@@ -475,120 +385,227 @@ const ConditionModal = ({
 };
 
 export default function PostItemScreen() {
-    const [formData, setFormData] = useState<FormData>({
+    const params = useLocalSearchParams<{ id?: string; mode?: string }>();
+    const editId = params.id ? Number(params.id) : NaN;
+    const isEdit = params.mode === 'edit' && Number.isFinite(editId) && editId > 0;
+
+    const { user } = useAuth();
+    const queryClient = useQueryClient();
+
+    const [form, setForm] = useState<ListingForm>({
         title: '',
         description: '',
         price: '',
         category: '',
         condition: '',
+        ageBucket: '',
         listingType: 'sell',
-        tags: [],
+        exchangeItems: '',
+        pickupQuartier: '',
+        pickupNote: '',
         images: [],
     });
+    const [existingImages, setExistingImages] = useState<BdPostImage[]>([]);
 
     const [showCategoryModal, setShowCategoryModal] = useState(false);
     const [showConditionModal, setShowConditionModal] = useState(false);
+    const [showAgeModal, setShowAgeModal] = useState(false);
+    const [showQuartierModal, setShowQuartierModal] = useState(false);
     const [showFullscreenCarousel, setShowFullscreenCarousel] = useState(false);
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
     const [errors, setErrors] = useState<Record<string, string>>({});
 
-    const updateFormData = (field: keyof FormData, value: any) => {
-        setFormData(prev => ({ ...prev, [field]: value }));
-        // Clear error when user starts typing
-        if (errors[field]) {
-            setErrors(prev => ({ ...prev, [field]: '' }));
+    // Edit mode: load the post to prefill, and pull the city's quartiers.
+    const editQuery = useQuery(postByIdQuery(isEdit ? editId : 0));
+    const quartiersData = useQuery(quartiersQuery(user?.city));
+    const quartierOptions = (quartiersData.data?.quartiers ?? []).map((q) => ({
+        value: q.name,
+        label: q.name,
+    }));
+
+    useEffect(() => {
+        const post = editQuery.data;
+        if (!isEdit || !post) return;
+        setForm({
+            title: post.title ?? '',
+            description: post.description ?? '',
+            price: post.price != null ? String(post.price) : '',
+            category: post.categories?.[0] ?? '',
+            condition: post.condition ?? '',
+            ageBucket: post.age_bucket ?? '',
+            listingType: post.is_free ? 'share' : post.exchange_items ? 'exchange' : 'sell',
+            exchangeItems: post.exchange_items ?? '',
+            pickupQuartier: post.pickup_quartier ?? '',
+            pickupNote: post.pickup_location_note ?? '',
+            images: [],
+        });
+        setExistingImages(post.images ?? []);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [editQuery.data?.id, isEdit]);
+
+    const updateForm = (field: keyof ListingForm, value: any) => {
+        setForm((prev) => ({ ...prev, [field]: value }));
+        if (errors[field]) setErrors((prev) => ({ ...prev, [field]: '' }));
+    };
+
+    const buildFormData = (state: 'draft' | 'published'): FormData => {
+        const fd = new FormData();
+        fd.append('title', form.title.trim());
+        fd.append('description', form.description.trim());
+        fd.append('state', state);
+        fd.append('allow_negotiation', form.listingType === 'sell' ? 'true' : 'false');
+        if (form.listingType === 'share') {
+            fd.append('is_free', 'true');
+        } else {
+            fd.append('is_free', 'false');
+            const price = parsePrice(form.price);
+            if (price != null) fd.append('price', String(price));
+        }
+        if (form.listingType === 'exchange' && form.exchangeItems.trim()) {
+            fd.append('exchange_items', form.exchangeItems.trim());
+        }
+        if (form.category) fd.append('categories', form.category); // single-select → 1-length csv
+        if (form.condition) fd.append('condition', form.condition);
+        if (form.ageBucket) fd.append('age_bucket', form.ageBucket);
+        if (form.pickupQuartier) fd.append('pickup_quartier', form.pickupQuartier);
+        if (form.pickupNote.trim()) fd.append('pickup_location_note', form.pickupNote.trim());
+        form.images.forEach((uri, i) =>
+            fd.append('images', { uri, name: `photo_${i}.jpg`, type: 'image/jpeg' } as any),
+        );
+        return fd;
+    };
+
+    const buildPatch = (state: 'draft' | 'published'): Record<string, unknown> => {
+        const patch: Record<string, unknown> = {
+            title: form.title.trim(),
+            description: form.description.trim(),
+            state,
+            allow_negotiation: form.listingType === 'sell',
+            categories: form.category ? [form.category] : [],
+            condition: form.condition || null,
+            age_bucket: form.ageBucket || null,
+            pickup_quartier: form.pickupQuartier || null,
+            pickup_location_note: form.pickupNote.trim() || null,
+        };
+        if (form.listingType === 'share') {
+            patch.is_free = true;
+            patch.price = null;
+            patch.exchange_items = null;
+        } else {
+            patch.is_free = false;
+            patch.price = parsePrice(form.price);
+            patch.exchange_items =
+                form.listingType === 'exchange' ? form.exchangeItems.trim() || null : null;
+        }
+        return patch;
+    };
+
+    const validate = (forPublish: boolean): boolean => {
+        const e: Record<string, string> = {};
+        if (!form.title.trim()) e.title = 'Le titre est requis';
+        if (!form.description.trim()) e.description = 'La description est requise';
+        if (forPublish) {
+            if (!form.category) e.category = 'La catégorie est requise';
+            if (!form.condition) e.condition = "L'état est requis";
+            if (form.listingType === 'sell' && parsePrice(form.price) == null)
+                e.price = 'Le prix est requis';
+            if (form.listingType === 'exchange' && !form.exchangeItems.trim())
+                e.exchangeItems = 'Précisez contre quoi échanger';
+            if (existingImages.length + form.images.length === 0)
+                e.images = 'Au moins une photo est requise';
+        }
+        setErrors(e);
+        return Object.keys(e).length === 0;
+    };
+
+    const createMut = useMutation({
+        mutationFn: (state: 'draft' | 'published') => createPost(buildFormData(state)),
+        onSuccess: (_post, state) => {
+            queryClient.invalidateQueries({ queryKey: ['posts'] });
+            showToast.success(state === 'published' ? 'Annonce publiée' : 'Brouillon enregistré');
+            router.back();
+        },
+        onError: (e) => showToast.error('Échec', errMessage(e)),
+    });
+
+    const updateMut = useMutation({
+        mutationFn: (state: 'draft' | 'published') => updatePost(editId, buildPatch(state)),
+        onSuccess: (_post, state) => {
+            queryClient.invalidateQueries({ queryKey: ['posts'] });
+            queryClient.invalidateQueries({ queryKey: ['post', editId] });
+            showToast.success(state === 'published' ? 'Annonce mise à jour' : 'Brouillon enregistré');
+            router.back();
+        },
+        onError: (e) => showToast.error('Échec', errMessage(e)),
+    });
+
+    const deleteImageMut = useMutation({
+        mutationFn: (imageId: number) => deletePostImage(editId, imageId),
+        onSuccess: (_r, imageId) => {
+            setExistingImages((prev) => prev.filter((im) => im.id !== imageId));
+            queryClient.invalidateQueries({ queryKey: ['post', editId] });
+            queryClient.invalidateQueries({ queryKey: ['posts'] });
+        },
+        onError: (e) => showToast.error('Échec', errMessage(e)),
+    });
+
+    const saving = createMut.isPending || updateMut.isPending;
+
+    const pickImage = async (fromCamera: boolean) => {
+        const result = fromCamera
+            ? await ImagePicker.launchCameraAsync({
+                  mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                  allowsEditing: true,
+                  aspect: [4, 3],
+                  quality: 0.8,
+              })
+            : await ImagePicker.launchImageLibraryAsync({
+                  mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                  allowsMultipleSelection: false,
+                  allowsEditing: true,
+                  aspect: [4, 3],
+                  quality: 0.8,
+              });
+        if (!result.canceled && result.assets[0]) {
+            updateForm('images', [...form.images, result.assets[0].uri]);
         }
     };
 
-    const validateForm = (): boolean => {
-        const newErrors: Record<string, string> = {};
-
-        if (!formData.title.trim()) newErrors.title = 'Le titre est requis';
-        if (!formData.description.trim()) newErrors.description = 'La description est requise';
-        if (!formData.price.trim()) newErrors.price = 'Le prix est requis';
-        if (!formData.category) newErrors.category = 'La catégorie est requise';
-        if (!formData.condition) newErrors.condition = 'L\'état est requis';
-        if (formData.images.length === 0) newErrors.images = 'Au moins une photo est requise';
-
-        setErrors(newErrors);
-        return Object.keys(newErrors).length === 0;
-    };
-
     const handleAddImage = async () => {
+        // Adding photos while editing is deferred (backend accepts new files only on create).
+        if (isEdit) {
+            showToast.info?.('Bientôt disponible', 'Ajout de photos en modification bientôt disponible.');
+            return;
+        }
+        if (existingImages.length + form.images.length >= 10) {
+            showToast.error('Limite atteinte', 'Maximum 10 photos.');
+            return;
+        }
         try {
-            // Request camera/media library permissions
             const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
             if (status !== 'granted') {
-                showToast.error('Permission requise', 'Nous avons besoin de votre permission pour accéder à vos photos.');
+                showToast.error('Permission requise', 'Autorisez l’accès à vos photos.');
                 return;
             }
-
-            // Show action sheet for camera or gallery
-            Alert.alert(
-                'Ajouter une photo',
-                'Choisissez une option',
-                [
-                    {
-                        text: 'Annuler',
-                        style: 'cancel',
-                    },
-                    {
-                        text: 'Prendre une photo',
-                        onPress: async () => {
-                            const result = await ImagePicker.launchCameraAsync({
-                                mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                                allowsEditing: true,
-                                aspect: [4, 3],
-                                quality: 0.8,
-                            });
-
-                            if (!result.canceled && result.assets[0]) {
-                                updateFormData('images', [...formData.images, result.assets[0].uri]);
-                            }
-                        },
-                    },
-                    {
-                        text: 'Choisir depuis la galerie',
-                        onPress: async () => {
-                            const result = await ImagePicker.launchImageLibraryAsync({
-                                mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                                allowsMultipleSelection: false,
-                                allowsEditing: true,
-                                aspect: [4, 3],
-                                quality: 0.8,
-                            });
-
-                            if (!result.canceled && result.assets[0]) {
-                                if (formData.images.length >= 10) {
-                                    showToast.error('Limite atteinte', 'Vous pouvez ajouter un maximum de 10 photos.');
-                                    return;
-                                }
-                                updateFormData('images', [...formData.images, result.assets[0].uri]);
-                                showToast.success('Photo ajoutée', 'La photo a été ajoutée avec succès.');
-                            }
-                        },
-                    },
-                ]
-            );
-        } catch (error) {
-            showToast.error('Erreur', 'Impossible d\'accéder aux photos. Veuillez réessayer.');
+            Alert.alert('Ajouter une photo', 'Choisissez une option', [
+                { text: 'Annuler', style: 'cancel' },
+                { text: 'Prendre une photo', onPress: () => pickImage(true) },
+                { text: 'Choisir depuis la galerie', onPress: () => pickImage(false) },
+            ]);
+        } catch {
+            showToast.error('Erreur', 'Impossible d’accéder aux photos.');
         }
     };
 
     const handleRemoveImage = (index: number) => {
-        const newImages = formData.images.filter((_, i) => i !== index);
-        updateFormData('images', newImages);
+        updateForm('images', form.images.filter((_, i) => i !== index));
     };
 
-    const handleAddTag = (tag: string) => {
-        if (!formData.tags.includes(tag) && formData.tags.length < 5) {
-            updateFormData('tags', [...formData.tags, tag]);
-        }
-    };
-
-    const handleRemoveTag = (tag: string) => {
-        const newTags = formData.tags.filter(t => t !== tag);
-        updateFormData('tags', newTags);
+    const handleRemoveExisting = (img: BdPostImage) => {
+        Alert.alert('Supprimer la photo', 'Retirer cette photo de l’annonce ?', [
+            { text: 'Annuler', style: 'cancel' },
+            { text: 'Supprimer', style: 'destructive', onPress: () => deleteImageMut.mutate(img.id) },
+        ]);
     };
 
     const handleImagePress = (index: number) => {
@@ -596,34 +613,50 @@ export default function PostItemScreen() {
         setShowFullscreenCarousel(true);
     };
 
-    const handleCloseFullscreen = () => {
-        setShowFullscreenCarousel(false);
-    };
-
-    const handleSaveDraft = () => {
-        // TODO: Save draft to API
-        showToast.success('Brouillon sauvegardé', 'Votre article a été sauvegardé comme brouillon.');
-    };
-
-    const handlePublish = () => {
-        if (validateForm()) {
-            // TODO: Publish to API
-            showToast.success('Article publié', 'Votre article a été publié avec succès!');
-            router.back();
-        } else {
-            showToast.error('Erreur de validation', 'Veuillez corriger les erreurs dans le formulaire.');
+    const submit = (state: 'draft' | 'published') => {
+        if (!validate(state === 'published')) {
+            showToast.error('Formulaire incomplet', 'Veuillez corriger les champs indiqués.');
+            return;
         }
+        if (isEdit) updateMut.mutate(state);
+        else createMut.mutate(state);
     };
+
+    // Edit-mode load guards (all hooks above are already declared).
+    if (isEdit && editQuery.isLoading) {
+        return (
+            <SafeAreaView style={styles.centered}>
+                <ActivityIndicator color={theme.colors.primary} />
+            </SafeAreaView>
+        );
+    }
+    if (isEdit && (editQuery.error || !editQuery.data)) {
+        return (
+            <SafeAreaView style={styles.centered}>
+                <Ionicons name="alert-circle-outline" size={48} color="#FF6B6B" />
+                <Text style={styles.stateText}>Impossible de charger cette annonce.</Text>
+                <TouchableOpacity style={styles.stateButton} onPress={() => editQuery.refetch()}>
+                    <Text style={styles.stateButtonText}>Réessayer</Text>
+                </TouchableOpacity>
+            </SafeAreaView>
+        );
+    }
+
+    const priceEditable = form.listingType !== 'share';
 
     return (
         <SafeAreaView style={styles.container}>
-            <FormHeader onSaveDraft={handleSaveDraft} />
-            
-            <KeyboardAvoidingView 
+            <FormHeader
+                title={isEdit ? 'Modifier l’annonce' : 'Nouvelle annonce'}
+                onSaveDraft={() => submit('draft')}
+                saving={saving}
+            />
+
+            <KeyboardAvoidingView
                 style={styles.content}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             >
-                <ScrollView 
+                <ScrollView
                     style={styles.scrollView}
                     showsVerticalScrollIndicator={false}
                     contentContainerStyle={styles.scrollContent}
@@ -632,8 +665,8 @@ export default function PostItemScreen() {
                     <View style={styles.formField}>
                         <TextInput
                             style={styles.titleInput}
-                            value={formData.title}
-                            onChangeText={(text) => updateFormData('title', text)}
+                            value={form.title}
+                            onChangeText={(text) => updateForm('title', text)}
                             placeholder="Titre"
                             placeholderTextColor="#999"
                         />
@@ -644,9 +677,9 @@ export default function PostItemScreen() {
                     <View style={styles.formField}>
                         <TextInput
                             style={styles.descriptionInput}
-                            value={formData.description}
-                            onChangeText={(text) => updateFormData('description', text)}
-                            placeholder="Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore... et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercita..."
+                            value={form.description}
+                            onChangeText={(text) => updateForm('description', text)}
+                            placeholder="Décrivez votre article : état, marque, taille, raison de la vente…"
                             multiline
                             placeholderTextColor="#999"
                         />
@@ -655,23 +688,44 @@ export default function PostItemScreen() {
 
                     {/* Listing Type Selector */}
                     <ListingTypeSelector
-                        selectedType={formData.listingType}
-                        onTypeChange={(type) => updateFormData('listingType', type)}
+                        selectedType={form.listingType}
+                        onTypeChange={(type) => updateForm('listingType', type)}
                     />
+
+                    {/* "Contre quoi ?" for exchange listings */}
+                    {form.listingType === 'exchange' && (
+                        <View style={styles.formField}>
+                            <Text style={styles.fieldLabel}>Contre quoi ?</Text>
+                            <TextInput
+                                style={styles.textInput}
+                                value={form.exchangeItems}
+                                onChangeText={(text) => updateForm('exchangeItems', text)}
+                                placeholder="Ex : téléphone, vélo… (séparés par des virgules)"
+                                placeholderTextColor="#999"
+                            />
+                            {errors.exchangeItems && (
+                                <Text style={styles.errorText}>{errors.exchangeItems}</Text>
+                            )}
+                        </View>
+                    )}
 
                     {/* Image Upload Section */}
                     <ImageUploadSection
-                        images={formData.images}
+                        existingImages={existingImages}
+                        images={form.images}
                         onAddImage={handleAddImage}
                         onRemoveImage={handleRemoveImage}
+                        onRemoveExisting={handleRemoveExisting}
                         onImagePress={handleImagePress}
                     />
                     {errors.images && <Text style={styles.errorText}>{errors.images}</Text>}
 
+                    {/* TODO(W6): "Suggestions IA" button slot (enabled when ≥1 photo) — ai_draft */}
+
                     {/* Category Field */}
                     <PickerField
                         label="Catégorie"
-                        value={formData.category}
+                        value={form.category ? categoryLabel(form.category) : ''}
                         onPress={() => setShowCategoryModal(true)}
                         placeholder="Sélectionner une catégorie"
                         required
@@ -681,61 +735,122 @@ export default function PostItemScreen() {
                     {/* Condition Field */}
                     <PickerField
                         label="État"
-                        value={formData.condition}
+                        value={form.condition ? conditionLabel(form.condition) ?? '' : ''}
                         onPress={() => setShowConditionModal(true)}
                         placeholder="Sélectionner l'état"
                         required
                     />
                     {errors.condition && <Text style={styles.errorText}>{errors.condition}</Text>}
 
-                    {/* Tags Section */}
-                    <TagsSection
-                        selectedTags={formData.tags}
-                        onAddTag={handleAddTag}
-                        onRemoveTag={handleRemoveTag}
+                    {/* Age bucket (optional) */}
+                    <PickerField
+                        label="Ancienneté"
+                        value={form.ageBucket ? AGE_LABELS[form.ageBucket] ?? '' : ''}
+                        onPress={() => setShowAgeModal(true)}
+                        placeholder="Ancienneté de l'article (optionnel)"
                     />
+
+                    {/* Quartier de remise (optional) */}
+                    <PickerField
+                        label="Quartier de remise"
+                        value={form.pickupQuartier}
+                        onPress={() => setShowQuartierModal(true)}
+                        placeholder={user?.city ? 'Choisir un quartier' : 'Ville non définie'}
+                    />
+
+                    {/* Pickup note (optional) */}
+                    <View style={styles.formField}>
+                        <Text style={styles.fieldLabel}>Point de rencontre</Text>
+                        <TextInput
+                            style={styles.textInput}
+                            value={form.pickupNote}
+                            onChangeText={(text) => updateForm('pickupNote', text)}
+                            placeholder="Ex : devant la pharmacie, marché… (optionnel)"
+                            placeholderTextColor="#999"
+                        />
+                    </View>
                 </ScrollView>
 
                 {/* Bottom Bar */}
                 <View style={styles.bottomBar}>
-                    <TextInput
-                        style={styles.priceInput}
-                        value={formData.price}
-                        onChangeText={(text) => updateFormData('price', text)}
-                        placeholder="350000 FCFA"
-                        keyboardType="numeric"
-                        placeholderTextColor="#999"
-                    />
-                    {errors.price && <Text style={styles.errorText}>{errors.price}</Text>}
-                    
-                    <TouchableOpacity 
-                        style={styles.publishButton}
-                        onPress={handlePublish}
+                    {priceEditable ? (
+                        <TextInput
+                            style={styles.priceInput}
+                            value={form.price}
+                            onChangeText={(text) => updateForm('price', text)}
+                            placeholder={
+                                form.listingType === 'exchange' ? 'Prix (optionnel)' : 'Prix en FCFA'
+                            }
+                            keyboardType="numeric"
+                            placeholderTextColor="#999"
+                        />
+                    ) : (
+                        <View style={styles.gratuitBadge}>
+                            <Ionicons name="gift-outline" size={18} color={theme.colors.success} />
+                            <Text style={styles.gratuitText}>Gratuit</Text>
+                        </View>
+                    )}
+                    {/* TODO(W6): "Prix conseillé" chip slot — price_suggestion */}
+
+                    <TouchableOpacity
+                        style={[styles.publishButton, saving && styles.publishButtonDisabled]}
+                        onPress={() => submit('published')}
+                        disabled={saving}
                     >
-                        <Text style={styles.publishButtonText}>Publier</Text>
+                        {saving ? (
+                            <ActivityIndicator color="#fff" />
+                        ) : (
+                            <Text style={styles.publishButtonText}>
+                                {isEdit ? 'Mettre à jour' : 'Publier'}
+                            </Text>
+                        )}
                     </TouchableOpacity>
                 </View>
+                {errors.price && <Text style={styles.errorText}>{errors.price}</Text>}
             </KeyboardAvoidingView>
 
-            <CategoryModal
+            <OptionModal
                 visible={showCategoryModal}
+                title="Sélectionner une catégorie"
+                options={CATEGORIES}
+                selectedValue={form.category}
                 onClose={() => setShowCategoryModal(false)}
-                onSelect={(category) => updateFormData('category', category)}
-                selectedCategory={formData.category}
+                onSelect={(value) => updateForm('category', value)}
             />
 
-            <ConditionModal
+            <OptionModal
                 visible={showConditionModal}
+                title="État de l'article"
+                options={CONDITIONS}
+                selectedValue={form.condition}
                 onClose={() => setShowConditionModal(false)}
-                onSelect={(condition) => updateFormData('condition', condition)}
-                selectedCondition={formData.condition}
+                onSelect={(value) => updateForm('condition', value)}
+            />
+
+            <OptionModal
+                visible={showAgeModal}
+                title="Ancienneté"
+                options={AGE_BUCKETS}
+                selectedValue={form.ageBucket}
+                onClose={() => setShowAgeModal(false)}
+                onSelect={(value) => updateForm('ageBucket', value)}
+            />
+
+            <OptionModal
+                visible={showQuartierModal}
+                title="Quartier de remise"
+                options={quartierOptions}
+                selectedValue={form.pickupQuartier}
+                emptyText={user?.city ? 'Aucun quartier pour votre ville.' : 'Ville non définie.'}
+                onClose={() => setShowQuartierModal(false)}
+                onSelect={(value) => updateForm('pickupQuartier', value)}
             />
 
             <FullscreenCarousel
                 visible={showFullscreenCarousel}
-                images={formData.images}
+                images={form.images}
                 currentIndex={currentImageIndex}
-                onClose={handleCloseFullscreen}
+                onClose={() => setShowFullscreenCarousel(false)}
             />
         </SafeAreaView>
     );
@@ -745,6 +860,60 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: theme.colors.white,
+    },
+    centered: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: theme.spacing.xl,
+        backgroundColor: theme.colors.white,
+    },
+    stateText: {
+        fontSize: 15,
+        color: '#333',
+        marginTop: theme.spacing.md,
+        textAlign: 'center',
+    },
+    stateButton: {
+        marginTop: theme.spacing.lg,
+        backgroundColor: theme.colors.primary,
+        paddingHorizontal: theme.spacing.xl,
+        paddingVertical: theme.spacing.md,
+        borderRadius: 24,
+    },
+    stateButtonText: {
+        color: theme.colors.white,
+        fontWeight: '700',
+        fontSize: 15,
+    },
+    headerTitle: {
+        flex: 1,
+        textAlign: 'center',
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#333',
+        marginHorizontal: theme.spacing.sm,
+    },
+    modalEmptyText: {
+        fontSize: 14,
+        color: theme.colors.gray,
+        padding: theme.spacing.lg,
+        textAlign: 'center',
+    },
+    gratuitBadge: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginRight: theme.spacing.md,
+    },
+    gratuitText: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: theme.colors.success,
+        marginLeft: 6,
+    },
+    publishButtonDisabled: {
+        opacity: 0.6,
     },
     header: {
         flexDirection: 'row',

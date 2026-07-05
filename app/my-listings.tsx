@@ -3,6 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   Image,
@@ -13,238 +14,188 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { showToast } from '../components/atoms/Toast';
 import { theme } from '../utils/theme';
+import { ApiError } from '@/lib/api';
+import { myPostsQuery, deletePost, updatePost } from '@/lib/api/posts';
+import { toCardProps } from '@/lib/mapPost';
+import { stateBadge } from '@/constants/catalog';
+import type { BdPost } from '@/constants/types';
 
-type FilterType = 'all' | 'available' | 'sold' | 'draft';
+// Client-side status filter. Chips map to Post.state values.
+type FilterType = 'all' | 'published' | 'sold' | 'draft' | 'unpublished';
 
-interface Product {
-  id: string;
-  title: string;
-  price: string;
-  status: 'available' | 'sold' | 'draft';
-  imageUrl: string;
-  views: number;
-  likes: number;
-  createdAt: string;
+const FILTERS: { id: FilterType; label: string; states: string[] }[] = [
+  { id: 'all', label: 'Tous', states: [] },
+  { id: 'published', label: 'Disponibles', states: ['published'] },
+  { id: 'sold', label: 'Vendus', states: ['sold'] },
+  { id: 'draft', label: 'Brouillons', states: ['draft'] },
+  { id: 'unpublished', label: 'Retirés', states: ['unpublished', 'reserved'] },
+];
+
+function errMessage(e: unknown): string {
+  if (e instanceof ApiError) {
+    if (e.status === 401) return 'Session expirée. Reconnectez-vous.';
+    if (e.status >= 500) return 'Erreur serveur. Réessayez.';
+    return e.message;
+  }
+  return 'Une erreur est survenue. Réessayez.';
 }
-
-// Mock data
-const mockProducts: Product[] = [
-  {
-    id: '1',
-    title: 'Macbook Pro 2020 (256 GB)',
-    price: '350000 FCFA',
-    status: 'available',
-    imageUrl: 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=300&h=200&fit=crop',
-    views: 45,
-    likes: 12,
-    createdAt: '2024-01-15',
-  },
-  {
-    id: '2',
-    title: 'Nike Air Max 270 - Taille 42',
-    price: '45000 FCFA',
-    status: 'sold',
-    imageUrl: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=300&h=200&fit=crop',
-    views: 23,
-    likes: 8,
-    createdAt: '2024-01-10',
-  },
-  {
-    id: '3',
-    title: 'iPhone 12 Pro Max 128GB',
-    price: '280000 FCFA',
-    status: 'draft',
-    imageUrl: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=300&h=200&fit=crop',
-    views: 0,
-    likes: 0,
-    createdAt: '2024-01-20',
-  },
-];
-
-const filterOptions = [
-  { id: 'all' as FilterType, label: 'Tous', count: 12 },
-  { id: 'available' as FilterType, label: 'Disponibles', count: 8 },
-  { id: 'sold' as FilterType, label: 'Vendus', count: 3 },
-  { id: 'draft' as FilterType, label: 'Brouillons', count: 1 },
-];
 
 export default function MyListingsScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [selectedFilter, setSelectedFilter] = useState<FilterType>('all');
-  const [products, setProducts] = useState<Product[]>(mockProducts);
-  const [refreshing, setRefreshing] = useState(false);
 
-  const filteredProducts = products.filter(product => {
-    if (selectedFilter === 'all') return true;
-    return product.status === selectedFilter;
+  const listing = useQuery(myPostsQuery());
+  const posts = listing.data?.posts ?? [];
+
+  const activeStates = FILTERS.find((f) => f.id === selectedFilter)?.states ?? [];
+  const filteredPosts =
+    activeStates.length === 0 ? posts : posts.filter((p) => activeStates.includes(p.state));
+
+  // Live counts per chip, derived from the loaded list.
+  const countFor = (states: string[]) =>
+    states.length === 0 ? posts.length : posts.filter((p) => states.includes(p.state)).length;
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['posts'] });
+  };
+
+  const delMut = useMutation({
+    mutationFn: (id: number) => deletePost(id),
+    onSuccess: () => {
+      invalidate();
+      showToast.success('Annonce supprimée');
+    },
+    onError: (e) => showToast.error('Échec', errMessage(e)),
   });
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    // TODO: Fetch products from API
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setRefreshing(false);
+  const soldMut = useMutation({
+    mutationFn: (id: number) => updatePost(id, { state: 'sold' }),
+    onSuccess: () => {
+      invalidate();
+      showToast.success('Marquée comme vendue');
+    },
+    onError: (e) => showToast.error('Échec', errMessage(e)),
+  });
+
+  const handleEdit = (id: number) => {
+    router.push({ pathname: '/post-item', params: { id: String(id), mode: 'edit' } });
   };
 
-  const handleEdit = (productId: string) => {
-    router.push({ pathname: '/post-item', params: { id: productId, mode: 'edit' } });
+  const handleDelete = (post: BdPost) => {
+    Alert.alert('Supprimer l\'annonce', `Supprimer "${post.title}" ?`, [
+      { text: 'Annuler', style: 'cancel' },
+      { text: 'Supprimer', style: 'destructive', onPress: () => delMut.mutate(post.id) },
+    ]);
   };
 
-  const handleDelete = (product: Product) => {
-    Alert.alert(
-      'Supprimer l\'annonce',
-      `Êtes-vous sûr de vouloir supprimer "${product.title}" ?`,
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Supprimer',
-          style: 'destructive',
-          onPress: () => {
-            setProducts(products.filter(p => p.id !== product.id));
-            showToast.success('Annonce supprimée', 'L\'annonce a été supprimée avec succès.');
-          },
-        },
-      ]
-    );
+  const handleMarkAsSold = (post: BdPost) => {
+    Alert.alert('Marquer comme vendu', `Marquer "${post.title}" comme vendu ?`, [
+      { text: 'Annuler', style: 'cancel' },
+      { text: 'Confirmer', onPress: () => soldMut.mutate(post.id) },
+    ]);
   };
 
-  const handleMarkAsSold = (product: Product) => {
-    Alert.alert(
-      'Marquer comme vendu',
-      `Voulez-vous marquer "${product.title}" comme vendu ?`,
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Confirmer',
-          onPress: () => {
-            setProducts(
-              products.map(p => (p.id === product.id ? { ...p, status: 'sold' as const } : p))
-            );
-            showToast.success('Statut mis à jour', 'L\'annonce a été marquée comme vendue.');
-          },
-        },
-      ]
-    );
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'available':
-        return '#34C759';
-      case 'sold':
-        return '#FF3B30';
-      case 'draft':
-        return '#FF9500';
-      default:
-        return '#666';
-    }
-  };
-
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'available':
-        return 'Disponible';
-      case 'sold':
-        return 'Vendu';
-      case 'draft':
-        return 'Brouillon';
-      default:
-        return status;
-    }
-  };
-
-  const renderFilterButton = (filter: typeof filterOptions[0]) => (
-    <TouchableOpacity
-      key={filter.id}
-      style={[
-        styles.filterButton,
-        selectedFilter === filter.id && styles.filterButtonActive,
-      ]}
-      onPress={() => setSelectedFilter(filter.id)}>
-      <Text
-        style={[
-          styles.filterText,
-          selectedFilter === filter.id && styles.filterTextActive,
-        ]}>
-        {filter.label}
-      </Text>
-      {filter.count > 0 && (
-        <View style={[
-          styles.filterBadge,
-          selectedFilter === filter.id && styles.filterBadgeActive,
-        ]}>
-          <Text style={[
-            styles.filterBadgeText,
-            selectedFilter === filter.id && styles.filterBadgeTextActive,
-          ]}>
-            {filter.count}
-          </Text>
-        </View>
-      )}
-    </TouchableOpacity>
-  );
-
-  const renderProduct = ({ item }: { item: Product }) => (
-    <TouchableOpacity
-      style={styles.productCard}
-      onPress={() => router.push({ pathname: '/item-details', params: { id: item.id } })}>
-      <Image source={{ uri: item.imageUrl }} style={styles.productImage} />
-      <View style={styles.productContent}>
-        <View style={styles.productHeader}>
-          <Text style={styles.productTitle} numberOfLines={2}>{item.title}</Text>
-          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) + '15' }]}>
-            <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
-              {getStatusLabel(item.status)}
+  const renderFilterButton = (filter: (typeof FILTERS)[0]) => {
+    const count = countFor(filter.states);
+    return (
+      <TouchableOpacity
+        key={filter.id}
+        style={[styles.filterButton, selectedFilter === filter.id && styles.filterButtonActive]}
+        onPress={() => setSelectedFilter(filter.id)}>
+        <Text
+          style={[styles.filterText, selectedFilter === filter.id && styles.filterTextActive]}>
+          {filter.label}
+        </Text>
+        {count > 0 && (
+          <View style={[styles.filterBadge, selectedFilter === filter.id && styles.filterBadgeActive]}>
+            <Text
+              style={[
+                styles.filterBadgeText,
+                selectedFilter === filter.id && styles.filterBadgeTextActive,
+              ]}>
+              {count}
             </Text>
           </View>
-        </View>
-        <Text style={styles.productPrice}>{item.price}</Text>
-        <View style={styles.productStats}>
-          <View style={styles.statItem}>
-            <Ionicons name="eye-outline" size={14} color="#666" />
-            <Text style={styles.statText}>{item.views}</Text>
+        )}
+      </TouchableOpacity>
+    );
+  };
+
+  const renderProduct = ({ item }: { item: BdPost }) => {
+    const card = toCardProps(item);
+    const badge = stateBadge(item.state);
+    const busy = delMut.isPending || soldMut.isPending;
+    return (
+      <TouchableOpacity
+        style={styles.productCard}
+        onPress={() => router.push({ pathname: '/item-details', params: { id: String(item.id) } })}>
+        {card.imageUrl ? (
+          <Image source={{ uri: card.imageUrl }} style={styles.productImage} />
+        ) : (
+          <View style={[styles.productImage, styles.productImagePlaceholder]}>
+            <Ionicons name="image-outline" size={28} color={theme.colors.gray} />
           </View>
-          <View style={styles.statItem}>
-            <Ionicons name="heart-outline" size={14} color="#666" />
-            <Text style={styles.statText}>{item.likes}</Text>
+        )}
+        <View style={styles.productContent}>
+          <View style={styles.productHeader}>
+            <Text style={styles.productTitle} numberOfLines={2}>{card.title}</Text>
+            <View style={[styles.statusBadge, { backgroundColor: badge.color + '15' }]}>
+              <Text style={[styles.statusText, { color: badge.color }]}>{badge.label}</Text>
+            </View>
           </View>
-        </View>
-        <View style={styles.productActions}>
-          {item.status === 'available' && (
+          <Text style={styles.productPrice}>{card.price}</Text>
+          <View style={styles.productStats}>
+            <View style={styles.statItem}>
+              <Ionicons name="eye-outline" size={14} color="#666" />
+              <Text style={styles.statText}>{card.views}</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Ionicons name="heart-outline" size={14} color="#666" />
+              <Text style={styles.statText}>{card.likes}</Text>
+            </View>
+          </View>
+          <View style={styles.productActions}>
+            {(item.state === 'published' || item.state === 'reserved') && (
+              <TouchableOpacity
+                style={styles.actionButton}
+                disabled={busy}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleMarkAsSold(item);
+                }}>
+                <Ionicons name="checkmark-circle" size={18} color="#34C759" />
+                <Text style={styles.actionText}>Vendu</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={styles.actionButton}
+              disabled={busy}
               onPress={(e) => {
                 e.stopPropagation();
-                handleMarkAsSold(item);
+                handleEdit(item.id);
               }}>
-              <Ionicons name="checkmark-circle" size={18} color="#34C759" />
-              <Text style={styles.actionText}>Marquer comme vendu</Text>
+              <Ionicons name="pencil" size={18} color={theme.colors.primary} />
+              <Text style={styles.actionText}>Modifier</Text>
             </TouchableOpacity>
-          )}
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={(e) => {
-              e.stopPropagation();
-              handleEdit(item.id);
-            }}>
-            <Ionicons name="pencil" size={18} color={theme.colors.primary} />
-            <Text style={styles.actionText}>Modifier</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={(e) => {
-              e.stopPropagation();
-              handleDelete(item);
-            }}>
-            <Ionicons name="trash-outline" size={18} color="#FF3B30" />
-            <Text style={[styles.actionText, { color: '#FF3B30' }]}>Supprimer</Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.actionButton}
+              disabled={busy}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleDelete(item);
+              }}>
+              <Ionicons name="trash-outline" size={18} color="#FF3B30" />
+              <Text style={[styles.actionText, { color: '#FF3B30' }]}>Supprimer</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -260,7 +211,7 @@ export default function MyListingsScreen() {
       {/* Filters */}
       <View style={styles.filtersContainer}>
         <FlatList
-          data={filterOptions}
+          data={FILTERS}
           renderItem={({ item }) => renderFilterButton(item)}
           keyExtractor={(item) => item.id}
           horizontal
@@ -270,35 +221,51 @@ export default function MyListingsScreen() {
       </View>
 
       {/* Products List */}
-      <FlatList
-        data={filteredProducts}
-        renderItem={renderProduct}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={[
-          styles.listContent,
-          filteredProducts.length === 0 && styles.emptyContainer,
-        ]}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons name="document-outline" size={64} color={theme.colors.gray} />
-            <Text style={styles.emptyTitle}>Aucune annonce</Text>
-            <Text style={styles.emptyMessage}>
-              {selectedFilter === 'all'
-                ? 'Vous n\'avez pas encore publié d\'annonce.'
-                : `Vous n'avez pas d'annonces ${filterOptions.find(f => f.id === selectedFilter)?.label.toLowerCase()}.`}
-            </Text>
-            <TouchableOpacity
-              style={styles.createButton}
-              onPress={() => router.push('/post-item')}>
-              <Text style={styles.createButtonText}>Créer une annonce</Text>
-            </TouchableOpacity>
-          </View>
-        }
-      />
+      {listing.isLoading ? (
+        <View style={styles.emptyContainer}>
+          <ActivityIndicator color={theme.colors.primary} />
+        </View>
+      ) : listing.isError ? (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="alert-circle-outline" size={56} color="#FF6B6B" />
+          <Text style={styles.emptyTitle}>Impossible de charger vos annonces</Text>
+          <TouchableOpacity style={styles.createButton} onPress={() => listing.refetch()}>
+            <Text style={styles.createButtonText}>Réessayer</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <FlatList
+          data={filteredPosts}
+          renderItem={renderProduct}
+          keyExtractor={(item) => String(item.id)}
+          contentContainerStyle={[
+            styles.listContent,
+            filteredPosts.length === 0 && styles.emptyContainer,
+          ]}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={listing.isRefetching}
+              onRefresh={() => listing.refetch()}
+              tintColor={theme.colors.primary}
+            />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Ionicons name="document-outline" size={64} color={theme.colors.gray} />
+              <Text style={styles.emptyTitle}>Aucune annonce</Text>
+              <Text style={styles.emptyMessage}>
+                {selectedFilter === 'all'
+                  ? "Vous n'avez pas encore publié d'annonce."
+                  : `Aucune annonce dans « ${FILTERS.find((f) => f.id === selectedFilter)?.label} ».`}
+              </Text>
+              <TouchableOpacity style={styles.createButton} onPress={() => router.push('/post-item')}>
+                <Text style={styles.createButtonText}>Créer une annonce</Text>
+              </TouchableOpacity>
+            </View>
+          }
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -389,6 +356,10 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     backgroundColor: '#f0f0f0',
+  },
+  productImagePlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   productContent: {
     flex: 1,
