@@ -1,8 +1,9 @@
 // app/(tabs)/home.tsx - Main screen with product list
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Dimensions,
   FlatList,
   Image,
@@ -14,9 +15,16 @@ import {
   View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { theme } from '../../utils/theme';
 
 import ProductCard from '../../components/molecules/ProductCard';
+import { CATEGORIES } from '@/constants/catalog';
+import { toCardProps } from '@/lib/mapPost';
+import { postsInfiniteQuery } from '@/lib/api/posts';
+import { unreadCountQuery } from '@/lib/api/notifications';
+import { useAuth } from '@/contexts/AuthContext';
+import type { BdPost } from '@/constants/types';
 
 // Grid layout constants for responsive design
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -26,147 +34,25 @@ const GRID_ITEM_WIDTH = (SCREEN_WIDTH - (GRID_PADDING * 2) - GRID_GAP) / 2;
 const GRID_ITEM_HEIGHT = 280;
 const GRID_IMAGE_HEIGHT = 160;
 
-// Enhanced mock data with diverse products
-const mockData = [
-  {
-    id: '1',
-    imageUrl: 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=300&h=200&fit=crop&crop=center',
-    title: 'Macbook Pro 2020 (256 GB)',
-    location: 'Kinguele - 25 min',
-    price: '350000 FCFA',
-    likes: 12,
-    views: 45,
-    comments: 3,
-    category: 'Electronics',
-    condition: 'Used',
-    seller: 'Jean Baptiste',
-    postedDate: '2 jours',
-    status: 'available',
-  },
-  {
-    id: '2',
-    imageUrl: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=300&h=200&fit=crop&crop=center',
-    title: 'Nike Air Max 270 - Taille 42',
-    location: 'Libreville Centre - 15 min',
-    price: '45000 FCFA',
-    likes: 8,
-    views: 23,
-    comments: 1,
-    category: 'Fashion',
-    condition: 'New',
-    seller: 'Marie Claire',
-    postedDate: '1 jour',
-    status: 'available',
-  },
-  {
-    id: '3',
-    imageUrl: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=300&h=200&fit=crop&crop=center',
-    title: 'iPhone 12 Pro Max 128GB',
-    location: 'Akebe - 30 min',
-    price: '280000 FCFA',
-    likes: 25,
-    views: 89,
-    comments: 7,
-    category: 'Electronics',
-    condition: 'Used',
-    seller: 'Paul Mba',
-    postedDate: '3 jours',
-    status: 'sold',
-  },
-  {
-    id: '4',
-    imageUrl: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=300&h=200&fit=crop&crop=center',
-    title: 'Sac à dos Adidas Originals',
-    location: 'Nkembo - 20 min',
-    price: '25000 FCFA',
-    likes: 6,
-    views: 18,
-    comments: 2,
-    category: 'Fashion',
-    condition: 'Used',
-    seller: 'Sarah Nguema',
-    postedDate: '5 jours',
-    status: 'available',
-  },
-  {
-    id: '5',
-    imageUrl: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=300&h=200&fit=crop&crop=center',
-    title: 'Table en bois massif',
-    location: 'Montagne Sainte - 45 min',
-    price: '120000 FCFA',
-    likes: 4,
-    views: 12,
-    comments: 0,
-    category: 'Home',
-    condition: 'Used',
-    seller: 'Pierre Obiang',
-    postedDate: '1 semaine',
-    status: 'available',
-  },
-  {
-    id: '6',
-    imageUrl: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=300&h=200&fit=crop&crop=center',
-    title: 'Vélo électrique Xiaomi',
-    location: 'Quartier Louis - 35 min',
-    price: '180000 FCFA',
-    likes: 15,
-    views: 67,
-    comments: 4,
-    category: 'Transport',
-    condition: 'Used',
-    seller: 'David Mve',
-    postedDate: '4 jours',
-    status: 'sold',
-  },
-  {
-    id: '7',
-    imageUrl: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=300&h=200&fit=crop&crop=center',
-    title: 'Livre scolaire - Mathématiques Terminale',
-    location: 'Centre-ville - 10 min',
-    price: '8000 FCFA',
-    likes: 2,
-    views: 8,
-    comments: 1,
-    category: 'Education',
-    condition: 'Used',
-    seller: 'Fatou Diallo',
-    postedDate: '2 semaines',
-    status: 'available',
-  },
-  {
-    id: '8',
-    imageUrl: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=300&h=200&fit=crop&crop=center',
-    title: 'Réfrigérateur Samsung 200L',
-    location: 'Nzeng Ayong - 40 min',
-    price: '220000 FCFA',
-    likes: 9,
-    views: 34,
-    comments: 2,
-    category: 'Home',
-    condition: 'Used',
-    seller: 'Marc Ondo',
-    postedDate: '6 jours',
-    status: 'available',
-  },
-];
-
-// Category filters
-const categories = [
-  { id: 'all', name: 'Tout', icon: 'grid-outline' },
-  { id: 'Electronics', name: 'Électronique', icon: 'phone-portrait-outline' },
-  { id: 'Fashion', name: 'Mode', icon: 'shirt-outline' },
-  { id: 'Home', name: 'Maison', icon: 'home-outline' },
-  { id: 'Transport', name: 'Transport', icon: 'car-outline' },
-  { id: 'Education', name: 'Éducation', icon: 'book-outline' },
-];
-
-// Mock user data
-const currentUser = {
-  name: 'Jean Baptiste',
-  avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face',
-  location: 'Akebe, Libreville',
-  notificationCount: 3,
+// Category chips: "Tout" + the 10 backend enum buckets (constants/catalog.ts)
+const CATEGORY_ICONS: Record<string, string> = {
+  all: 'grid-outline',
+  electronics: 'phone-portrait-outline',
+  furniture: 'bed-outline',
+  appliances: 'tv-outline',
+  vehicles: 'car-outline',
+  fashion: 'shirt-outline',
+  baby_kids: 'happy-outline',
+  sports: 'football-outline',
+  books: 'book-outline',
+  tools: 'construct-outline',
+  other: 'ellipsis-horizontal-outline',
 };
+
+const categories = [
+  { id: 'all', name: 'Tout' },
+  ...CATEGORIES.map((c) => ({ id: c.value, name: c.label })),
+];
 
 // Get personalized greeting based on time
 const getGreeting = () => {
@@ -177,16 +63,25 @@ const getGreeting = () => {
 };
 
 export default function HomeScreen() {
-  const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [refreshing, setRefreshing] = useState(false);
-  const [filteredData, setFilteredData] = useState(mockData);
-  const [currentLocation, setCurrentLocation] = useState(currentUser.location);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
-  const [isLoading, setIsLoading] = useState(true);
   const [showProfileQuickAccess, setShowProfileQuickAccess] = useState(false);
   const categoryListRef = useRef<FlatList>(null);
   const router = useRouter();
+  const { user, signOut } = useAuth();
+
+  // Real paginated feed, scoped server-side to the user's city.
+  const feed = useInfiniteQuery(
+    postsInfiniteQuery({
+      categories: selectedCategory === 'all' ? undefined : [selectedCategory],
+    }),
+  );
+  const posts = feed.data?.pages.flatMap((p) => p.posts) ?? [];
+  const { data: unreadCount = 0 } = useQuery(unreadCountQuery());
+
+  const displayName = user?.first_name || user?.username || 'Bienvenue';
+  const displayLocation = user?.quartier || user?.city || 'Ville non définie';
+  const avatarUri = user?.avatar_url || undefined;
 
   // Initial scroll to selected category on mount
   useEffect(() => {
@@ -206,33 +101,10 @@ export default function HomeScreen() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Simulate initial data loading
-  useEffect(() => {
-    const loadData = async () => {
-      setIsLoading(true);
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      setIsLoading(false);
-    };
-    
-    loadData();
-  }, []);
-
-  // Filter data based on selected category
-  const filterData = useCallback((category: string) => {
-    if (category === 'all') {
-      setFilteredData(mockData);
-    } else {
-      const filtered = mockData.filter(item => item.category === category);
-      setFilteredData(filtered);
-    }
-  }, []);
-
   // Handle category selection with scroll
   const handleCategoryPress = (categoryId: string) => {
     setSelectedCategory(categoryId);
-    filterData(categoryId);
-    
+
     // Scroll to selected category
     const categoryIndex = categories.findIndex(cat => cat.id === categoryId);
     if (categoryIndex !== -1 && categoryListRef.current) {
@@ -244,31 +116,9 @@ export default function HomeScreen() {
     }
   };
 
-  // Pull to refresh functionality
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    // Simulate API call delay
-    setTimeout(() => {
-      setRefreshing(false);
-      // In a real app, you would fetch new data here
-      console.log('Data refreshed');
-    }, 1500);
-  }, []);
-
-  // Handle location picker
+  // Location is server-scoped to user.city; the picker is display-only for v1.
   const handleLocationPress = () => {
-    // In a real app, this would open a location picker modal
-    console.log('Open location picker');
-    // For demo, cycle through some locations
-    const locations = [
-      'Akebe, Libreville',
-      'Centre-ville, Libreville',
-      'Nkembo, Libreville',
-      'Montagne Sainte, Libreville'
-    ];
-    const currentIndex = locations.indexOf(currentLocation);
-    const nextIndex = (currentIndex + 1) % locations.length;
-    setCurrentLocation(locations[nextIndex]);
+    // TODO(W5): open a quartier picker → PATCH /auth/me quartier.
   };
 
   // Handle notification press
@@ -282,20 +132,21 @@ export default function HomeScreen() {
   };
 
   // Handle profile quick access actions
-  const handleProfileAction = (action: string) => {
+  const handleProfileAction = async (action: string) => {
     setShowProfileQuickAccess(false);
     switch (action) {
       case 'profile':
         router.push('/(tabs)/profile');
         break;
       case 'settings':
-        console.log('Navigate to settings');
+        router.push('/settings');
         break;
       case 'help':
-        console.log('Navigate to help');
+        router.push('/help-support');
         break;
       case 'logout':
-        console.log('Logout user');
+        await signOut();
+        router.replace('/login');
         break;
     }
   };
@@ -305,7 +156,7 @@ export default function HomeScreen() {
     setViewMode(mode);
   };
 
-  const handleProductPress = (item: any) => {
+  const handleProductPress = (item: BdPost) => {
     router.push({ pathname: '/item-details', params: { id: String(item.id) } });
   };
 
@@ -313,59 +164,48 @@ export default function HomeScreen() {
     router.push('/post-item');
   };
 
-  const renderProduct = ({ item }: { item: any }) => (
-    <ProductCard {...item} onPress={() => handleProductPress(item)} />
-  );
+  const renderProduct = ({ item }: { item: BdPost }) => {
+    const card = toCardProps(item);
+    return <ProductCard {...card} onPress={() => handleProductPress(item)} />;
+  };
 
-  const renderGridProduct = ({ item }: { item: any }) => (
-    <View style={[styles.gridItem, { width: GRID_ITEM_WIDTH }]}>
-      <TouchableOpacity style={styles.gridProductCard} onPress={() => handleProductPress(item)}>
-        {item.imageUrl && (
-          <Image source={{ uri: item.imageUrl }} style={styles.gridImage} resizeMode="cover" />
-        )}
-        <View style={styles.gridContent}>
-          <Text 
-            style={styles.gridTitle} 
-            numberOfLines={2} 
-            ellipsizeMode="tail">
-            {item.title}
-          </Text>
-          <Text 
-            style={styles.gridLocation} 
-            numberOfLines={1} 
-            ellipsizeMode="tail">
-            {item.location}
-          </Text>
-          <Text 
-            style={styles.gridPrice} 
-            numberOfLines={1} 
-            ellipsizeMode="tail">
-            {item.price}
-          </Text>
-          <View style={styles.gridActions}>
-            <View style={styles.gridActionItem}>
-              <Ionicons name="heart-outline" size={12} color="#666" />
-              <Text 
-                style={styles.gridActionText} 
-                numberOfLines={1} 
-                ellipsizeMode="tail">
-                {item.likes}
-              </Text>
-            </View>
-            <View style={styles.gridActionItem}>
-              <Ionicons name="eye-outline" size={12} color="#666" />
-              <Text 
-                style={styles.gridActionText} 
-                numberOfLines={1} 
-                ellipsizeMode="tail">
-                {item.views}
-              </Text>
+  const renderGridProduct = ({ item }: { item: BdPost }) => {
+    const card = toCardProps(item);
+    return (
+      <View style={[styles.gridItem, { width: GRID_ITEM_WIDTH }]}>
+        <TouchableOpacity style={styles.gridProductCard} onPress={() => handleProductPress(item)}>
+          {card.imageUrl && (
+            <Image source={{ uri: card.imageUrl }} style={styles.gridImage} resizeMode="cover" />
+          )}
+          <View style={styles.gridContent}>
+            <Text style={styles.gridTitle} numberOfLines={2} ellipsizeMode="tail">
+              {card.title}
+            </Text>
+            <Text style={styles.gridLocation} numberOfLines={1} ellipsizeMode="tail">
+              {card.location}
+            </Text>
+            <Text style={styles.gridPrice} numberOfLines={1} ellipsizeMode="tail">
+              {card.price}
+            </Text>
+            <View style={styles.gridActions}>
+              <View style={styles.gridActionItem}>
+                <Ionicons name="heart-outline" size={12} color="#666" />
+                <Text style={styles.gridActionText} numberOfLines={1} ellipsizeMode="tail">
+                  {card.likes}
+                </Text>
+              </View>
+              <View style={styles.gridActionItem}>
+                <Ionicons name="eye-outline" size={12} color="#666" />
+                <Text style={styles.gridActionText} numberOfLines={1} ellipsizeMode="tail">
+                  {card.views}
+                </Text>
+              </View>
             </View>
           </View>
-        </View>
-      </TouchableOpacity>
-    </View>
-  );
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
   const renderCategoryItem = ({ item }: { item: any }) => (
     <TouchableOpacity
@@ -376,7 +216,7 @@ export default function HomeScreen() {
       onPress={() => handleCategoryPress(item.id)}
     >
       <Ionicons
-        name={item.icon as any}
+        name={(CATEGORY_ICONS[item.id] ?? 'pricetag-outline') as any}
         size={20}
         color={selectedCategory === item.id ? theme.colors.white : theme.colors.gray}
       />
@@ -427,33 +267,23 @@ export default function HomeScreen() {
       <View style={styles.profileQuickAccessModal}>
         {/* Profile Header */}
         <View style={styles.profileQuickAccessHeader}>
-          <Image source={{ uri: currentUser.avatar }} style={styles.profileQuickAccessAvatar} />
+          {avatarUri ? (
+            <Image source={{ uri: avatarUri }} style={styles.profileQuickAccessAvatar} />
+          ) : (
+            <View style={[styles.profileQuickAccessAvatar, styles.avatarFallback]}>
+              <Ionicons name="person" size={28} color={theme.colors.gray} />
+            </View>
+          )}
           <View style={styles.profileQuickAccessInfo}>
-            <Text style={styles.profileQuickAccessName}>{currentUser.name}</Text>
-            <Text style={styles.profileQuickAccessLocation}>{currentUser.location}</Text>
+            <Text style={styles.profileQuickAccessName}>{displayName}</Text>
+            <Text style={styles.profileQuickAccessLocation}>{displayLocation}</Text>
           </View>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.profileQuickAccessClose}
             onPress={() => setShowProfileQuickAccess(false)}
           >
             <Ionicons name="close" size={24} color={theme.colors.gray} />
           </TouchableOpacity>
-        </View>
-
-        {/* Quick Stats */}
-        <View style={styles.profileQuickStats}>
-          <View style={styles.profileQuickStat}>
-            <Text style={styles.profileQuickStatNumber}>12</Text>
-            <Text style={styles.profileQuickStatLabel}>Annonces</Text>
-          </View>
-          <View style={styles.profileQuickStat}>
-            <Text style={styles.profileQuickStatNumber}>8</Text>
-            <Text style={styles.profileQuickStatLabel}>Vendus</Text>
-          </View>
-          <View style={styles.profileQuickStat}>
-            <Text style={styles.profileQuickStatNumber}>24</Text>
-            <Text style={styles.profileQuickStatLabel}>Favoris</Text>
-          </View>
         </View>
 
         {/* Quick Actions */}
@@ -514,12 +344,18 @@ export default function HomeScreen() {
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <TouchableOpacity style={styles.profileContainer} onPress={handleProfilePress}>
-            <Image source={{ uri: currentUser.avatar }} style={styles.userAvatar} />
+            {avatarUri ? (
+              <Image source={{ uri: avatarUri }} style={styles.userAvatar} />
+            ) : (
+              <View style={[styles.userAvatar, styles.avatarFallback]}>
+                <Ionicons name="person" size={24} color={theme.colors.gray} />
+              </View>
+            )}
             <View style={styles.onlineIndicator} />
           </TouchableOpacity>
           <View style={styles.welcomeContainer}>
             <Text style={styles.greetingText}>{getGreeting()},</Text>
-            <Text style={styles.userName}>{currentUser.name}</Text>
+            <Text style={styles.userName} numberOfLines={1}>{displayName}</Text>
           </View>
         </View>
         <View style={styles.headerRight}>
@@ -528,9 +364,9 @@ export default function HomeScreen() {
           </TouchableOpacity>
           <TouchableOpacity style={styles.notificationContainer} onPress={handleNotificationPress}>
             <Ionicons name="notifications-outline" size={24} color={theme.colors.gray} />
-            {currentUser.notificationCount > 0 && (
+            {unreadCount > 0 && (
               <View style={styles.notificationBadge}>
-                <Text style={styles.badgeText}>{currentUser.notificationCount}</Text>
+                <Text style={styles.badgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
               </View>
             )}
           </TouchableOpacity>
@@ -541,7 +377,7 @@ export default function HomeScreen() {
       <View style={styles.locationBar}>
         <TouchableOpacity style={styles.locationContainer} onPress={handleLocationPress}>
           <Ionicons name="location-outline" size={16} color={theme.colors.primary} />
-          <Text style={styles.locationText}>{currentLocation}</Text>
+          <Text style={styles.locationText} numberOfLines={1}>{displayLocation}</Text>
           <Ionicons name="chevron-down" size={14} color={theme.colors.gray} />
         </TouchableOpacity>
         <View style={styles.viewToggleContainer}>
@@ -594,28 +430,70 @@ export default function HomeScreen() {
       </View>
 
       {/* Product List */}
-      <FlatList
-        data={isLoading ? Array(6).fill({}) : filteredData}
-        renderItem={isLoading ? (viewMode === 'list' ? renderSkeletonItem : renderGridSkeletonItem) : (viewMode === 'list' ? renderProduct : renderGridProduct)}
-        keyExtractor={(item, index) => isLoading ? `skeleton-${index}` : item.id}
-        contentContainerStyle={[
-          styles.listContainer,
-          viewMode === 'grid' && styles.gridContainer
-        ]}
-        showsVerticalScrollIndicator={false}
-        ItemSeparatorComponent={() => viewMode === 'list' && !isLoading ? <View style={styles.itemSeparator} /> : null}
-        numColumns={viewMode === 'grid' ? 2 : 1}
-        columnWrapperStyle={viewMode === 'grid' ? styles.gridRow : undefined}
-        key={viewMode} // Force re-render when view mode changes
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={[theme.colors.primary]}
-            tintColor={theme.colors.primary}
-          />
-        }
-      />
+      {feed.isError && posts.length === 0 && !feed.isLoading ? (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="alert-circle-outline" size={56} color="#FF6B6B" />
+          <Text style={styles.emptyTitle}>Impossible de charger les annonces</Text>
+          <TouchableOpacity style={styles.emptyButton} onPress={() => feed.refetch()}>
+            <Text style={styles.emptyButtonText}>Réessayer</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <FlatList
+          data={feed.isLoading ? Array(6).fill({}) : posts}
+          renderItem={
+            feed.isLoading
+              ? (viewMode === 'list' ? renderSkeletonItem : renderGridSkeletonItem)
+              : (viewMode === 'list' ? renderProduct : renderGridProduct)
+          }
+          keyExtractor={(item, index) =>
+            feed.isLoading ? `skeleton-${index}` : String((item as BdPost).id)
+          }
+          contentContainerStyle={[
+            styles.listContainer,
+            viewMode === 'grid' && styles.gridContainer,
+            posts.length === 0 && !feed.isLoading && styles.emptyListContainer,
+          ]}
+          showsVerticalScrollIndicator={false}
+          ItemSeparatorComponent={() =>
+            viewMode === 'list' && !feed.isLoading ? <View style={styles.itemSeparator} /> : null
+          }
+          numColumns={viewMode === 'grid' ? 2 : 1}
+          columnWrapperStyle={viewMode === 'grid' ? styles.gridRow : undefined}
+          key={viewMode} // Force re-render when view mode changes
+          onEndReached={() => {
+            if (feed.hasNextPage && !feed.isFetchingNextPage) feed.fetchNextPage();
+          }}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            feed.isFetchingNextPage ? (
+              <ActivityIndicator style={styles.footerSpinner} color={theme.colors.primary} />
+            ) : null
+          }
+          ListEmptyComponent={
+            feed.isLoading ? null : (
+              <View style={styles.emptyContainer}>
+                <Ionicons name="pricetags-outline" size={56} color={theme.colors.grayLight} />
+                <Text style={styles.emptyTitle}>Aucune annonce dans votre ville</Text>
+                <Text style={styles.emptySubtitle}>
+                  Soyez le premier à vendre près de chez vous.
+                </Text>
+                <TouchableOpacity style={styles.emptyButton} onPress={handlePostItem}>
+                  <Text style={styles.emptyButtonText}>Publier une annonce</Text>
+                </TouchableOpacity>
+              </View>
+            )
+          }
+          refreshControl={
+            <RefreshControl
+              refreshing={feed.isRefetching && !feed.isFetchingNextPage}
+              onRefresh={() => feed.refetch()}
+              colors={[theme.colors.primary]}
+              tintColor={theme.colors.primary}
+            />
+          }
+        />
+      )}
 
       {/* Floating Action Button */}
       <TouchableOpacity style={styles.fab} onPress={handlePostItem}>
@@ -632,6 +510,50 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.white,
+  },
+  avatarFallback: {
+    backgroundColor: '#F0F0F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  footerSpinner: {
+    paddingVertical: theme.spacing.lg,
+  },
+  emptyListContainer: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: theme.spacing.xl,
+    paddingVertical: theme.spacing.xl * 2,
+  },
+  emptyTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#333',
+    marginTop: theme.spacing.md,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: theme.colors.gray,
+    marginTop: 6,
+    textAlign: 'center',
+  },
+  emptyButton: {
+    marginTop: theme.spacing.lg,
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: theme.spacing.xl,
+    paddingVertical: theme.spacing.md,
+    borderRadius: 24,
+  },
+  emptyButtonText: {
+    color: theme.colors.white,
+    fontWeight: '700',
+    fontSize: 15,
   },
   header: {
     flexDirection: 'row',
