@@ -1,7 +1,7 @@
 // app/item-details.tsx - Item details screen
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
@@ -18,11 +18,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../utils/theme';
 import { showToast } from '../components/atoms/Toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { postByIdQuery, priceCheck } from '@/lib/api/posts';
+import { postByIdQuery, priceCheck, likePost, unlikePost } from '@/lib/api/posts';
 import { getOrCreateConversation } from '@/lib/api/conversations';
 import { ApiError } from '@/lib/api';
 import { formatAmount, formatRelativeTime } from '@/lib/format';
-import type { BdPriceCheck } from '@/constants/types';
+import type { BdPost, BdPriceCheck } from '@/constants/types';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -106,16 +106,46 @@ export default function ItemDetailsScreen() {
   const postId = Number(id);
 
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [isLiked, setIsLiked] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [bonPrix, setBonPrix] = useState<BdPriceCheck | null>(null);
 
+  const queryClient = useQueryClient();
   const { data: post, isLoading, error, refetch } = useQuery(postByIdQuery(postId));
 
   const bonPrixMutation = useMutation({
     mutationFn: () => priceCheck(postId),
     onSuccess: setBonPrix,
     onError: (e: any) => showToast.error('Bon prix ?', priceCheckErrorMessage(e)),
+  });
+
+  // Like/unlike with optimistic cache update; post.liked_by_me is the source of truth.
+  const likeMutation = useMutation({
+    mutationFn: (currentlyLiked: boolean) =>
+      currentlyLiked ? unlikePost(postId) : likePost(postId),
+    onMutate: async (currentlyLiked: boolean) => {
+      await queryClient.cancelQueries({ queryKey: ['post', postId] });
+      const prev = queryClient.getQueryData<BdPost>(['post', postId]);
+      queryClient.setQueryData<BdPost>(['post', postId], (old) =>
+        old
+          ? {
+              ...old,
+              liked_by_me: !currentlyLiked,
+              likes_count: Math.max(0, old.likes_count + (currentlyLiked ? -1 : 1)),
+            }
+          : old,
+      );
+      return { prev };
+    },
+    onError: (e, _v, ctx) => {
+      // 400 = already in the desired state; keep the optimistic value.
+      if (e instanceof ApiError && e.status === 400) return;
+      if (ctx?.prev) queryClient.setQueryData(['post', postId], ctx.prev);
+      showToast.error('Échec', 'Action impossible. Réessayez.');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['post', postId] });
+      queryClient.invalidateQueries({ queryKey: ['posts', 'liked'] });
+    },
   });
 
   const contactMutation = useMutation({
@@ -357,11 +387,12 @@ export default function ItemDetailsScreen() {
         <View style={styles.bottomLeft}>
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={() => setIsLiked((v) => !v)}>
+            disabled={likeMutation.isPending}
+            onPress={() => likeMutation.mutate(post.liked_by_me)}>
             <Ionicons
-              name={isLiked ? 'heart' : 'heart-outline'}
+              name={post.liked_by_me ? 'heart' : 'heart-outline'}
               size={24}
-              color={isLiked ? '#FF6B6B' : '#666'}
+              color={post.liked_by_me ? '#FF6B6B' : '#666'}
             />
           </TouchableOpacity>
         </View>

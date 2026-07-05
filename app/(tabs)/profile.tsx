@@ -1,7 +1,7 @@
 // app/(tabs)/profile.tsx - User Profile Screen
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React from 'react';
 import {
     Alert,
     Image,
@@ -13,56 +13,18 @@ import {
     View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useQuery } from '@tanstack/react-query';
 import { theme } from '../../utils/theme';
+import { useAuth } from '@/contexts/AuthContext';
+import { myPostsQuery, likedPostsQuery } from '@/lib/api/posts';
 
-// Mock user data
-const mockUser = {
-    id: '1',
-    name: 'Jean Baptiste',
-    email: 'jean.baptiste@email.com',
-    phone: '+241 01 23 45 67',
-    location: 'Libreville, Gabon',
-    joinDate: 'Janvier 2024',
-    avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face',
-    verified: true,
-    stats: {
-        listings: 12,
-        sold: 8,
-        favorites: 24,
-        reviews: 4.8
-    }
-};
-
-const profileMenuItems = [
-    {
-        id: 'my-listings',
-        title: 'Mes annonces',
-        icon: 'list-outline',
-        count: mockUser.stats.listings,
-        color: theme.colors.primary
-    },
-    {
-        id: 'favorites',
-        title: 'Favoris',
-        icon: 'heart-outline',
-        count: mockUser.stats.favorites,
-        color: '#E91E63'
-    },
-    {
-        id: 'sold-items',
-        title: 'Vendus',
-        icon: 'checkmark-circle-outline',
-        count: mockUser.stats.sold,
-        color: theme.colors.success
-    },
-    {
-        id: 'reviews',
-        title: 'Avis',
-        icon: 'star-outline',
-        count: mockUser.stats.reviews,
-        color: '#FF9800'
-    }
-];
+/** created_at ISO → "Mois AAAA" (French), or null. */
+function memberSinceLabel(iso: string | null | undefined): string | null {
+    if (!iso) return null;
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+}
 
 const settingsItems = [
     {
@@ -106,7 +68,31 @@ const settingsItems = [
 
 export default function ProfileScreen() {
     const router = useRouter();
-    const [user] = useState(mockUser);
+    const { user, signOut } = useAuth();
+
+    const mine = useQuery(myPostsQuery());
+    const liked = useQuery(likedPostsQuery());
+
+    const listingsCount = mine.data?.total_posts ?? 0;
+    const soldCount = (mine.data?.posts ?? []).filter((p) => p.state === 'sold').length;
+    const favCount = liked.data?.total_posts ?? 0;
+    const ratingLabel = user?.avg_rating != null ? user.avg_rating.toFixed(1) : '—';
+
+    const displayName =
+        [user?.first_name, user?.last_name].filter(Boolean).join(' ') ||
+        user?.username ||
+        'Utilisateur';
+    const displayLocation =
+        [user?.quartier, user?.city].filter(Boolean).join(', ') || 'Localisation non définie';
+    const memberSince = memberSinceLabel(user?.created_at);
+    const avatarUri = user?.avatar_url || undefined;
+
+    const profileMenuItems = [
+        { id: 'my-listings', title: 'Mes annonces', icon: 'list-outline', count: String(listingsCount), color: theme.colors.primary },
+        { id: 'favorites', title: 'Favoris', icon: 'heart-outline', count: String(favCount), color: '#E91E63' },
+        { id: 'sold-items', title: 'Vendus', icon: 'checkmark-circle-outline', count: String(soldCount), color: theme.colors.success },
+        { id: 'reviews', title: 'Avis', icon: 'star-outline', count: ratingLabel, color: '#FF9800' },
+    ];
 
     const handleMenuPress = (itemId: string) => {
         switch (itemId) {
@@ -152,7 +138,14 @@ export default function ProfileScreen() {
                     'Êtes-vous sûr de vouloir vous déconnecter ?',
                     [
                         { text: 'Annuler', style: 'cancel' },
-                        { text: 'Se déconnecter', style: 'destructive', onPress: () => router.push('/login') }
+                        {
+                            text: 'Se déconnecter',
+                            style: 'destructive',
+                            onPress: async () => {
+                                await signOut();
+                                router.replace('/login');
+                            },
+                        },
                     ]
                 );
                 break;
@@ -222,16 +215,17 @@ export default function ProfileScreen() {
                 {/* User Info Card */}
                 <View style={styles.userCard}>
                     <View style={styles.avatarContainer}>
-                        <Image source={{ uri: user.avatar }} style={styles.avatar} />
-                        {user.verified && (
-                            <View style={styles.verifiedBadge}>
-                                <Ionicons name="checkmark" size={12} color="white" />
+                        {avatarUri ? (
+                            <Image source={{ uri: avatarUri }} style={styles.avatar} />
+                        ) : (
+                            <View style={[styles.avatar, styles.avatarFallback]}>
+                                <Ionicons name="person" size={36} color={theme.colors.gray} />
                             </View>
                         )}
                     </View>
-                    <Text style={styles.userName}>{user.name}</Text>
-                    <Text style={styles.userLocation}>{user.location}</Text>
-                    <Text style={styles.joinDate}>Membre depuis {user.joinDate}</Text>
+                    <Text style={styles.userName}>{displayName}</Text>
+                    <Text style={styles.userLocation}>{displayLocation}</Text>
+                    {memberSince && <Text style={styles.joinDate}>Membre depuis {memberSince}</Text>}
                 </View>
 
                 {/* Menu Grid */}
@@ -305,6 +299,11 @@ const styles = StyleSheet.create({
         borderRadius: 40,
         borderWidth: 3,
         borderColor: theme.colors.primary,
+    },
+    avatarFallback: {
+        backgroundColor: '#F0F0F0',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     verifiedBadge: {
         position: 'absolute',
