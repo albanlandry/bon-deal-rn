@@ -37,6 +37,9 @@ export interface BackendUser {
   phone_number: string | null;
   email: string | null;
   date_of_birth: string | null;
+  avg_rating: number | null;
+  review_count: number;
+  created_at: string | null;
 }
 
 interface TokenResponse {

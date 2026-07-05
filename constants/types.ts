@@ -28,12 +28,22 @@ export interface BdPost {
   age_bucket: string | null;
   views_count: number;
   likes_count: number;
+  liked_by_me: boolean;
   shares_count: number;
   offer_count: number;
   active_offer_count: number;
   images: BdPostImage[];
   created_at: string | null;
   updated_at: string | null;
+}
+
+/** Paginated envelope from GET /posts, /posts/mine, /posts/liked. */
+export interface BdPostListResponse {
+  success: boolean;
+  total_posts: number;
+  offset: number;
+  limit: number;
+  posts: BdPost[];
 }
 
 export interface BdUserBrief {

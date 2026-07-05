@@ -90,12 +90,16 @@ const ProductCard: React.FC<ProductCardProps> = React.memo(
     );
   },
   (prev, next) =>
+    prev.id === next.id &&
+    prev.imageUrl === next.imageUrl &&
     prev.title === next.title &&
     prev.location === next.location &&
     prev.price === next.price &&
     prev.likes === next.likes &&
     prev.views === next.views &&
-    prev.comments === next.comments
+    prev.comments === next.comments &&
+    prev.status === next.status &&
+    prev.onPress === next.onPress
 );
 
 ProductCard.displayName = 'ProductCard';
