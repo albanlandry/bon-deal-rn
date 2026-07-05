@@ -18,11 +18,86 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../utils/theme';
 import { showToast } from '../components/atoms/Toast';
 import { useAuth } from '@/contexts/AuthContext';
-import { postByIdQuery } from '@/lib/api/posts';
+import { postByIdQuery, priceCheck } from '@/lib/api/posts';
 import { getOrCreateConversation } from '@/lib/api/conversations';
+import { ApiError } from '@/lib/api';
 import { formatAmount, formatRelativeTime } from '@/lib/format';
+import type { BdPriceCheck } from '@/constants/types';
 
 const { width: screenWidth } = Dimensions.get('window');
+
+// --- Bon prix ? (ephemeral verdict card) ------------------------------------
+
+const VERDICT_META = {
+  bonne_affaire: { label: 'Bonne affaire', color: '#28A745' },
+  prix_correct: { label: 'Prix correct', color: '#444' },
+  trop_cher: { label: 'Prix au-dessus du marché', color: '#D9534F' },
+} as const;
+
+function priceCheckErrorMessage(e: unknown): string {
+  const status = e instanceof ApiError ? e.status : 0;
+  if (status === 503) return "L'assistant prix n'est pas disponible pour le moment.";
+  if (status === 429) return 'Trop de vérifications — réessayez plus tard.';
+  if (status === 409) return "Cette annonce n'a pas de prix à vérifier.";
+  return "Impossible de vérifier le prix. Réessayez.";
+}
+
+function confidenceLabel(c: number): string {
+  if (c >= 0.7) return 'Avis fiable';
+  if (c >= 0.4) return 'Avis indicatif';
+  return 'À prendre avec prudence';
+}
+
+function BonPrixCard({ check, onDismiss }: { check: BdPriceCheck; onDismiss: () => void }) {
+  const meta = VERDICT_META[check.verdict];
+  const m = check.market;
+  const span = m ? m.range_max - m.range_min : 0;
+  const dotPos = m
+    ? Math.min(Math.max(span > 0 ? (check.listed_price - m.range_min) / span : 0.5, 0), 1)
+    : 0.5;
+  const deltaLine =
+    check.delta_pct != null
+      ? ` · ${check.delta_pct > 0 ? '+' : ''}${Math.round(check.delta_pct)}% vs marché`
+      : '';
+
+  return (
+    <View style={styles.bonprixCard}>
+      <View style={styles.bonprixTitleRow}>
+        <Text style={styles.bonprixTitle}>💡 Bon prix ?</Text>
+        <Text style={styles.bonprixPrivate}>Visible par vous seul</Text>
+      </View>
+      <Text style={[styles.bonprixVerdict, { color: meta.color }]}>{meta.label}</Text>
+      <Text style={styles.bonprixRationale}>{check.rationale_fr}</Text>
+      {m ? (
+        <>
+          <Text style={styles.bonprixMeta}>
+            Marché : {formatAmount(m.range_min)} – {formatAmount(m.range_max)} ·{' '}
+            {m.comparable_count} annonce{m.comparable_count > 1 ? 's' : ''} similaire
+            {m.comparable_count > 1 ? 's' : ''}
+            {deltaLine}
+          </Text>
+          <View style={styles.bonprixBarTrack}>
+            <View style={[styles.bonprixBarDot, { left: `${dotPos * 100}%` }]} />
+          </View>
+        </>
+      ) : (
+        <Text style={styles.bonprixMeta}>
+          Peu d'annonces similaires — avis basé sur l'annonce elle-même
+        </Text>
+      )}
+      {check.condition_flags_fr.map((flag, i) => (
+        <Text key={i} style={styles.bonprixFlag}>⚠ {flag}</Text>
+      ))}
+      {!!check.warning && <Text style={styles.bonprixWarning}>{check.warning}</Text>}
+      <View style={styles.bonprixFooterRow}>
+        <Text style={styles.bonprixMeta}>{confidenceLabel(check.confidence)}</Text>
+        <TouchableOpacity onPress={onDismiss}>
+          <Text style={styles.bonprixDismiss}>Fermer</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
 
 export default function ItemDetailsScreen() {
   const router = useRouter();
@@ -33,8 +108,15 @@ export default function ItemDetailsScreen() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isLiked, setIsLiked] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [bonPrix, setBonPrix] = useState<BdPriceCheck | null>(null);
 
   const { data: post, isLoading, error, refetch } = useQuery(postByIdQuery(postId));
+
+  const bonPrixMutation = useMutation({
+    mutationFn: () => priceCheck(postId),
+    onSuccess: setBonPrix,
+    onError: (e: any) => showToast.error('Bon prix ?', priceCheckErrorMessage(e)),
+  });
 
   const contactMutation = useMutation({
     mutationFn: () => getOrCreateConversation(postId),
@@ -231,6 +313,24 @@ export default function ItemDetailsScreen() {
           </View>
 
           <Text style={styles.productDescription}>{post.description}</Text>
+
+          {/* Bon prix ? */}
+          {!post.is_free && !!post.price && !bonPrix && (
+            <TouchableOpacity
+              style={styles.bonprixPill}
+              onPress={() => bonPrixMutation.mutate()}
+              disabled={bonPrixMutation.isPending}>
+              {bonPrixMutation.isPending ? (
+                <View style={styles.bonprixPillRow}>
+                  <ActivityIndicator size="small" color="#6B4FA1" />
+                  <Text style={styles.bonprixPillText}> Analyse du marché…</Text>
+                </View>
+              ) : (
+                <Text style={styles.bonprixPillText}>💡 C'est un bon prix ?</Text>
+              )}
+            </TouchableOpacity>
+          )}
+          {bonPrix && <BonPrixCard check={bonPrix} onDismiss={() => setBonPrix(null)} />}
 
           {/* Location */}
           {(locationText || post.pickup_location_note) && (
@@ -441,6 +541,106 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 24,
     color: '#333',
+  },
+  bonprixPill: {
+    alignSelf: 'center',
+    borderWidth: 1,
+    borderColor: '#E4D9F8',
+    borderRadius: 14,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 6,
+    marginTop: theme.spacing.md,
+    backgroundColor: '#FFFFFF',
+  },
+  bonprixPillRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  bonprixPillText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6B4FA1',
+  },
+  bonprixCard: {
+    backgroundColor: '#F5F0FF',
+    borderColor: '#E4D9F8',
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: theme.spacing.md,
+    marginTop: theme.spacing.md,
+  },
+  bonprixTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  bonprixTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6B4FA1',
+  },
+  bonprixPrivate: {
+    fontSize: 10,
+    color: '#8a8a8a',
+  },
+  bonprixVerdict: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginTop: 6,
+  },
+  bonprixRationale: {
+    fontSize: 13,
+    color: '#444',
+    marginTop: 4,
+    lineHeight: 18,
+  },
+  bonprixMeta: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 8,
+  },
+  bonprixBarTrack: {
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#E4D9F8',
+    marginTop: 6,
+  },
+  bonprixBarDot: {
+    position: 'absolute',
+    top: -3,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginLeft: -5,
+    backgroundColor: '#6B4FA1',
+  },
+  bonprixFlag: {
+    backgroundColor: '#FFF6E5',
+    color: '#B45309',
+    fontSize: 12,
+    borderRadius: 8,
+    padding: 8,
+    marginTop: 8,
+    overflow: 'hidden',
+  },
+  bonprixWarning: {
+    backgroundColor: '#FDECEC',
+    color: '#C0392B',
+    fontSize: 12,
+    borderRadius: 8,
+    padding: 8,
+    marginTop: 8,
+    overflow: 'hidden',
+  },
+  bonprixFooterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  bonprixDismiss: {
+    fontSize: 12,
+    color: '#6B4FA1',
+    fontWeight: '600',
+    marginTop: 8,
   },
   locationSection: {
     marginTop: theme.spacing.lg,

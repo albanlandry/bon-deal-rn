@@ -115,6 +115,28 @@ export interface BdNegotiationOffer {
   created_at: string | null;
 }
 
+/** Ephemeral Bon prix ? verdict (POST /posts/{id}/price_check). */
+export interface BdPriceCheck {
+  post_id: number;
+  verdict: 'bonne_affaire' | 'prix_correct' | 'trop_cher';
+  rationale_fr: string;
+  condition_flags_fr: string[];
+  confidence: number;
+  warning: string | null;
+  market_verdict: 'bonne_affaire' | 'prix_correct' | 'trop_cher' | null;
+  market: {
+    suggested: number;
+    range_min: number;
+    range_max: number;
+    comparable_count: number;
+  } | null;
+  source: 'similar_items' | 'listing_only';
+  listed_price: number;
+  delta_pct: number | null;
+  images_checked: number;
+  generated_at: string;
+}
+
 /** Ephemeral Négo-Coach verdict (POST /negotiations/{id}/coach) — never
  *  persisted server-side; lives only in the response and local state. */
 export interface BdCoachVerdict {
