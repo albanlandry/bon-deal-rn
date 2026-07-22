@@ -49,13 +49,14 @@ Open **Windows PowerShell** and run:
 ```powershell
 cd C:\DEV\bondeal_app\bon-deal-rn
 
-# one-time: copy the untracked env file from the WSL clone
-copy \\wsl.localhost\Ubuntu\home\mbmk92\DEV\bondeal_app\bon-deal-rn\.env.local .env.local
+# .env.local is untracked — create it pointing at the prod backend (see §4)
+"API_BASE_URL=http://150.230.114.9:8000" | Out-File -Encoding ascii .env.local
 
 npm install                            # install dependencies
 npm run prebuild:clean                 # generate the native android/ project (applies all config plugins)
 ```
 
+- [ ] `.env.local` exists with the prod `API_BASE_URL`.
 - [ ] `npm install` finishes without a fatal error.
 - [ ] `npm run prebuild:clean` creates an `android/` folder.
 
@@ -84,28 +85,27 @@ npm run prebuild:clean                 # generate the native android/ project (a
 
 ## 4. Connect the app to the backend
 
-The app is configured to reach the backend at **`http://10.0.2.2:8000`**
-(`10.0.2.2` is how the emulator addresses your PC's `localhost`).
+**For testing, point at prod.** Every screen now needs login, and login only
+works against the prod backend (see §5a). So set `.env.local` to:
 
-- [ ] **Confirm the backend is reachable from Windows** (PowerShell):
+```
+API_BASE_URL=http://150.230.114.9:8000
+```
 
-  ```powershell
-  curl http://localhost:8000/
-  ```
-  Expected: `{"message":"Marketplace API"}`.
+Prod is reachable from anywhere and uses the same Supabase database + the latest
+code. `curl http://150.230.114.9:8000/` should return `{"message":"Marketplace API"}`.
 
-- If that works, the emulator's `10.0.2.2:8000` will reach it too.
-- **If it does NOT work** (WSL/Docker host-networking hiccup), use the live prod
-  backend instead — edit `.env.local`:
+> After changing `.env.local` you must **rebuild** (`npm run android:local`) — the
+> value is read at build time, not runtime.
 
-  ```
-  API_BASE_URL=http://150.230.114.9:8000
-  ```
-  Then rebuild (`npm run android:local`). This backend is reachable from anywhere
-  and uses the same database.
+<details><summary>Advanced: using the local WSL backend instead</summary>
 
-> After changing `.env.local` you must **rebuild** (the value is read at build
-> time, not runtime).
+The local backend answers at **`http://10.0.2.2:8000`** (`10.0.2.2` = the
+emulator's route to your PC's `localhost`). It's fine for browsing but **cannot
+log you in** (no Firebase key locally, §5a). If the emulator can't reach it, run
+`adb reverse tcp:8000 tcp:8000` and set `API_BASE_URL=http://localhost:8000`.
+Confirm from Windows with `curl http://localhost:8000/`.
+</details>
 
 ---
 
