@@ -42,7 +42,20 @@ emulator. Follow the sections in order. Checkboxes mark the things **you** do.
   - Android SDK
   - an **SDK Platform** (API level **34** or **35**)
   - Android SDK Platform-Tools + Emulator
-  - (Java 17 is bundled — no separate install.)
+- [ ] **Point `JAVA_HOME` at Android Studio's bundled JDK.** A JDK ships *inside*
+  Android Studio (JetBrains Runtime 21) — no separate install — but Gradle can't
+  find it on its own, so `npm run android:local` fails with *"JAVA_HOME is not set
+  and no 'java' command could be found in your PATH"* (exit code 9009). Set it
+  once (User scope, no admin):
+
+  ```powershell
+  [Environment]::SetEnvironmentVariable("JAVA_HOME", "C:\Program Files\Android\Android Studio\jbr", "User")
+  ```
+  Reopen PowerShell, then verify: `echo $Env:JAVA_HOME` and
+  `& "$Env:JAVA_HOME\bin\java.exe" -version` → `openjdk version "21.x"`.
+  (To use it in the *current* window without reopening:
+  `$Env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"`.)
+  Older Android Studio installs use `\jre` instead of `\jbr` — check which exists.
 - [ ] **Create a Virtual Device (AVD):** Android Studio → **More Actions → Virtual Device Manager → Create Device**.
   - Pick e.g. **Pixel 7**.
   - For the system image, **choose one with the Play Store icon** (a "Google Play" image). ⚠️ This matters — Firebase phone-auth needs Google Play services.
@@ -195,6 +208,8 @@ the ✨ button → favorite something → check your profile.**
 - **Gradle/Metro extremely slow or files locked** → you're building from the old OneDrive copy. Use the `C:\DEV\bondeal_app\bon-deal-rn` clone (see the note at the top).
 - **Emulator has no Play Store / Firebase auth errors about Google Play services** → your AVD used a non-Play image. Recreate the AVD with a "Google Play" system image (§1).
 - **Metro stuck / stale cache** → stop it (Ctrl-C) and run `npm run start:local -- --clear`.
+- **`JAVA_HOME is not set...` / gradlew exits with code 9009** → `JAVA_HOME` isn't pointing at Android Studio's bundled JDK. See §1.
+- **`npm ... cannot be loaded because running scripts is disabled`** → PowerShell execution policy. See §1.
 
 ---
 
