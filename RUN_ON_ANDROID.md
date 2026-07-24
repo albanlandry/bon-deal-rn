@@ -124,8 +124,9 @@ npm run prebuild:clean                 # generate the native android/ project (a
 
 ## 4. Connect the app to the backend
 
-**For testing, point at prod.** Every screen now needs login, and login only
-works against the prod backend (see §5a). So set `.env.local` to:
+**For testing, point at prod.** It's always up, runs the latest code, and shares
+the same Supabase database as local. (Login is blocked on *both* backends until a
+Firebase key is installed — see §5a.) Set `.env.local` to:
 
 ```
 API_BASE_URL=http://150.230.114.9:8000
@@ -140,8 +141,9 @@ code. `curl http://150.230.114.9:8000/` should return `{"message":"Marketplace A
 <details><summary>Advanced: using the local WSL backend instead</summary>
 
 The local backend answers at **`http://10.0.2.2:8000`** (`10.0.2.2` = the
-emulator's route to your PC's `localhost`). It's fine for browsing but **cannot
-log you in** (no Firebase key locally, §5a). If the emulator can't reach it, run
+emulator's route to your PC's `localhost`) and hits the same Supabase database.
+Useful if you want to install a Firebase key on a backend you fully control
+without touching shared prod (§5a). If the emulator can't reach it, run
 `adb reverse tcp:8000 tcp:8000` and set `API_BASE_URL=http://localhost:8000`.
 Confirm from Windows with `curl http://localhost:8000/`.
 </details>
@@ -154,20 +156,25 @@ The whole app is now wired to the real backend (see §6). Every screen — brows
 sell, search, favorites, profile — needs you to be **logged in**, which needs the
 `POST /auth/firebase` endpoint working.
 
-### 5a. Backend Firebase Admin key — ✅ done on prod
-The Firebase Admin key **is installed on the prod backend** (`150.230.114.9:8000`),
-so `POST /auth/firebase` works there and login goes through end-to-end.
+### 5a. Backend Firebase Admin key — ⚠️ NOT installed yet (blocks login)
+`POST /auth/firebase` currently returns **503 "Firebase auth is not configured on
+the server"** on **both** the prod and local backends — `FIREBASE_CREDENTIALS_PATH`
+is unset in both. Until a key is installed you can reach the login screen and
+receive an OTP, but the session exchange fails, so no authenticated screen loads.
 
-⚠️ The **local** WSL Docker backend does **not** have a working Firebase key
-(`/auth/firebase` returns 503 there). So for anything past the login screen,
-**point the app at prod** — set `.env.local` to:
+Two halves must belong to the **same** Firebase project:
+1. **App** — `firebase/configs/google-services.json` (today: project `bon-deal-mvp`,
+   package `com.gabtech.bondeal`).
+2. **Backend** — a service-account JSON at `FIREBASE_CREDENTIALS_PATH`. The backend
+   calls `firebase_admin.verify_id_token()`, which only accepts tokens minted by
+   its own project.
 
-```
-API_BASE_URL=http://150.230.114.9:8000
-```
+To supply it: **Firebase Console → ⚙ Project settings → Service accounts →
+Generate new private key** → the downloaded JSON goes on the backend, with
+`FIREBASE_CREDENTIALS_PATH` pointing at it, then restart the container.
 
-then rebuild (`npm run android:local`). Prod runs the latest code and the same
-Supabase database, so you get real listings, search, AI, everything.
+Both backends run against the **same Supabase database**, so either works for
+data; only the Firebase key decides whether login completes.
 
 ### 5b. A Firebase test phone number — *you*
 So you don't have to fight real SMS + SHA-1 registration on the emulator:
@@ -204,7 +211,7 @@ the ✨ button → favorite something → check your profile.**
 
 - **`npm run android:local` says "No connected devices"** → the emulator isn't running. Start it in Android Studio first, confirm with `adb devices` (should list an `emulator-5554  device`).
 - **App loads but every backend call fails / "Network request failed"** → (a) backend not running, (b) `curl http://localhost:8000/` fails from Windows → use the prod URL fallback in §4, or in PowerShell run `adb reverse tcp:8000 tcp:8000` and set `API_BASE_URL=http://localhost:8000`. Rebuild after any `.env.local` change.
-- **Login OTP screen works but "login" then does nothing / 503** → you're pointed at the **local** backend, which has no working Firebase key. Set `API_BASE_URL=http://150.230.114.9:8000` in `.env.local` and rebuild (§5a).
+- **Login OTP screen works but "login" then does nothing / 503** → no Firebase Admin key is installed on the backend yet (§5a). Both prod and local return 503 until one is added.
 - **Gradle/Metro extremely slow or files locked** → you're building from the old OneDrive copy. Use the `C:\DEV\bondeal_app\bon-deal-rn` clone (see the note at the top).
 - **Emulator has no Play Store / Firebase auth errors about Google Play services** → your AVD used a non-Play image. Recreate the AVD with a "Google Play" system image (§1).
 - **Metro stuck / stale cache** → stop it (Ctrl-C) and run `npm run start:local -- --clear`.
