@@ -27,6 +27,17 @@ emulator. Follow the sections in order. Checkboxes mark the things **you** do.
 ## 1. One-time installs (Windows)
 
 - [ ] **Node.js 20 LTS** — https://nodejs.org (Windows installer). Verify: `node -v` → `v20.x`.
+- [ ] **Allow npm to run in PowerShell.** By default PowerShell blocks `.ps1`
+  scripts, and npm ships as one — so `npm install` fails with *"npm.ps1 cannot be
+  loaded because running scripts is disabled on this system."* Fix once (no admin
+  needed, scoped to your user):
+
+  ```powershell
+  Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+  ```
+  Verify: `Get-ExecutionPolicy -List` shows `CurrentUser  RemoteSigned`.
+  (Alternative if you'd rather not change it: prefix every call with `.cmd` —
+  `npm.cmd install`, `npm.cmd run android:local`.)
 - [ ] **Android Studio** — https://developer.android.com/studio . During the setup wizard, let it install:
   - Android SDK
   - an **SDK Platform** (API level **34** or **35**)
