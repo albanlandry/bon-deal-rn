@@ -77,6 +77,13 @@ module.exports = {
         {
           android: {
             usesCleartextTraffic: true,
+            // Pin build-tools to an installed, parser-readable version. Some SDK
+            // installs carry canary packages (e.g. build-tools 37, android-36.1)
+            // whose package.xml uses schema v4, which AGP's bundled parser can't
+            // read — it then fails to verify the default build-tools 35.0.0 and
+            // aborts trying to (re)download it. Pinning to 36.0.0 (matches
+            // compileSdk 36) sidesteps the scan. Survives `prebuild --clean`.
+            buildToolsVersion: '36.0.0',
           },
         },
       ],

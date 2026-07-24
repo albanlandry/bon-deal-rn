@@ -47,3 +47,10 @@ yarn-error.*
 .env.production
 android.keys.txt
 ios.keys.txt
+# Firebase service-account keys — SECRETS, never commit
+*-firebase-adminsdk-*.json
+*serviceAccount*.json
+serviceAccountKey.json
+# Stray Firebase client config at repo root (the real, committed one is firebase/configs/google-services.json)
+/google-services.json
+*.bak
