@@ -79,7 +79,22 @@ npm run prebuild:clean                 # generate the native android/ project (a
 ## 3. Run the app
 
 1. [ ] **Start the emulator** (Android Studio → Device Manager → ▶) and wait until the Android home screen is showing.
-2. [ ] **Make sure the backend is running.** It runs in Docker under WSL. In a WSL terminal: `cd ~/DEV/bondeal_app/bon-deal-fastapi && docker compose up -d backend` (or it may already be up).
+2. [ ] **Nothing to start** — the app talks to the **prod** backend (§4), which is
+   always up. Sanity-check it from PowerShell if you like:
+   `curl http://150.230.114.9:8000/` → `{"message":"Marketplace API"}`.
+
+   <details><summary>Only if you switched to the local backend</summary>
+
+   Start it in a WSL terminal. Note this machine has Compose **v1**, so the
+   command is hyphenated:
+
+   ```bash
+   cd ~/DEV/bondeal_app/bon-deal-fastapi && docker-compose up -d backend
+   ```
+   (`docker compose ...` with a space needs the v2 plugin, which isn't installed
+   here — it fails with `unknown shorthand flag: 'd'`.) Check it's up with
+   `docker ps`; it often already is.
+   </details>
 3. [ ] **Build & launch** (PowerShell, in the project folder):
 
    ```powershell
