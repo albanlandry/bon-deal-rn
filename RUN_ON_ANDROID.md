@@ -158,22 +158,37 @@ The whole app is now wired to the real backend (see §6). Every screen — brows
 sell, search, favorites, profile — needs you to be **logged in**, which needs the
 `POST /auth/firebase` endpoint working.
 
-### 5a. Backend Firebase Admin key — ⚠️ NOT installed yet (blocks login)
-`POST /auth/firebase` currently returns **503 "Firebase auth is not configured on
-the server"** on **both** the prod and local backends — `FIREBASE_CREDENTIALS_PATH`
-is unset in both. Until a key is installed you can reach the login screen and
-receive an OTP, but the session exchange fails, so no authenticated screen loads.
+### 5a. Backend Firebase Admin key — ✅ installed on prod
+Login works end-to-end against the **prod** backend. `POST /auth/firebase` verifies
+the Firebase ID token and mints a backend JWT (creating the user on first login,
+keyed by phone number). A quick check — this should return **401**, not 503:
+
+```powershell
+curl -X POST http://<PROD_API_HOST>:8000/auth/firebase -H "Content-Type: application/json" -d "{\"firebase_id_token\":\"x\"}"
+```
+`401 Invalid Firebase token` = the key is installed and working.
+`503 Firebase auth is not configured` = no key on that backend.
+
+⚠️ The **local** WSL backend has no working key, so `/auth/firebase` still 503s
+there. **Point the app at prod for anything past the login screen** (§4).
 
 Two halves must belong to the **same** Firebase project:
-1. **App** — `firebase/configs/google-services.json` (today: project `bon-deal-mvp`,
-   package `com.gabtech.bondeal`).
+1. **App** — `firebase/configs/google-services.json`. The tracked file is project
+   `bon-deal-mvp`; the working Windows clone carries a **local, uncommitted** swap
+   to `bondeal-dev`, which is the project prod trusts. Package must be
+   `com.gabtech.bondeal`.
 2. **Backend** — a service-account JSON at `FIREBASE_CREDENTIALS_PATH`. The backend
    calls `firebase_admin.verify_id_token()`, which only accepts tokens minted by
    its own project.
 
-To supply it: **Firebase Console → ⚙ Project settings → Service accounts →
-Generate new private key** → the downloaded JSON goes on the backend, with
-`FIREBASE_CREDENTIALS_PATH` pointing at it, then restart the container.
+To supply one for another environment: **Firebase Console → ⚙ Project settings →
+Service accounts → Generate new private key** → put the JSON on the backend
+(`chmod 600`, gitignored), point `FIREBASE_CREDENTIALS_PATH` at it, then
+**recreate** the container — note a plain `docker restart` does *not* reload `.env`:
+
+```bash
+docker compose up -d --force-recreate
+```
 
 Both backends run against the **same Supabase database**, so either works for
 data; only the Firebase key decides whether login completes.
@@ -213,7 +228,7 @@ the ✨ button → favorite something → check your profile.**
 
 - **`npm run android:local` says "No connected devices"** → the emulator isn't running. Start it in Android Studio first, confirm with `adb devices` (should list an `emulator-5554  device`).
 - **App loads but every backend call fails / "Network request failed"** → (a) backend not running, (b) `curl http://localhost:8000/` fails from Windows → use the prod URL fallback in §4, or in PowerShell run `adb reverse tcp:8000 tcp:8000` and set `API_BASE_URL=http://localhost:8000`. Rebuild after any `.env.local` change.
-- **Login OTP screen works but "login" then does nothing / 503** → no Firebase Admin key is installed on the backend yet (§5a). Both prod and local return 503 until one is added.
+- **Login OTP screen works but "login" then does nothing / 503** → you are pointed at the **local** backend, which has no Firebase key. Switch `.env.local` to the prod host and rebuild (§5a).
 - **Gradle/Metro extremely slow or files locked** → you're building from the old OneDrive copy. Use the `C:\DEV\bondeal_app\bon-deal-rn` clone (see the note at the top).
 - **Emulator has no Play Store / Firebase auth errors about Google Play services** → your AVD used a non-Play image. Recreate the AVD with a "Google Play" system image (§1).
 - **Metro stuck / stale cache** → stop it (Ctrl-C) and run `npm run start:local -- --clear`.
