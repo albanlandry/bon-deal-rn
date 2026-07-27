@@ -126,9 +126,9 @@ npm run prebuild:clean                 # generate the native android/ project (a
 
 ## 4. Connect the app to the backend
 
-**For testing, point at prod.** It's always up, runs the latest code, and shares
-the same Supabase database as local. (Login is blocked on *both* backends until a
-Firebase key is installed — see §5a.) Set `.env.local` to:
+**For testing, point at prod.** It's always up, runs the latest code, shares the
+same Supabase database as local, and is the **only** backend where login works
+(the Firebase key is installed there — see §5a). Set `.env.local` to:
 
 ```
 API_BASE_URL=http://<PROD_API_HOST>:8000
