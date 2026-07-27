@@ -74,9 +74,10 @@ Open **Windows PowerShell** and run:
 cd C:\DEV\bondeal_app\bon-deal-rn
 
 # .env.local is untracked — create it pointing at the prod backend (see §4).
-# Replace <PROD_API_HOST> with the real host — ask the project lead; it is
-# deliberately not published in this repo.
-"API_BASE_URL=http://<PROD_API_HOST>:8000" | Out-File -Encoding ascii .env.local
+# Replace <PROD_API_HOST> with the real hostname — ask the project lead; it is
+# deliberately not published in this repo. The API is HTTPS on the default
+# port 443, so no :8000 suffix.
+"API_BASE_URL=https://<PROD_API_HOST>" | Out-File -Encoding ascii .env.local
 
 npm install                            # install dependencies
 npm run prebuild:clean                 # generate the native android/ project (applies all config plugins)
@@ -96,7 +97,7 @@ npm run prebuild:clean                 # generate the native android/ project (a
 1. [ ] **Start the emulator** (Android Studio → Device Manager → ▶) and wait until the Android home screen is showing.
 2. [ ] **Nothing to start** — the app talks to the **prod** backend (§4), which is
    always up. Sanity-check it from PowerShell if you like:
-   `curl http://<PROD_API_HOST>:8000/` → `{"message":"Marketplace API"}`.
+   `curl https://<PROD_API_HOST>/` → `{"message":"Marketplace API"}`.
 
    <details><summary>Only if you switched to the local backend</summary>
 
@@ -131,11 +132,11 @@ same Supabase database as local, and is the **only** backend where login works
 (the Firebase key is installed there — see §5a). Set `.env.local` to:
 
 ```
-API_BASE_URL=http://<PROD_API_HOST>:8000
+API_BASE_URL=https://<PROD_API_HOST>
 ```
 
 Prod is reachable from anywhere and uses the same Supabase database + the latest
-code. `curl http://<PROD_API_HOST>:8000/` should return `{"message":"Marketplace API"}`.
+code. `curl https://<PROD_API_HOST>/` should return `{"message":"Marketplace API"}`.
 
 > After changing `.env.local` you must **rebuild** (`npm run android:local`) — the
 > value is read at build time, not runtime.
@@ -164,7 +165,7 @@ the Firebase ID token and mints a backend JWT (creating the user on first login,
 keyed by phone number). A quick check — this should return **401**, not 503:
 
 ```powershell
-curl -X POST http://<PROD_API_HOST>:8000/auth/firebase -H "Content-Type: application/json" -d "{\"firebase_id_token\":\"x\"}"
+curl -X POST https://<PROD_API_HOST>/auth/firebase -H "Content-Type: application/json" -d "{\"firebase_id_token\":\"x\"}"
 ```
 `401 Invalid Firebase token` = the key is installed and working.
 `503 Firebase auth is not configured` = no key on that backend.

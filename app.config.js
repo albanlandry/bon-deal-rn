@@ -69,14 +69,15 @@ module.exports = {
           },
         },
       ],
-      // Allow cleartext (http://) traffic on Android so the app can reach the
-      // non-TLS backend (10.0.2.2:8000 emulator-to-host, or 150.230.114.9:8000).
-      // Remove once the backend is served over HTTPS.
+      // Cleartext (http://) is allowed ONLY outside production, so a developer can
+      // still reach a local backend at http://10.0.2.2:8000. Production builds
+      // forbid it: the API is served over TLS at https://bondeal.duckdns.org, and
+      // a global cleartext permit would let any plaintext URL silently work.
       [
         'expo-build-properties',
         {
           android: {
-            usesCleartextTraffic: true,
+            usesCleartextTraffic: (process.env.APP_ENV || 'local') !== 'production',
             // Pin build-tools to an installed, parser-readable version. Some SDK
             // installs carry canary packages (e.g. build-tools 37, android-36.1)
             // whose package.xml uses schema v4, which AGP's bundled parser can't
