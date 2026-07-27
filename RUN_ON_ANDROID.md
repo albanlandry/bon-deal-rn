@@ -73,8 +73,10 @@ Open **Windows PowerShell** and run:
 ```powershell
 cd C:\DEV\bondeal_app\bon-deal-rn
 
-# .env.local is untracked — create it pointing at the prod backend (see §4)
-"API_BASE_URL=http://150.230.114.9:8000" | Out-File -Encoding ascii .env.local
+# .env.local is untracked — create it pointing at the prod backend (see §4).
+# Replace <PROD_API_HOST> with the real host — ask the project lead; it is
+# deliberately not published in this repo.
+"API_BASE_URL=http://<PROD_API_HOST>:8000" | Out-File -Encoding ascii .env.local
 
 npm install                            # install dependencies
 npm run prebuild:clean                 # generate the native android/ project (applies all config plugins)
@@ -94,7 +96,7 @@ npm run prebuild:clean                 # generate the native android/ project (a
 1. [ ] **Start the emulator** (Android Studio → Device Manager → ▶) and wait until the Android home screen is showing.
 2. [ ] **Nothing to start** — the app talks to the **prod** backend (§4), which is
    always up. Sanity-check it from PowerShell if you like:
-   `curl http://150.230.114.9:8000/` → `{"message":"Marketplace API"}`.
+   `curl http://<PROD_API_HOST>:8000/` → `{"message":"Marketplace API"}`.
 
    <details><summary>Only if you switched to the local backend</summary>
 
@@ -129,11 +131,11 @@ the same Supabase database as local. (Login is blocked on *both* backends until 
 Firebase key is installed — see §5a.) Set `.env.local` to:
 
 ```
-API_BASE_URL=http://150.230.114.9:8000
+API_BASE_URL=http://<PROD_API_HOST>:8000
 ```
 
 Prod is reachable from anywhere and uses the same Supabase database + the latest
-code. `curl http://150.230.114.9:8000/` should return `{"message":"Marketplace API"}`.
+code. `curl http://<PROD_API_HOST>:8000/` should return `{"message":"Marketplace API"}`.
 
 > After changing `.env.local` you must **rebuild** (`npm run android:local`) — the
 > value is read at build time, not runtime.
