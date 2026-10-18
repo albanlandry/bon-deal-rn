@@ -54,3 +54,6 @@ serviceAccountKey.json
 # Stray Firebase client config at repo root (the real, committed one is firebase/configs/google-services.json)
 /google-services.json
 *.bak
+
+# Local Claude progress notes
+memory.md
