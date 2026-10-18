@@ -46,6 +46,21 @@ const FAQ = [
     answer: 'Oui : Profil › Mes annonces, puis choisissez l’annonce à modifier, masquer ou supprimer.',
   },
   {
+    question: 'Comment signaler une annonce ou un membre ?',
+    answer:
+      'Sur une annonce, appuyez sur le drapeau. Pour un membre, ouvrez son profil (menu ⋮) ou le menu de la conversation. Pour un message, faites un appui long dessus. Les signalements sont anonymes et examinés par notre équipe.',
+  },
+  {
+    question: 'Comment bloquer quelqu’un ?',
+    answer:
+      'Depuis son profil ou le menu ⋮ de la conversation, choisissez « Bloquer ». Vous ne verrez plus ses annonces et vous ne pourrez plus vous écrire. Pour débloquer : Paramètres › Confidentialité.',
+  },
+  {
+    question: 'Que faire après une offre acceptée ?',
+    answer:
+      'Une transaction apparaît dans la conversation et dans Profil › Mes transactions. Après l’échange, confirmez-le, puis laissez un avis. En cas de problème, utilisez « Signaler un problème ».',
+  },
+  {
     question: 'Comment changer de quartier ?',
     answer: 'Depuis l’accueil, appuyez sur le quartier en haut de l’écran, ou allez dans Paramètres › Mon quartier.',
   },

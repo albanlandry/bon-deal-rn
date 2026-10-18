@@ -182,6 +182,18 @@ export default function ProfileScreen() {
           <ListRow icon="pricetags-outline" title="Mes annonces" onPress={() => router.push('/my-listings')} />
           <ListRow icon="heart-outline" title="Favoris" onPress={() => router.push('/(tabs)/favorites')} />
           <ListRow
+            icon="receipt-outline"
+            title="Mes transactions"
+            subtitle="Confirmer un échange, laisser un avis"
+            onPress={() => router.push('/transactions' as Href)}
+          />
+          <ListRow
+            icon="bookmark-outline"
+            title="Mes recherches"
+            subtitle="Recherches enregistrées et alertes"
+            onPress={() => router.push('/saved-searches' as Href)}
+          />
+          <ListRow
             icon="star-outline"
             title="Mes avis"
             subtitle="Ce que les autres disent de vous"

@@ -1,8 +1,8 @@
 // app/search-results.tsx — Résultats: count, sort, filter sheet, grid.
 import { Ionicons } from '@expo/vector-icons';
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -19,10 +19,15 @@ import {
 } from '@/components/ui';
 import { CATEGORY_ICONS } from '@/components/molecules/CategorySheet';
 import ListingGrid from '@/components/organisms/ListingGrid';
+import SaveSearchSheet from '@/components/organisms/SaveSearchSheet';
 import { CATEGORIES, categoryLabel } from '@/constants/catalog';
 import type { BdPost } from '@/constants/types';
+import { useAuth } from '@/contexts/AuthContext';
 import { useToggleLike } from '@/lib/api/likeToggle';
-import { postsInfiniteQuery, type PostSort } from '@/lib/api/posts';
+import { postsInfiniteQuery, type FeedParams, type NearParams, type PostSort } from '@/lib/api/posts';
+import { quartiersQuery } from '@/lib/api/quartiers';
+import { describeFilters, feedToFilters } from '@/lib/api/savedSearches';
+import { getCurrentCoords, LOCATION_MESSAGES } from '@/lib/location';
 import { createStyles, useStyles, useTheme } from '@/theme';
 
 type PriceBucket = 'under50' | '50to100' | 'over100';
@@ -45,7 +50,18 @@ const SORT_SEGMENTS: { value: PostSort; label: string }[] = [
   { value: 'price_low', label: 'Prix ↑' },
   { value: 'price_high', label: 'Prix ↓' },
 ];
-const ALL_SORTS: PostSort[] = ['date_new', 'date_old', 'price_low', 'price_high'];
+const DISTANCE_SEGMENT: { value: PostSort; label: string } = { value: 'distance', label: 'Distance' };
+const ALL_SORTS: PostSort[] = ['date_new', 'date_old', 'price_low', 'price_high', 'distance'];
+const RADII = [2, 5, 10, 25];
+const DEFAULT_RADIUS = 5;
+
+function parseNear(lat?: string, lng?: string, radius?: string): NearParams | null {
+  const la = Number(lat);
+  const ln = Number(lng);
+  if (!lat || !lng || !Number.isFinite(la) || !Number.isFinite(ln)) return null;
+  const r = Number(radius);
+  return { lat: la, lng: ln, radiusKm: Number.isFinite(r) && r > 0 ? Math.min(r, 200) : DEFAULT_RADIUS };
+}
 
 // Which bucket a raw min/max range best corresponds to (for chip highlighting).
 function bucketFromRange(min?: number, max?: number): PriceBucket | null {
@@ -72,6 +88,8 @@ interface Filters {
   minPrice?: number;
   maxPrice?: number;
   conditionMode: ConditionMode;
+  quartier: string | null;
+  near: NearParams | null;
 }
 
 export default function SearchResultsScreen() {
@@ -86,20 +104,39 @@ export default function SearchResultsScreen() {
     maxPrice?: string;
     condition?: string;
     sort?: string;
+    quartier?: string;
+    nearLat?: string;
+    nearLng?: string;
+    radiusKm?: string;
   }>();
   const query = params.query ?? '';
+  const { user } = useAuth();
+  const quartiers = useQuery(quartiersQuery(user?.city));
 
   const [filters, setFilters] = useState<Filters>(() => ({
     category: params.category ?? params.categories?.split(',')[0] ?? null,
     minPrice: params.minPrice ? Number(params.minPrice) : undefined,
     maxPrice: params.maxPrice ? Number(params.maxPrice) : undefined,
     conditionMode: modeFromConds(params.condition ? params.condition.split(',') : []),
+    quartier: params.quartier || null,
+    near: parseNear(params.nearLat, params.nearLng, params.radiusKm),
   }));
   const [sort, setSort] = useState<PostSort>(
-    ALL_SORTS.includes(params.sort as PostSort) ? (params.sort as PostSort) : 'date_new',
+    ALL_SORTS.includes(params.sort as PostSort)
+      ? (params.sort as PostSort)
+      : params.nearLat && params.nearLng
+        ? 'distance'
+        : 'date_new',
   );
   const [showSheet, setShowSheet] = useState(false);
   const [draft, setDraft] = useState<Filters>(filters);
+  const [showSave, setShowSave] = useState(false);
+  const [locating, setLocating] = useState(false);
+
+  // Distance sort only makes sense with a position.
+  useEffect(() => {
+    if (!filters.near && sort === 'distance') setSort('date_new');
+  }, [filters.near, sort]);
 
   const condition =
     filters.conditionMode === 'like_new'
@@ -108,16 +145,19 @@ export default function SearchResultsScreen() {
         ? ['good', 'fair', 'poor']
         : undefined;
 
-  const feed = useInfiniteQuery(
-    postsInfiniteQuery({
-      search: query || undefined,
-      categories: filters.category ? [filters.category] : undefined,
-      minPrice: filters.minPrice,
-      maxPrice: filters.maxPrice,
-      condition,
-      sort,
-    }),
-  );
+  const feedParams: FeedParams = {
+    search: query || undefined,
+    categories: filters.category ? [filters.category] : undefined,
+    minPrice: filters.minPrice,
+    maxPrice: filters.maxPrice,
+    condition,
+    quartier: filters.quartier ?? undefined,
+    near: filters.near ?? undefined,
+    sort,
+  };
+  const feed = useInfiniteQuery(postsInfiniteQuery(feedParams));
+  const savedFilters = feedToFilters(feedParams);
+  const filterSummary = describeFilters(savedFilters, categoryLabel);
   const results = useMemo(() => feed.data?.pages.flatMap((p) => p.posts) ?? [], [feed.data]);
   const total = feed.data?.pages[0]?.total_posts ?? 0;
 
@@ -133,9 +173,35 @@ export default function SearchResultsScreen() {
   const activeCount =
     (filters.category ? 1 : 0) +
     (filters.minPrice != null || filters.maxPrice != null ? 1 : 0) +
-    (filters.conditionMode !== 'all' ? 1 : 0);
+    (filters.conditionMode !== 'all' ? 1 : 0) +
+    (filters.quartier ? 1 : 0) +
+    (filters.near ? 1 : 0);
 
-  const emptyFilters: Filters = { category: null, minPrice: undefined, maxPrice: undefined, conditionMode: 'all' };
+  const emptyFilters: Filters = {
+    category: null,
+    minPrice: undefined,
+    maxPrice: undefined,
+    conditionMode: 'all',
+    quartier: null,
+    near: null,
+  };
+
+  // "Près de moi" in the sheet: ask for the position only when switched on.
+  const toggleDraftNear = async () => {
+    if (draft.near) {
+      setDraft((d) => ({ ...d, near: null }));
+      return;
+    }
+    setLocating(true);
+    const res = await getCurrentCoords();
+    setLocating(false);
+    if (!res.ok) {
+      const m = LOCATION_MESSAGES[res.reason];
+      showToast.error(m.title, m.message);
+      return;
+    }
+    setDraft((d) => ({ ...d, near: { ...res.coords, radiusKm: DEFAULT_RADIUS } }));
+  };
   const resetFilters = () => {
     setFilters(emptyFilters);
     setDraft(emptyFilters);
@@ -170,13 +236,25 @@ export default function SearchResultsScreen() {
       label: CONDITION_MODES.find((m) => m.id === filters.conditionMode)!.label,
       clear: () => setFilters((f) => ({ ...f, conditionMode: 'all' })),
     });
+  if (filters.quartier)
+    activeChips.push({
+      key: 'quartier',
+      label: filters.quartier,
+      clear: () => setFilters((f) => ({ ...f, quartier: null })),
+    });
+  if (filters.near)
+    activeChips.push({
+      key: 'near',
+      label: `À moins de ${filters.near.radiusKm} km`,
+      clear: () => setFilters((f) => ({ ...f, near: null })),
+    });
 
   const showError = feed.isError && results.length === 0 && !feed.isLoading;
 
   const header = (
     <View style={s.listHeader}>
       <SegmentedControl
-        segments={SORT_SEGMENTS}
+        segments={filters.near ? [...SORT_SEGMENTS, DISTANCE_SEGMENT] : SORT_SEGMENTS}
         value={sort}
         onChange={setSort}
         accessibilityLabel="Trier les résultats"
@@ -188,9 +266,19 @@ export default function SearchResultsScreen() {
           ))}
         </ScrollView>
       )}
-      <AppText variant="small" color="inkMuted" accessibilityLiveRegion="polite" style={s.count}>
-        {feed.isLoading ? 'Recherche…' : `${total} résultat${total > 1 ? 's' : ''}`}
-      </AppText>
+      <View style={s.countRow}>
+        <AppText variant="small" color="inkMuted" accessibilityLiveRegion="polite" style={s.flex}>
+          {feed.isLoading ? 'Recherche…' : `${total} résultat${total > 1 ? 's' : ''}`}
+        </AppText>
+        <Button
+          label="Enregistrer"
+          icon="bookmark-outline"
+          variant="ghost"
+          size="sm"
+          onPress={() => setShowSave(true)}
+          accessibilityHint="Enregistrer cette recherche et recevoir une alerte pour les nouvelles annonces"
+        />
+      </View>
     </View>
   );
 
@@ -208,6 +296,7 @@ export default function SearchResultsScreen() {
             {query || 'Parcourir les annonces'}
           </AppText>
         </Pressable>
+        <IconButton icon="bookmark-outline" label="Enregistrer cette recherche" onPress={() => setShowSave(true)} />
         <IconButton
           icon="options-outline"
           label="Filtres"
@@ -257,6 +346,8 @@ export default function SearchResultsScreen() {
               label="Appliquer"
               onPress={() => {
                 setFilters(draft);
+                // Turning "Près de moi" on implies "nearest first".
+                if (draft.near && !filters.near) setSort('distance');
                 setShowSheet(false);
               }}
               style={s.flex}
@@ -301,7 +392,71 @@ export default function SearchResultsScreen() {
             />
           ))}
         </View>
+
+        <AppText variant="labelStrong" style={s.groupTitle}>
+          Quartier
+        </AppText>
+        {!user?.city ? (
+          <AppText variant="small" color="inkMuted">
+            Renseignez votre ville dans votre profil pour filtrer par quartier.
+          </AppText>
+        ) : (quartiers.data?.quartiers ?? []).length === 0 && !draft.quartier ? (
+          <AppText variant="small" color="inkMuted">
+            {quartiers.isLoading ? 'Chargement des quartiers…' : `Aucun quartier référencé à ${user.city}.`}
+          </AppText>
+        ) : (
+          <View style={s.wrap}>
+            <Chip label="Tous" selected={!draft.quartier} onPress={() => setDraft((d) => ({ ...d, quartier: null }))} />
+            {draft.quartier && !(quartiers.data?.quartiers ?? []).some((x) => x.name === draft.quartier) && (
+              <Chip label={draft.quartier} selected onPress={() => setDraft((d) => ({ ...d, quartier: null }))} />
+            )}
+            {(quartiers.data?.quartiers ?? []).map((x) => (
+              <Chip
+                key={x.id}
+                label={x.name}
+                selected={draft.quartier === x.name}
+                onPress={() => setDraft((d) => ({ ...d, quartier: d.quartier === x.name ? null : x.name }))}
+              />
+            ))}
+          </View>
+        )}
+
+        <AppText variant="labelStrong" style={s.groupTitle}>
+          Distance
+        </AppText>
+        <View style={s.wrap}>
+          <Chip
+            label={locating ? 'Localisation…' : 'Près de moi'}
+            icon="navigate-outline"
+            kind="filter"
+            selected={!!draft.near}
+            disabled={locating}
+            onPress={toggleDraftNear}
+          />
+          {draft.near &&
+            RADII.map((r) => (
+              <Chip
+                key={r}
+                label={`${r} km`}
+                selected={draft.near?.radiusKm === r}
+                onPress={() => setDraft((d) => (d.near ? { ...d, near: { ...d.near, radiusKm: r } } : d))}
+              />
+            ))}
+        </View>
+        {!!draft.near && (
+          <AppText variant="caption" color="inkMuted" style={s.hint}>
+            Seules les annonces localisées apparaissent, les plus proches d’abord.
+          </AppText>
+        )}
       </Sheet>
+
+      <SaveSearchSheet
+        visible={showSave}
+        onClose={() => setShowSave(false)}
+        filters={savedFilters}
+        defaultName={query || (filters.category ? categoryLabel(filters.category) : filterSummary)}
+        summary={filterSummary}
+      />
     </SafeAreaView>
   );
 }
@@ -330,7 +485,8 @@ const makeStyles = createStyles((t) => ({
   },
   listHeader: { paddingHorizontal: t.spacing.md, paddingTop: t.spacing.xs, gap: t.spacing.xs },
   activeRow: { gap: t.spacing.xs },
-  count: { paddingBottom: t.spacing.xs },
+  countRow: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs, paddingBottom: t.spacing.xs },
+  hint: { marginTop: t.spacing.xs },
   groupTitle: { marginTop: t.spacing.md, marginBottom: t.spacing.xs },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.xs },
   sheetActions: { flexDirection: 'row', gap: t.spacing.sm },

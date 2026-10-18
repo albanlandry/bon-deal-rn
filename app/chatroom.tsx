@@ -27,9 +27,11 @@ import {
   Card,
   ErrorState,
   IconButton,
+  ListRow,
   QuickReplies,
   SafetyBanner,
   SELLER_QUICK_REPLIES,
+  Sheet,
   showToast,
   Skeleton,
 } from '@/components/ui';
@@ -42,6 +44,11 @@ import {
   sendMessage,
 } from '@/lib/api/conversations';
 import { acceptOffer, coachAdvice, counterOffer, rejectOffer } from '@/lib/api/negotiations';
+import { publicProfileQuery } from '@/lib/api/account';
+import { blockedMessage } from '@/lib/api/safety';
+import { useBlockActions } from '@/lib/useBlock';
+import ReportSheet from '@/components/organisms/ReportSheet';
+import TransactionPanel from '@/components/organisms/TransactionPanel';
 import { ApiError } from '@/lib/api';
 import { clearUnread, mergeServerMessage, messagesKey, nextTempId } from '@/lib/chatCache';
 import { formatAmount, formatClock, formatDayLabel } from '@/lib/format';
@@ -64,13 +71,17 @@ function renderSystemMessage(
     uid === myId ? 'Vous' : (conv?.counterparty?.username ?? "L'autre partie");
   switch (msg.kind) {
     case 'system_offer_made':
-      return `${who(p.by_user_id)} a fait une offre de ${amt(p.amount)}`;
+      return p.by_user_id === myId
+        ? `Vous avez fait une offre de ${amt(p.amount)}`
+        : `${who(p.by_user_id)} a fait une offre de ${amt(p.amount)}`;
     case 'system_counter':
-      return `${who(p.by_user_id)} a proposé ${amt(p.amount)}`;
+      return p.by_user_id === myId
+        ? `Vous avez proposé ${amt(p.amount)}`
+        : `${who(p.by_user_id)} a proposé ${amt(p.amount)}`;
     case 'system_accepted':
       return `Offre acceptée — ${amt(p.amount)}`;
     case 'system_rejected':
-      return `${who(p.by_user_id)} a refusé l'offre`;
+      return p.by_user_id === myId ? "Vous avez refusé l'offre" : `${who(p.by_user_id)} a refusé l'offre`;
     case 'system_auto_rejected':
       return "Offre clôturée — l'article a été réservé pour un autre acheteur";
     case 'system_withdrawn':
@@ -93,10 +104,13 @@ function TextBubble({
   msg,
   mine,
   onRetry,
+  onLongPress,
 }: {
   msg: BdChatMessage;
   mine: boolean;
   onRetry: (m: BdChatMessage) => void;
+  /** Incoming messages: long-press opens the report sheet. */
+  onLongPress?: (m: BdChatMessage) => void;
 }) {
   const t = useTheme();
   const styles = useStyles(makeStyles);
@@ -105,10 +119,15 @@ function TextBubble({
   return (
     <View style={[styles.bubbleRow, mine ? styles.right : styles.left]}>
       <Pressable
-        disabled={!failed}
-        onPress={() => onRetry(msg)}
+        disabled={!failed && !onLongPress}
+        onPress={failed ? () => onRetry(msg) : undefined}
+        onLongPress={onLongPress ? () => onLongPress(msg) : undefined}
+        delayLongPress={400}
         accessibilityRole={failed ? 'button' : undefined}
         accessibilityLabel={failed ? `Message non envoyé : ${msg.body}. Toucher pour réessayer` : undefined}
+        accessibilityHint={onLongPress ? 'Appui long pour signaler ce message' : undefined}
+        accessibilityActions={onLongPress ? [{ name: 'longpress', label: 'Signaler ce message' }] : undefined}
+        onAccessibilityAction={onLongPress ? () => onLongPress(msg) : undefined}
         style={[
           styles.bubble,
           mine
@@ -413,6 +432,10 @@ export default function ChatroomScreen() {
   const [messageText, setMessageText] = useState('');
   const [coach, setCoach] = useState<BdCoachVerdict | null>(null);
   const [safetyDismissed, setSafetyDismissed] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [report, setReport] = useState<{ type: 'user' | 'message'; id: number; subject?: string } | null>(null);
+  const [actionMsg, setActionMsg] = useState<BdChatMessage | null>(null);
+  const { confirmBlock, confirmUnblock } = useBlockActions();
   const listRef = useRef<FlatList<Row>>(null);
 
   // Live delivery comes from the realtime provider; poll only while it's down.
@@ -423,6 +446,9 @@ export default function ChatroomScreen() {
   const conv = convQuery.data;
   const messages = msgsQuery.data;
   const myId = user?.id;
+  const otherId = conv?.counterparty?.id;
+  const otherProfile = useQuery({ ...publicProfileQuery(otherId), enabled: enabled && !!otherId, staleTime: 0 });
+  const blockedByMe = !!otherProfile.data?.blocked_by_me;
 
   // Messages for the open room don't count as unread.
   useEffect(() => {
@@ -478,7 +504,8 @@ export default function ChatroomScreen() {
     },
     onError: (e: any, { tempId }) => {
       setThread((old) => old?.map((m) => (m.id === tempId ? { ...m, client_status: 'failed' } : m)));
-      showToast.error('Message non envoyé', e?.message || 'Touchez le message pour réessayer.');
+      const blocked = blockedMessage(e);
+      showToast.error('Message non envoyé', blocked ?? (e?.message || 'Touchez le message pour réessayer.'));
     },
   });
 
@@ -509,7 +536,7 @@ export default function ChatroomScreen() {
       showToast.success('Offre acceptée');
       invalidateThread();
     },
-    onError: (e: any) => showToast.error('Échec', e?.message || 'Veuillez réessayer.'),
+    onError: (e: any) => showToast.error('Échec', blockedMessage(e) ?? (e?.message || 'Veuillez réessayer.')),
   });
 
   const rejectMutation = useMutation({
@@ -518,7 +545,7 @@ export default function ChatroomScreen() {
       showToast.info('Offre refusée');
       invalidateThread();
     },
-    onError: (e: any) => showToast.error('Échec', e?.message || 'Veuillez réessayer.'),
+    onError: (e: any) => showToast.error('Échec', blockedMessage(e) ?? (e?.message || 'Veuillez réessayer.')),
   });
 
   const negBusy = acceptMutation.isPending || rejectMutation.isPending;
@@ -595,6 +622,14 @@ export default function ChatroomScreen() {
     });
   };
 
+  const openProfile = () => {
+    if (!otherId) return;
+    router.push({
+      pathname: '/seller-profile',
+      params: { userId: String(otherId), username: conv?.counterparty?.username ?? '' },
+    });
+  };
+
   const dismissSafety = () => {
     setSafetyDismissed(true);
     AsyncStorage.setItem(SAFETY_DISMISSED_KEY, '1').catch(() => {});
@@ -634,13 +669,22 @@ export default function ChatroomScreen() {
   const post = conv?.post;
   const postBadge =
     post?.state === 'sold' ? 'Vendu' : post?.state === 'reserved' ? 'Réservé' : null;
+  // Buyer can (re)open a negotiation from the chat when none is pending.
+  const canMakeOffer =
+    !!conv && isBuyer && !blockedByMe && post?.state === 'published' && !post.is_free && ln?.status !== 'pending' && ln?.status !== 'accepted';
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       {/* Header: counterparty + listing (price and state) */}
       <View style={styles.header}>
         <IconButton icon="arrow-back" label="Retour" onPress={() => router.back()} />
-        <Avatar name={conv?.counterparty?.username} size={36} />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Voir le profil de ${conv?.counterparty?.username ?? ''}`}
+          disabled={!otherId}
+          onPress={openProfile}>
+          <Avatar uri={otherProfile.data?.avatar_url} name={conv?.counterparty?.username} size={36} />
+        </Pressable>
         <View style={styles.flex}>
           <AppText variant="bodyStrong" numberOfLines={1}>
             {conv?.counterparty?.username ?? 'Conversation'}
@@ -649,6 +693,9 @@ export default function ChatroomScreen() {
             {conv ? (isBuyer ? 'Vendeur' : 'Acheteur') : ' '}
           </AppText>
         </View>
+        {conv && (
+          <IconButton icon="ellipsis-vertical" label="Options de la conversation" onPress={() => setMenuOpen(true)} />
+        )}
       </View>
       {post && (
         <Pressable
@@ -684,6 +731,22 @@ export default function ChatroomScreen() {
         />
       )}
 
+      {ln?.status === 'accepted' && !!ln.transaction_id && (
+        <View style={styles.txn}>
+          <TransactionPanel transactionId={ln.transaction_id} myId={myId} />
+        </View>
+      )}
+
+      {blockedByMe && (
+        <View style={[styles.banner, { backgroundColor: t.colors.warningTint }]}>
+          <Ionicons name="ban-outline" size={18} color={t.colors.warning} />
+          <AppText variant="label" style={styles.flex}>
+            Vous avez bloqué ce membre. Débloquez-le pour lui écrire.
+          </AppText>
+          <Button size="sm" variant="secondary" label="Débloquer" onPress={() => otherId && confirmUnblock(otherId, conv?.counterparty?.username)} />
+        </View>
+      )}
+
       {coach && (
         <CoachCard
           coach={coach}
@@ -715,7 +778,12 @@ export default function ChatroomScreen() {
               item.type === 'day' ? (
                 <DaySeparator label={item.label} />
               ) : item.msg.kind === 'text' ? (
-                <TextBubble msg={item.msg} mine={item.msg.sender_id === myId} onRetry={handleRetry} />
+                <TextBubble
+                  msg={item.msg}
+                  mine={item.msg.sender_id === myId}
+                  onRetry={handleRetry}
+                  onLongPress={item.msg.sender_id !== myId && item.msg.id > 0 ? setActionMsg : undefined}
+                />
               ) : (
                 <SystemPill text={renderSystemMessage(item.msg, conv, myId)} kind={item.msg.kind} />
               )
@@ -754,11 +822,26 @@ export default function ChatroomScreen() {
           />
         )}
 
+        {canMakeOffer && (
+          <View style={styles.offerRow}>
+            <Button
+              label="Faire une offre"
+              icon="pricetag-outline"
+              size="sm"
+              variant="secondary"
+              onPress={() =>
+                router.push({ pathname: '/make-offer', params: { postId: String(post!.id), conversationId: String(cid) } })
+              }
+            />
+          </View>
+        )}
+
         {/* Composer */}
         <View style={styles.composer}>
           <TextInput
             style={[t.type.body, styles.input]}
-            placeholder="Écrire un message…"
+            placeholder={blockedByMe ? 'Membre bloqué' : 'Écrire un message…'}
+            editable={!blockedByMe}
             placeholderTextColor={t.colors.inkSubtle}
             selectionColor={t.colors.brandStrong}
             value={messageText}
@@ -786,6 +869,76 @@ export default function ChatroomScreen() {
           </Pressable>
         </View>
       </KeyboardAvoidingView>
+
+      <Sheet visible={menuOpen} onClose={() => setMenuOpen(false)} title={conv?.counterparty?.username ?? 'Conversation'}>
+        <ListRow
+          icon="person-circle-outline"
+          title="Voir le profil"
+          onPress={() => {
+            setMenuOpen(false);
+            openProfile();
+          }}
+        />
+        <ListRow
+          icon="flag-outline"
+          title="Signaler ce membre"
+          subtitle="Arnaque, harcèlement, faux profil…"
+          onPress={() => {
+            setMenuOpen(false);
+            if (otherId) setReport({ type: 'user', id: otherId, subject: conv?.counterparty?.username });
+          }}
+        />
+        {blockedByMe ? (
+          <ListRow
+            icon="lock-open-outline"
+            title="Débloquer"
+            onPress={() => {
+              setMenuOpen(false);
+              if (otherId) confirmUnblock(otherId, conv?.counterparty?.username);
+            }}
+            last
+          />
+        ) : (
+          <ListRow
+            icon="ban-outline"
+            title="Bloquer ce membre"
+            subtitle="Plus de messages ni d’offres entre vous"
+            destructive
+            onPress={() => {
+              setMenuOpen(false);
+              if (otherId) confirmBlock(otherId, conv?.counterparty?.username);
+            }}
+            last
+          />
+        )}
+      </Sheet>
+
+      <Sheet visible={!!actionMsg} onClose={() => setActionMsg(null)} title="Message">
+        {!!actionMsg?.body && (
+          <AppText variant="small" color="inkMuted" numberOfLines={3} style={styles.quoted}>
+            « {actionMsg.body} »
+          </AppText>
+        )}
+        <ListRow
+          icon="flag-outline"
+          title="Signaler ce message"
+          destructive
+          onPress={() => {
+            const m = actionMsg;
+            setActionMsg(null);
+            if (m) setReport({ type: 'message', id: m.id, subject: m.body ?? undefined });
+          }}
+          last
+        />
+      </Sheet>
+
+      <ReportSheet
+        visible={!!report}
+        onClose={() => setReport(null)}
+        targetType={report?.type ?? 'user'}
+        targetId={report?.id ?? null}
+        subject={report?.subject}
+      />
     </SafeAreaView>
   );
 }
@@ -841,6 +994,9 @@ const makeStyles = createStyles((t: Theme) => ({
   coachBarDot: { position: 'absolute', top: -4, width: 12, height: 12, borderRadius: 6, marginLeft: -6 },
   coachActions: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginTop: 4 },
   skeletons: { padding: t.spacing.md, gap: t.spacing.sm },
+  txn: { paddingHorizontal: t.spacing.sm, paddingTop: t.spacing.xs },
+  offerRow: { flexDirection: 'row', paddingHorizontal: t.spacing.sm, paddingBottom: t.spacing.xs },
+  quoted: { marginBottom: t.spacing.sm },
   messagesContent: { paddingHorizontal: t.spacing.sm, paddingBottom: t.spacing.xs, flexGrow: 1 },
   safety: { paddingVertical: t.spacing.xs },
   emptyChat: { padding: t.spacing.xl },

@@ -44,6 +44,9 @@ export interface SellCelebrationProps {
   onShare: () => void;
   onView: () => void;
   onHome: () => void;
+  /** POST /posts `possible_duplicate_of`: same title posted in the last 30 days. */
+  duplicateOfId?: number | null;
+  onViewDuplicate?: () => void;
 }
 
 /**
@@ -51,7 +54,15 @@ export interface SellCelebrationProps {
  * confetti burst, then offer the natural next step (share). Confetti is
  * skipped when the OS "reduce motion" setting is on.
  */
-export default function SellCelebration({ visible, title, onShare, onView, onHome }: SellCelebrationProps) {
+export default function SellCelebration({
+  visible,
+  title,
+  onShare,
+  onView,
+  onHome,
+  duplicateOfId,
+  onViewDuplicate,
+}: SellCelebrationProps) {
   const t = useTheme();
   const pieces = useMemo(() => {
     const palette = [t.colors.brand, t.colors.trust, t.colors.warning, t.colors.success, t.colors.brandStrong];
@@ -89,6 +100,29 @@ export default function SellCelebration({ visible, title, onShare, onView, onHom
             « {title} » est maintenant visible par les acheteurs de votre ville. Partagez-la pour
             trouver preneur plus vite.
           </AppText>
+          {!!duplicateOfId && (
+            <View
+              accessibilityRole="alert"
+              style={[styles.dup, { backgroundColor: t.colors.warningTint, borderRadius: t.radius.md }]}>
+              <Ionicons name="copy-outline" size={20} color={t.colors.warning} />
+              <View style={styles.flex}>
+                <AppText variant="labelStrong">Vous avez déjà publié une annonce similaire</AppText>
+                <AppText variant="caption" color="inkMuted">
+                  Les doublons gênent les acheteurs et peuvent être retirés par la modération.
+                </AppText>
+                {onViewDuplicate && (
+                  <Button
+                    label="Voir l’autre annonce"
+                    variant="ghost"
+                    size="sm"
+                    iconRight="arrow-forward"
+                    onPress={onViewDuplicate}
+                    style={styles.dupBtn}
+                  />
+                )}
+              </View>
+            </View>
+          )}
           <Button label="Partager l’annonce" icon="share-social-outline" onPress={onShare} fullWidth />
           <Button label="Voir mon annonce" variant="secondary" onPress={onView} fullWidth />
           <Button label="Retour à l’accueil" variant="ghost" onPress={onHome} fullWidth />
@@ -102,5 +136,8 @@ const styles = StyleSheet.create({
   fill: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   piece: { position: 'absolute', top: 0 },
   card: { width: '100%', maxWidth: 380, padding: 24, gap: 12, alignItems: 'center' },
+  dup: { flexDirection: 'row', gap: 10, padding: 12, alignSelf: 'stretch' },
+  dupBtn: { alignSelf: 'flex-start', marginLeft: -8 },
+  flex: { flex: 1 },
   icon: { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
 });

@@ -13,6 +13,8 @@ import { showToast } from '@/components/atoms/Toast';
 import AuthScaffold from '@/components/organisms/AuthScaffold';
 import { apiFetch } from '@/lib/api';
 import { uploadAvatar } from '@/lib/api/me';
+import { acceptConsents } from '@/lib/api/account';
+import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/theme';
 
 const TOTAL_STEPS = 5;
@@ -29,6 +31,7 @@ export default function SetupProfileScreen() {
   const t = useTheme();
   const router = useRouter();
   const { phone } = useLocalSearchParams<{ phone?: string }>();
+  const { refreshUser } = useAuth();
 
   const [nickname, setNickname] = useState('');
   const [touched, setTouched] = useState(false);
@@ -93,6 +96,14 @@ export default function SetupProfileScreen() {
     // client. A failure (e.g. nickname taken) is surfaced but does not block
     // onboarding — the backend keeps the auto-generated username.
     setSaving(true);
+    // Signup accepted the terms ("En continuant, vous acceptez…" on the
+    // signup screen): record the current versions now that we have a session.
+    // If this fails, the consent gate asks again before the tabs.
+    try {
+      await acceptConsents();
+    } catch (e) {
+      console.warn('[setup-profile] consent save failed:', e);
+    }
     try {
       await apiFetch('/auth/me', {
         method: 'PATCH',
@@ -110,6 +121,7 @@ export default function SetupProfileScreen() {
         showToast.error('Photo non enregistrée', 'Vous pourrez l’ajouter depuis votre profil.');
       }
     }
+    await refreshUser();
     setSaving(false);
 
     router.push({

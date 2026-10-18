@@ -62,3 +62,20 @@ export function formatClock(iso: string | null | undefined): string {
   const mm = String(d.getMinutes()).padStart(2, '0');
   return `${hh}:${mm}`;
 }
+
+/** Median reply delay → "~15 min", "~2 h", "~1 j" (for "Répond en ~X"). */
+export function formatResponseTime(minutes: number | null | undefined): string | null {
+  if (minutes == null || !Number.isFinite(minutes)) return null;
+  if (minutes < 60) return `~${Math.max(1, Math.round(minutes))} min`;
+  const h = Math.round(minutes / 60);
+  if (h < 24) return `~${h} h`;
+  return `~${Math.round(h / 24)} j`;
+}
+
+/** Days until an ISO date (ceil, can be ≤ 0 when past). */
+export function daysUntil(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return null;
+  return Math.ceil((then - Date.now()) / 86400000);
+}

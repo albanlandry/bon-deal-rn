@@ -4,9 +4,15 @@
  * negotiation_service._serialize_negotiation, notification_service._serialize).
  */
 
+export type BdImageStatus = 'ready' | 'processing' | 'failed';
+
+/** Post photo. Direct uploads carry WebP `variants` once the worker is done;
+ *  while `processing` the `url` may be empty (only the owner sees those). */
 export interface BdPostImage {
   id: number;
   url: string;
+  status?: BdImageStatus;
+  variants?: { thumb?: string; medium?: string; large?: string } | null;
 }
 
 export interface BdPost {
@@ -33,6 +39,12 @@ export interface BdPost {
   offer_count: number;
   active_offer_count: number;
   images: BdPostImage[];
+  lat?: number | null;
+  lng?: number | null;
+  /** When a published listing goes offline (state becomes `expired`). */
+  expires_at?: string | null;
+  /** Only with a `near_*` feed query. */
+  distance_km?: number | null;
   created_at: string | null;
   updated_at: string | null;
 }
@@ -275,4 +287,108 @@ export interface BdReviewListResponse {
   offset: number;
   limit: number;
   reviews: BdReview[];
+}
+
+// --- Phase 3: trust & safety -------------------------------------------------
+
+export type BdReportTarget = 'post' | 'user' | 'message' | 'review';
+export type BdReportReason =
+  | 'spam'
+  | 'scam'
+  | 'prohibited_item'
+  | 'offensive'
+  | 'harassment'
+  | 'fake_profile'
+  | 'other';
+
+export interface BdBlockedUser {
+  user_id: number;
+  username: string;
+  avatar_url: string | null;
+  blocked_at: string | null;
+}
+
+/** GET /users/{id}/profile → user. */
+export interface BdPublicProfile {
+  id: number;
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
+  city: string | null;
+  quartier: string | null;
+  member_since: string | null;
+  phone_verified: boolean;
+  avg_rating: number | null;
+  review_count: number;
+  sales_count: number;
+  active_listings: number;
+  response_time_minutes: number | null;
+  blocked_by_me: boolean;
+}
+
+export interface BdNotificationPrefs {
+  messages: boolean;
+  offers: boolean;
+  listings: boolean;
+  saved_searches: boolean;
+  marketing: boolean;
+}
+
+export interface BdPrivacyPrefs {
+  show_last_name: boolean;
+  show_quartier: boolean;
+}
+
+export interface BdPreferences {
+  notifications: BdNotificationPrefs;
+  privacy: BdPrivacyPrefs;
+}
+
+export type BdTransactionStatus = 'pending' | 'completed' | 'cancelled' | 'disputed';
+
+export interface BdTransaction {
+  id: number;
+  post_id: number;
+  post_title: string | null;
+  seller_id: number;
+  buyer_id: number;
+  seller: BdUserBriefFull | null;
+  buyer: BdUserBriefFull | null;
+  amount: number;
+  currency: string | null;
+  payment_method: string | null;
+  meeting_location: string | null;
+  status: BdTransactionStatus;
+  cancellation_reason: string | null;
+  created_at: string | null;
+  completed_at: string | null;
+  cancelled_at: string | null;
+  disputed_at: string | null;
+  dispute_reason: string | null;
+  dispute_opened_by_id: number | null;
+  /** Only on GET /transactions/{id}. */
+  reviews?: BdReview[];
+}
+
+// --- Phase 4: discovery ------------------------------------------------------
+
+export interface BdSavedSearchFilters {
+  search?: string | null;
+  categories?: string[];
+  min_price?: number | null;
+  max_price?: number | null;
+  condition?: string[];
+  quartier?: string | null;
+  near_lat?: number | null;
+  near_lng?: number | null;
+  radius_km?: number | null;
+}
+
+export interface BdSavedSearch {
+  id: number;
+  name: string;
+  filters: BdSavedSearchFilters;
+  alerts_enabled: boolean;
+  last_checked_at: string | null;
+  created_at: string | null;
 }

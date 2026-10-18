@@ -24,12 +24,16 @@ import type { BdPost } from '@/constants/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToggleLike } from '@/lib/api/likeToggle';
 import { unreadCountQuery } from '@/lib/api/notifications';
-import { postsInfiniteQuery } from '@/lib/api/posts';
+import { postsInfiniteQuery, type FeedParams, type NearParams } from '@/lib/api/posts';
+import { getCurrentCoords, LOCATION_MESSAGES } from '@/lib/location';
 import { formatRelativeTime } from '@/lib/format';
 import { sellDraftQuery } from '@/lib/sellDraft';
 import { createStyles, useStyles, useTheme } from '@/theme';
 
 const SELL_STEPS = 4;
+const NEAR_RADIUS_KM = 5;
+
+type Scope = 'city' | 'quartier' | 'near';
 
 export default function HomeScreen() {
   const t = useTheme();
@@ -40,11 +44,35 @@ export default function HomeScreen() {
   const [category, setCategory] = useState<string | null>(null);
   const [showCategories, setShowCategories] = useState(false);
   const [showQuartier, setShowQuartier] = useState(false);
+  const [scope, setScope] = useState<Scope>('city');
+  const [near, setNear] = useState<NearParams | null>(null);
+  const [locating, setLocating] = useState(false);
 
-  // Real paginated feed, scoped server-side to the user's city.
-  const feed = useInfiniteQuery(
-    postsInfiniteQuery({ categories: category ? [category] : undefined }),
-  );
+  // Real paginated feed, scoped server-side to the user's city, optionally
+  // narrowed to the home quartier or to "Près de moi" (nearest first).
+  const effectiveScope: Scope =
+    scope === 'quartier' && !user?.quartier ? 'city' : scope === 'near' && !near ? 'city' : scope;
+  const feedParams: FeedParams = {
+    categories: category ? [category] : undefined,
+    quartier: effectiveScope === 'quartier' ? user!.quartier! : undefined,
+    near: effectiveScope === 'near' ? near! : undefined,
+    sort: effectiveScope === 'near' ? 'distance' : undefined,
+  };
+  const feed = useInfiniteQuery(postsInfiniteQuery(feedParams));
+
+  const pickNearMe = async () => {
+    if (locating) return;
+    setLocating(true);
+    const res = await getCurrentCoords();
+    setLocating(false);
+    if (!res.ok) {
+      const m = LOCATION_MESSAGES[res.reason];
+      showToast.error(m.title, m.message);
+      return;
+    }
+    setNear({ ...res.coords, radiusKm: NEAR_RADIUS_KM });
+    setScope('near');
+  };
   const posts = useMemo(() => feed.data?.pages.flatMap((p) => p.posts) ?? [], [feed.data]);
   const { data: unreadCount = 0 } = useQuery({ ...unreadCountQuery(), enabled: isAuthenticated });
   const { data: draft } = useQuery(sellDraftQuery());
@@ -68,6 +96,40 @@ export default function HomeScreen() {
 
   const header = (
     <View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={s.chips}
+        accessibilityLabel="Zone des annonces">
+        <Chip
+          label="Toute la ville"
+          icon="business-outline"
+          selected={effectiveScope === 'city'}
+          onPress={() => setScope('city')}
+        />
+        {user?.quartier ? (
+          <Chip
+            label={user.quartier}
+            icon="home-outline"
+            selected={effectiveScope === 'quartier'}
+            onPress={() => setScope('quartier')}
+          />
+        ) : (
+          <Chip
+            label="Choisir mon quartier"
+            icon="home-outline"
+            kind="action"
+            onPress={() => setShowQuartier(true)}
+          />
+        )}
+        <Chip
+          label={locating ? 'Localisation…' : `Près de moi`}
+          icon="navigate-outline"
+          selected={effectiveScope === 'near'}
+          disabled={locating}
+          onPress={pickNearMe}
+        />
+      </ScrollView>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -131,7 +193,15 @@ export default function HomeScreen() {
       )}
 
       <AppText variant="h3" style={s.sectionTitle} accessibilityRole="header">
-        {category ? categoryLabel(category) : user?.city ? `Annonces à ${user.city}` : 'Annonces récentes'}
+        {effectiveScope === 'near'
+          ? `${category ? categoryLabel(category) : 'Annonces'} à moins de ${NEAR_RADIUS_KM} km`
+          : effectiveScope === 'quartier'
+            ? `${category ? categoryLabel(category) : 'Annonces'} à ${user?.quartier}`
+            : category
+              ? categoryLabel(category)
+              : user?.city
+                ? `Annonces à ${user.city}`
+                : 'Annonces récentes'}
       </AppText>
     </View>
   );
@@ -200,16 +270,30 @@ export default function HomeScreen() {
           ListEmptyComponent={
             <EmptyState
               icon="pricetags-outline"
-              title={category ? 'Rien dans cette catégorie' : 'Aucune annonce dans votre ville'}
+              title={
+                category
+                  ? 'Rien dans cette catégorie'
+                  : effectiveScope === 'near'
+                    ? 'Rien près de vous'
+                    : effectiveScope === 'quartier'
+                      ? 'Aucune annonce dans votre quartier'
+                      : 'Aucune annonce dans votre ville'
+              }
               message={
                 category
                   ? 'Essayez une autre catégorie, ou soyez le premier à y vendre.'
-                  : 'Soyez le premier à vendre près de chez vous.'
+                  : effectiveScope === 'near'
+                    ? `Aucune annonce localisée à moins de ${NEAR_RADIUS_KM} km.`
+                    : 'Soyez le premier à vendre près de chez vous.'
               }
               actionLabel="Publier une annonce"
               onAction={() => router.push('/post-item')}
-              secondaryLabel={category ? 'Voir toutes les catégories' : undefined}
-              onSecondary={category ? () => setCategory(null) : undefined}
+              secondaryLabel={
+                category ? 'Voir toutes les catégories' : effectiveScope !== 'city' ? 'Voir toute la ville' : undefined
+              }
+              onSecondary={
+                category ? () => setCategory(null) : effectiveScope !== 'city' ? () => setScope('city') : undefined
+              }
             />
           }
         />

@@ -1,5 +1,5 @@
 // app/signup.tsx — Sign up with phone + SMS code (Firebase)
-import { useRouter } from 'expo-router';
+import { Href, useRouter } from 'expo-router';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import AppText from '@/components/atoms/AppText';
@@ -37,7 +37,16 @@ export default function SignupScreen() {
         }}
       />
       <AppText variant="caption" color="inkSubtle" align="center" style={styles.legal}>
-        En continuant, vous acceptez les conditions d’utilisation de BonDeal.
+        En continuant, vous acceptez les{' '}
+        <AppText
+          variant="caption"
+          color="brandStrong"
+          accessibilityRole="link"
+          onPress={() => router.push({ pathname: '/terms-and-conditions', params: { mode: 'read' } } as Href)}
+          style={styles.link}>
+          conditions d’utilisation et la politique de confidentialité
+        </AppText>{' '}
+        de BonDeal.
       </AppText>
     </AuthScaffold>
   );
@@ -47,4 +56,5 @@ const styles = StyleSheet.create({
   footerCol: { alignItems: 'center' },
   footer: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' },
   legal: { marginTop: 12 },
+  link: { textDecorationLine: 'underline' },
 });

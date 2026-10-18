@@ -21,6 +21,7 @@ import {
 import { coachAdvice, counterOffer, openNegotiation } from '@/lib/api/negotiations';
 import { postByIdQuery } from '@/lib/api/posts';
 import { conversationQuery } from '@/lib/api/conversations';
+import { blockedMessage } from '@/lib/api/safety';
 import { ApiError } from '@/lib/api';
 import { formatAmount, formatNumber } from '@/lib/format';
 import { haptics } from '@/lib/haptics';
@@ -105,6 +106,12 @@ export default function MakeOfferScreen() {
       }
     },
     onError: (e: any) => {
+      // 403 between blocked users: show the server's French message as is.
+      const blocked = blockedMessage(e);
+      if (blocked) {
+        showToast.error('Offre impossible', blocked);
+        return;
+      }
       showToast.error('Échec', e?.message || 'Veuillez réessayer.');
     },
   });

@@ -1,13 +1,16 @@
 // app/settings.tsx — Paramètres
 // Grouped list (Hick: few groups, one decision per row). Logout and account
 // deletion are both reachable in ≤ 3 taps (ethics guardrail §2.4).
-import { useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Href, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, Linking, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
 import { config } from '@/utils/config';
+import { ApiError } from '@/lib/api';
+import { createExportUrl, deleteAccount } from '@/lib/api/account';
+import { clearSellDraft } from '@/lib/sellDraft';
 import { ThemePreference, useTheme } from '@/theme';
 import {
   AppText,
@@ -19,6 +22,7 @@ import {
   SegmentedControl,
   Sheet,
   showToast,
+  TextField,
 } from '@/components/ui';
 
 export const SUPPORT_EMAIL = 'support@bondeal.com';
@@ -37,6 +41,8 @@ export default function SettingsScreen() {
   const [quartierOpen, setQuartierOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [confirmText, setConfirmText] = useState('');
+  const confirmOk = confirmText.trim().toUpperCase() === 'SUPPRIMER';
 
   // Logout (MB-AUTH-05): signOut() unregisters this device's push token
   // (DELETE /push_tokens/{token}) then signs out of Firebase, whose listener
@@ -63,18 +69,46 @@ export default function SettingsScreen() {
     ]);
   };
 
-  // TODO(backend): no account-deletion endpoint yet (R7 / MB-AUTH-08). Until it
-  // exists, the request is sent to support by e-mail, prefilled with the
-  // account identifiers so it can be processed without back-and-forth.
-  const requestDeletion = () => {
-    const subject = encodeURIComponent('Demande de suppression de compte');
-    const body = encodeURIComponent(
-      `Bonjour,\n\nJe souhaite supprimer mon compte BonDeal et les données associées.\n\nNom d'utilisateur : ${user?.username ?? ''}\nIdentifiant : ${user?.id ?? ''}\nTéléphone : ${user?.phone_number ?? ''}\n\nMerci.`,
-    );
-    Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`).catch(() =>
-      showToast.error('Aucune application e-mail', `Écrivez-nous à ${SUPPORT_EMAIL}`),
-    );
-    setDeleteOpen(false);
+  // Account deletion (R7 / MB-AUTH-08): DELETE /auth/me anonymises the
+  // account at once (the token stops working). We then sign out locally only
+  // — no server call can succeed any more — and drop every cache and the
+  // local sell draft so nothing of the account stays on the phone.
+  const deleteMut = useMutation({
+    mutationFn: deleteAccount,
+    onSuccess: async () => {
+      setDeleteOpen(false);
+      await qc.cancelQueries();
+      qc.clear();
+      try {
+        await signOut({ local: true });
+      } catch {
+        // the server side is already done
+      }
+      clearSellDraft(qc);
+      router.replace('/login');
+      showToast.success('Compte supprimé', 'Vos données ont été effacées. À bientôt sur BonDeal.');
+    },
+    onError: (e) =>
+      showToast.error(
+        'Suppression impossible',
+        e instanceof ApiError && e.status === 400 ? 'Tapez SUPPRIMER pour confirmer.' : 'Vérifiez votre connexion et réessayez.',
+      ),
+  });
+
+  const exportMut = useMutation({
+    mutationFn: createExportUrl,
+    onSuccess: (url) =>
+      Linking.openURL(url).catch(() => showToast.error('Aucun navigateur', 'Impossible d’ouvrir le lien.')),
+    onError: (e) =>
+      showToast.error(
+        'Export impossible',
+        e instanceof ApiError && e.status === 429 ? 'Trop de demandes. Réessayez dans une heure.' : 'Réessayez.',
+      ),
+  });
+
+  const openDelete = () => {
+    setConfirmText('');
+    setDeleteOpen(true);
   };
 
   return (
@@ -133,7 +167,7 @@ export default function SettingsScreen() {
           <ListRow
             icon="trash-outline"
             title="Supprimer mon compte"
-            onPress={() => setDeleteOpen(true)}
+            onPress={openDelete}
             destructive
             chevron={false}
             last
@@ -153,29 +187,54 @@ export default function SettingsScreen() {
         title="Supprimer votre compte"
         footer={
           <View style={styles.sheetActions}>
-            <Button label="Envoyer la demande" variant="danger" icon="mail-outline" onPress={requestDeletion} fullWidth />
+            <Button
+              label="Supprimer définitivement"
+              variant="danger"
+              icon="trash-outline"
+              onPress={() => deleteMut.mutate()}
+              loading={deleteMut.isPending}
+              disabled={!confirmOk}
+              disabledReason={!confirmOk ? 'Tapez SUPPRIMER pour confirmer.' : undefined}
+              fullWidth
+            />
             <Button label="Garder mon compte" variant="ghost" onPress={() => setDeleteOpen(false)} fullWidth />
           </View>
         }>
         <AppText variant="body" style={styles.para}>
-          La suppression est définitive. Elle efface :
+          La suppression est immédiate et définitive. Elle efface :
         </AppText>
         {[
-          'votre profil (nom, photo, quartier, téléphone) ;',
-          'vos annonces et leurs photos ;',
-          'vos favoris et vos notifications.',
+          'votre profil : nom, photo, quartier, ville, e-mail et numéro de téléphone ;',
+          'vos annonces (retirées du site) et toutes leurs photos ;',
+          'vos favoris, vos notifications, vos préférences et vos blocages.',
         ].map((line) => (
           <AppText key={line} variant="small" color="inkMuted">
             • {line}
           </AppText>
         ))}
         <AppText variant="small" color="inkMuted" style={styles.para}>
-          Certaines données liées à des transactions peuvent être conservées si la loi l’exige.
+          Vos conversations et transactions restent visibles par l’autre membre, sous un nom anonyme,
+          pour qu’il garde son historique. Les négociations en cours sont annulées. Votre numéro pourra servir à
+          créer un nouveau compte.
         </AppText>
-        <AppText variant="small" style={styles.para}>
-          Pour l’instant, la suppression est traitée par notre équipe : un e-mail pré-rempli va
-          s’ouvrir, il suffit de l’envoyer. Nous vous confirmerons la suppression par e-mail.
-        </AppText>
+        <Button
+          label={exportMut.isPending ? 'Préparation…' : 'Télécharger mes données avant'}
+          icon="download-outline"
+          variant="secondary"
+          size="sm"
+          onPress={() => exportMut.mutate()}
+          loading={exportMut.isPending}
+          style={styles.exportBtn}
+        />
+        <TextField
+          label="Pour confirmer, tapez SUPPRIMER"
+          value={confirmText}
+          onChangeText={setConfirmText}
+          autoCapitalize="characters"
+          autoCorrect={false}
+          placeholder="SUPPRIMER"
+          containerStyle={styles.para}
+        />
       </Sheet>
     </SafeAreaView>
   );
@@ -188,4 +247,5 @@ const styles = StyleSheet.create({
   themeLabel: { marginBottom: 2 },
   sheetActions: { gap: 4 },
   para: { marginTop: 12 },
+  exportBtn: { alignSelf: 'flex-start', marginTop: 12 },
 });

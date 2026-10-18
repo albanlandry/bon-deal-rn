@@ -1,30 +1,20 @@
-// app/notification-settings.tsx — Notifications
-// TODO(backend): no endpoint for notification preferences yet (MB-NOT-04);
-// settings are stored locally only (AsyncStorage) and do not yet filter the
-// pushes the server sends.
-// Defaults (default effect, §1.5 / §2.3): messages and offers ON, marketing OFF.
+// app/notification-settings.tsx — Notifications (MB-NOT-04)
+// Stored on the server (GET/PUT /auth/me/preferences), so they filter the
+// pushes BonDeal sends to every device. In-app notifications are always
+// kept. Defaults (default effect, §1.5 / §2.3): everything ON except
+// marketing. Moderation messages are always delivered.
+import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { ScrollView, StyleSheet } from 'react-native';
+import { Linking, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/theme';
-import { ScreenHeader } from '@/components/ui';
-import SettingsLocalToggles, { LocalToggleGroup } from '@/components/organisms/SettingsLocalToggles';
+import { AppText, Button, ErrorState, ListGroup, ListRow, ScreenHeader, Skeleton } from '@/components/ui';
+import { usePreferences } from '@/lib/usePreferences';
+import type { BdNotificationPrefs } from '@/constants/types';
 
-export const NOTIFICATION_SETTINGS_KEY = 'bondeal.settings.notifications.v1';
+type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
-const GROUPS: LocalToggleGroup[] = [
-  {
-    title: 'Général',
-    items: [
-      {
-        id: 'push',
-        title: 'Notifications push',
-        description: 'Recevoir des notifications sur cet appareil',
-        icon: 'notifications-outline',
-        defaultValue: true,
-      },
-    ],
-  },
+const GROUPS: { title: string; items: { id: keyof BdNotificationPrefs; title: string; description: string; icon: IconName }[] }[] = [
   {
     title: 'Échanges',
     items: [
@@ -33,45 +23,29 @@ const GROUPS: LocalToggleGroup[] = [
         title: 'Nouveaux messages',
         description: 'Quand un acheteur ou un vendeur vous écrit',
         icon: 'chatbubble-outline',
-        defaultValue: true,
-        dependsOn: 'push',
       },
       {
         id: 'offers',
         title: 'Offres et négociations',
-        description: 'Offres reçues, contre-offres, offres acceptées',
+        description: 'Offres reçues, contre-offres, offres acceptées ou refusées',
         icon: 'pricetag-outline',
-        defaultValue: true,
-        dependsOn: 'push',
-      },
-      {
-        id: 'sales',
-        title: 'Ventes et transactions',
-        description: 'Quand une vente est confirmée ou annulée',
-        icon: 'checkmark-done-outline',
-        defaultValue: true,
-        dependsOn: 'push',
       },
     ],
   },
   {
-    title: 'Mes annonces',
+    title: 'Mes annonces et recherches',
     items: [
       {
-        id: 'likes',
-        title: 'Favoris sur mes annonces',
-        description: 'Quand quelqu’un ajoute votre annonce à ses favoris',
-        icon: 'heart-outline',
-        defaultValue: true,
-        dependsOn: 'push',
+        id: 'listings',
+        title: 'Expiration de mes annonces',
+        description: 'Trois jours avant l’expiration, puis à l’expiration',
+        icon: 'hourglass-outline',
       },
       {
-        id: 'views',
-        title: 'Vues sur mes annonces',
-        description: 'Résumé des consultations de vos annonces',
-        icon: 'eye-outline',
-        defaultValue: false,
-        dependsOn: 'push',
+        id: 'saved_searches',
+        title: 'Alertes de recherche',
+        description: 'Nouvelles annonces qui correspondent à vos recherches enregistrées',
+        icon: 'bookmark-outline',
       },
     ],
   },
@@ -83,8 +57,6 @@ const GROUPS: LocalToggleGroup[] = [
         title: 'Actualités et bons plans',
         description: 'Nouveautés et conseils de BonDeal. Désactivé par défaut.',
         icon: 'megaphone-outline',
-        defaultValue: false,
-        dependsOn: 'push',
       },
     ],
   },
@@ -92,11 +64,51 @@ const GROUPS: LocalToggleGroup[] = [
 
 export default function NotificationSettingsScreen() {
   const t = useTheme();
+  const { prefs, isLoading, isError, refetch, setNotification } = usePreferences();
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: t.colors.canvas }]}>
       <ScreenHeader title="Notifications" />
       <ScrollView contentContainerStyle={styles.content}>
-        <SettingsLocalToggles storageKey={NOTIFICATION_SETTINGS_KEY} groups={GROUPS} />
+        {isLoading ? (
+          <View style={styles.loading}>
+            {[0, 1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} height={56} radius={t.radius.md} />
+            ))}
+          </View>
+        ) : isError || !prefs ? (
+          <ErrorState message="Impossible de charger vos réglages." onRetry={() => refetch()} />
+        ) : (
+          GROUPS.map((g) => (
+            <ListGroup key={g.title} title={g.title}>
+              {g.items.map((item, idx) => (
+                <ListRow
+                  key={item.id}
+                  icon={item.icon}
+                  title={item.title}
+                  subtitle={item.description}
+                  toggle={{ value: !!prefs.notifications[item.id], onChange: (v) => setNotification(item.id, v) }}
+                  last={idx === g.items.length - 1}
+                />
+              ))}
+            </ListGroup>
+          ))
+        )}
+        <View style={styles.note}>
+          <Ionicons name="information-circle-outline" size={16} color={t.colors.inkMuted} />
+          <AppText variant="caption" color="inkMuted" style={styles.flex}>
+            Ces choix s’appliquent aux notifications push sur tous vos appareils. Tout reste visible dans
+            l’onglet Notifications de l’application. Les messages de l’équipe de modération sont toujours envoyés.
+          </AppText>
+        </View>
+        <Button
+          label="Autorisations du téléphone"
+          icon="phone-portrait-outline"
+          variant="ghost"
+          size="sm"
+          onPress={() => Linking.openSettings().catch(() => {})}
+          style={styles.system}
+        />
       </ScrollView>
     </SafeAreaView>
   );
@@ -105,4 +117,8 @@ export default function NotificationSettingsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: 16, paddingBottom: 32 },
+  loading: { gap: 12 },
+  note: { flexDirection: 'row', gap: 8, alignItems: 'flex-start', paddingHorizontal: 4 },
+  flex: { flex: 1 },
+  system: { alignSelf: 'flex-start', marginTop: 8 },
 });

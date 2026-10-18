@@ -1,20 +1,19 @@
-// app/terms-and-conditions.tsx — Conditions d'utilisation
-// Themed restyle; content unchanged. Two modes:
-//  - signup flow (default): consent checklist + "Accepter et continuer" → /verify-number
-//  - `?mode=read` (from Settings / Help / About): read-only, no footer.
-// Ethics fix (§2.3): analytics and marketing consents are optional toggles,
-// default OFF, persisted locally. Only the terms themselves (phone + profile
-// data needed to run the service) are required. "Refuser" is always available.
-// TODO(backend): no endpoint to record consent choices/versions yet (MB-AUTH-03);
-// optional consents are stored locally only (AsyncStorage).
+// app/terms-and-conditions.tsx — Conditions d'utilisation (read-only)
+// What BonDeal does with your data, the guarantees, and the current legal
+// versions (GET /legal). Acceptance is recorded on the server: new members
+// accept at signup, and anyone who still has to accept the current version
+// is sent to the blocking /consent screen before the tabs.
+// Marketing messages are a notification preference (Paramètres ›
+// Notifications), off by default.
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { Href, useRouter } from 'expo-router';
+import React from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/theme';
 import { AppText, Button, Card, ScreenHeader } from '@/components/ui';
+import { legalVersionsQuery } from '@/lib/api/account';
 
 interface ConsentItemProps {
   title: string;
@@ -68,61 +67,16 @@ function ConsentItem({ title, description, isChecked, onToggle, disabled }: Cons
 const GUARANTEES: { icon: React.ComponentProps<typeof Ionicons>['name']; text: string }[] = [
   { icon: 'shield-checkmark', text: 'Vos données sont cryptées et stockées en toute sécurité' },
   { icon: 'refresh', text: 'Vous pouvez modifier vos préférences à tout moment' },
-  { icon: 'trash', text: 'Vous pouvez supprimer vos données personnelles à tout moment' },
+  { icon: 'download', text: 'Vous pouvez télécharger une copie de vos données (Paramètres › Confidentialité)' },
+  { icon: 'trash', text: 'Vous pouvez supprimer votre compte et vos données à tout moment' },
   { icon: 'lock-closed', text: 'Nous ne vendons jamais vos données à des tiers' },
   { icon: 'globe', text: 'Conformité RGPD et standards internationaux de protection des données' },
 ];
 
-export const CONSENT_SETTINGS_KEY = 'bondeal.settings.consents.v1';
-
 export default function TermsAndConditionsScreen() {
   const router = useRouter();
   const t = useTheme();
-  const { mode } = useLocalSearchParams<{ mode?: string }>();
-  const readOnly = mode === 'read';
-  const [consents, setConsents] = useState({
-    phoneNumber: false,
-    personalData: false,
-    analytics: false,
-    marketing: false,
-  });
-
-  // Load the saved optional consents (analytics / marketing, default OFF).
-  useEffect(() => {
-    AsyncStorage.getItem(CONSENT_SETTINGS_KEY)
-      .then((raw) => {
-        if (!raw) return;
-        const saved = JSON.parse(raw);
-        setConsents((prev) => ({
-          ...prev,
-          analytics: !!saved?.analytics,
-          marketing: !!saved?.marketing,
-        }));
-      })
-      .catch(() => {});
-  }, []);
-
-  const handleConsentToggle = (key: keyof typeof consents) => {
-    setConsents((prev) => {
-      const next = { ...prev, [key]: !prev[key] };
-      if (key === 'analytics' || key === 'marketing') {
-        AsyncStorage.setItem(
-          CONSENT_SETTINGS_KEY,
-          JSON.stringify({ analytics: next.analytics, marketing: next.marketing }),
-        ).catch(() => {});
-      }
-      return next;
-    });
-  };
-
-  // Only the terms themselves are required; analytics and marketing are optional.
-  const requiredAccepted = consents.phoneNumber && consents.personalData;
-
-  const leave = () => (router.canGoBack() ? router.back() : router.replace('/login'));
-
-  const handleAccept = () => {
-    if (requiredAccepted) leave();
-  };
+  const legal = useQuery(legalVersionsQuery());
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: t.colors.canvas }]}>
@@ -134,43 +88,49 @@ export default function TermsAndConditionsScreen() {
             <Ionicons name="document-text" size={40} color={t.colors.brandStrong} />
           </View>
           <AppText variant="h2" align="center">
-            Bienvenue sur BonDeal
+            BonDeal et vos données
           </AppText>
           <AppText variant="small" color="inkMuted" align="center">
-            Pour offrir la meilleure expérience possible, nous avons besoin de votre consentement
-            concernant l'utilisation de vos données personnelles.
+            Ce que nous utilisons pour faire fonctionner BonDeal, et ce que nous vous garantissons.
           </AppText>
+          {legal.data && (
+            <AppText variant="caption" color="inkSubtle" align="center">
+              Conditions v{legal.data.terms_version} · Confidentialité v{legal.data.privacy_version}
+            </AppText>
+          )}
         </View>
 
         <AppText variant="h3" style={styles.sectionTitle}>
-          {readOnly ? 'Utilisation de vos données' : 'Votre consentement'}
+          Utilisation de vos données
         </AppText>
         <View style={styles.consents}>
           <ConsentItem
             title="Numéro de téléphone"
-            description="Nous utilisons votre numéro de téléphone pour vous authentifier, envoyer des codes de vérification et faciliter les échanges entre acheteurs et vendeurs."
-            isChecked={consents.phoneNumber}
-            onToggle={() => handleConsentToggle('phoneNumber')}
-            disabled={readOnly}
+            description="Nous utilisons votre numéro de téléphone pour vous authentifier et sécuriser votre compte. Il n'est jamais affiché aux autres membres."
+            isChecked
+            onToggle={() => {}}
+            disabled
           />
           <ConsentItem
-            title="Données personnelles"
-            description="Votre nom, photo de profil et informations de profil sont utilisés pour créer votre identité sur la plateforme et faciliter la confiance entre utilisateurs."
-            isChecked={consents.personalData}
-            onToggle={() => handleConsentToggle('personalData')}
-            disabled={readOnly}
+            title="Données de profil"
+            description="Votre pseudo, votre photo, votre ville et votre quartier construisent votre identité sur la plateforme et la confiance entre membres. Vous choisissez ce qui est visible dans Paramètres › Confidentialité."
+            isChecked
+            onToggle={() => {}}
+            disabled
           />
           <ConsentItem
-            title="Données d'analyse (optionnel)"
-            description="Nous collectons des données d'utilisation pour améliorer notre service, détecter les bugs et optimiser les fonctionnalités de l'application."
-            isChecked={consents.analytics}
-            onToggle={() => handleConsentToggle('analytics')}
+            title="Annonces, messages et transactions"
+            description="Ils sont conservés pour faire fonctionner le service, vous protéger en cas de litige et lutter contre les arnaques (modération des signalements)."
+            isChecked
+            onToggle={() => {}}
+            disabled
           />
           <ConsentItem
-            title="Communication marketing (optionnel)"
-            description="Recevez des notifications sur les meilleures offres, promotions exclusives et nouveautés BonDeal. Vous pouvez vous désabonner à tout moment."
-            isChecked={consents.marketing}
-            onToggle={() => handleConsentToggle('marketing')}
+            title="Communication marketing (facultatif)"
+            description="Désactivée par défaut. Vous pouvez l'activer ou la couper à tout moment dans Paramètres › Notifications."
+            isChecked={false}
+            onToggle={() => {}}
+            disabled
           />
         </View>
 
@@ -187,28 +147,14 @@ export default function TermsAndConditionsScreen() {
             </View>
           ))}
         </Card>
+        <Button
+          label="Gérer ma confidentialité"
+          icon="shield-outline"
+          variant="secondary"
+          onPress={() => router.push('/privacy-settings' as Href)}
+          style={styles.manage}
+        />
       </ScrollView>
-
-      {!readOnly && (
-        <View style={[styles.footer, { backgroundColor: t.colors.surface, borderTopColor: t.colors.line }]}>
-          <Button label="Refuser" variant="secondary" onPress={leave} style={styles.flex} />
-          <Button
-            label="Accepter"
-            onPress={handleAccept}
-            disabled={!requiredAccepted}
-            style={styles.flex2}
-          />
-        </View>
-      )}
-      {!readOnly && !requiredAccepted && (
-        <AppText
-          variant="caption"
-          color="inkSubtle"
-          align="center"
-          style={[styles.reason, { backgroundColor: t.colors.surface }]}>
-          Cochez les deux premières cases pour accepter les conditions.
-        </AppText>
-      )}
     </SafeAreaView>
   );
 }
@@ -223,8 +169,6 @@ const styles = StyleSheet.create({
   consentItem: { flexDirection: 'row', gap: 12, padding: 14, borderWidth: 1, minHeight: 56 },
   checkbox: { width: 26, height: 26, borderRadius: 6, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginTop: 2 },
   bullet: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 6 },
-  footer: { flexDirection: 'row', gap: 12, padding: 16, borderTopWidth: StyleSheet.hairlineWidth },
-  reason: { paddingBottom: 12 },
+  manage: { marginTop: 16 },
   flex: { flex: 1 },
-  flex2: { flex: 2 },
 });

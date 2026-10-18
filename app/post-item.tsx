@@ -11,6 +11,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+    ActivityIndicator,
     Alert,
     KeyboardAvoidingView,
     Platform,
@@ -46,12 +47,15 @@ import SellOptionSheet from '@/components/molecules/SellOptionSheet';
 import SellCelebration from '@/components/organisms/SellCelebration';
 import { ApiError } from '@/lib/api';
 import {
+    attachPostImages,
     createPost,
     updatePost,
     deletePostImage,
     postByIdQuery,
     sharePost,
 } from '@/lib/api/posts';
+import { appConfigQuery } from '@/lib/api/account';
+import { uploadPhoto, UploadError } from '@/lib/api/uploads';
 import { quartiersQuery } from '@/lib/api/quartiers';
 import { uploadImages, aiDraft, priceSuggestion } from '@/lib/api/ai';
 import {
@@ -84,7 +88,7 @@ interface ListingForm {
     exchangeItems: string;   // csv, "Contre quoi ?"
     pickupQuartier: string;
     pickupNote: string;
-    images: string[];        // new local URIs to upload (create only)
+    images: string[];        // new local URIs (uploaded directly to storage as soon as picked)
 }
 
 const EMPTY_FORM: ListingForm = {
@@ -103,7 +107,29 @@ const EMPTY_FORM: ListingForm = {
 };
 
 const STEPS = ['Photos', 'Détails', 'Prix', 'Aperçu'];
-const MAX_PHOTOS = 10;
+// Fallback until GET /app-config answers (the server's platform setting).
+const DEFAULT_MAX_PHOTOS = 5;
+
+/** Per-photo direct-upload state, keyed by local URI. */
+interface UploadState {
+    status: 'uploading' | 'done' | 'error';
+    progress: number;
+    key?: string;
+    error?: string;
+}
+
+function uploadErrMessage(e: unknown): string {
+    if (e instanceof UploadError) return e.message;
+    if (e instanceof ApiError) {
+        if (e.status === 400 && /at most/i.test(e.message)) return 'Nombre maximal de photos atteint.';
+        if (e.status === 413) return 'Photo trop lourde.';
+        if (e.status === 429) return 'Trop d’envois, réessayez plus tard.';
+        if (e.status === 503) return 'Envoi de photos indisponible pour le moment.';
+        if (e.status === 401) return 'Session expirée. Reconnectez-vous.';
+        return e.message;
+    }
+    return 'Échec de l’envoi. Vérifiez votre connexion.';
+}
 
 const AI_STEPS = [
     'Analyse des photos…',
@@ -217,6 +243,7 @@ export default function PostItemScreen() {
     const styles = useStyles(makeStyles);
     const { user } = useAuth();
     const queryClient = useQueryClient();
+    const MAX_PHOTOS = useQuery(appConfigQuery()).data?.max_images ?? DEFAULT_MAX_PHOTOS;
 
     const [step, setStep] = useState(0);
     const [form, setForm] = useState<ListingForm>(EMPTY_FORM);
@@ -231,9 +258,21 @@ export default function PostItemScreen() {
     const [priceSug, setPriceSug] = useState<BdPriceSuggestion | null>(null);
     const priceSugKey = useRef<string>('');
     const [published, setPublished] = useState<BdPost | null>(null);
+    const [duplicateOf, setDuplicateOf] = useState<number | null>(null);
+    const [uploads, setUploads] = useState<Record<string, UploadState>>({});
+    const uploadsRef = useRef<Record<string, UploadState>>({});
+    uploadsRef.current = uploads;
+    const assetMeta = useRef<Record<string, { mimeType?: string | null; size?: number | null }>>({});
+    const startedUploads = useRef<Set<string>>(new Set());
+    const [pendingSubmit, setPendingSubmit] = useState<null | 'draft' | 'published'>(null);
 
     // Edit mode: load the post to prefill, and pull the city's quartiers.
-    const editQuery = useQuery(postByIdQuery(isEdit ? editId : 0));
+    // Polls while a freshly attached photo is still being processed by the worker.
+    const editQuery = useQuery({
+        ...postByIdQuery(isEdit ? editId : 0),
+        refetchInterval: (q) =>
+            q.state.data?.images?.some((im) => im.status === 'processing') ? 2000 : false,
+    });
     const quartiersData = useQuery(quartiersQuery(user?.city));
     const quartierOptions = (quartiersData.data?.quartiers ?? []).map((q) => ({
         value: q.name,
@@ -257,9 +296,13 @@ export default function PostItemScreen() {
             pickupNote: post.pickup_location_note ?? '',
             images: [],
         });
-        setExistingImages(post.images ?? []);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [editQuery.data?.id, isEdit]);
+
+    // Keep the server photos in sync (new attachments, processing → ready).
+    useEffect(() => {
+        if (isEdit && editQuery.data) setExistingImages(editQuery.data.images ?? []);
+    }, [editQuery.data, isEdit]);
 
     // Create mode: restore the autosaved draft (Zeigarnik).
     useEffect(() => {
@@ -355,9 +398,9 @@ export default function PostItemScreen() {
         if (form.ageBucket) fd.append('age_bucket', form.ageBucket);
         if (form.pickupQuartier) fd.append('pickup_quartier', form.pickupQuartier);
         if (form.pickupNote.trim()) fd.append('pickup_location_note', form.pickupNote.trim());
-        form.images.forEach((uri, i) =>
-            fd.append('images', { uri, name: `photo_${i}.jpg`, type: 'image/jpeg' } as any),
-        );
+        // Photos were already uploaded straight to storage; attach their keys.
+        const keys = form.images.map((uri) => uploadsRef.current[uri]?.key).filter(Boolean);
+        if (keys.length) fd.append('image_keys', keys.join(','));
         return fd;
     };
 
@@ -435,14 +478,20 @@ export default function PostItemScreen() {
 
     const createMut = useMutation({
         mutationFn: (state: 'draft' | 'published') => createPost(buildFormData(state)),
-        onSuccess: (post, state) => {
+        onSuccess: ({ post, possibleDuplicateOf }, state) => {
             queryClient.invalidateQueries({ queryKey: ['posts'] });
             clearSellDraft(queryClient);
             if (state === 'published') {
                 haptics.success();
+                setDuplicateOf(possibleDuplicateOf);
                 setPublished(post);
             } else {
-                showToast.success('Brouillon enregistré', 'Retrouvez-le dans « Mes annonces ».');
+                showToast.success(
+                    'Brouillon enregistré',
+                    possibleDuplicateOf
+                        ? 'Attention : vous avez déjà publié une annonce similaire.'
+                        : 'Retrouvez-le dans « Mes annonces ».',
+                );
                 router.back();
             }
         },
@@ -471,7 +520,74 @@ export default function PostItemScreen() {
         onError: (e) => showToast.error('Échec', errMessage(e)),
     });
 
-    const saving = createMut.isPending || updateMut.isPending;
+    // --- direct photo uploads ---------------------------------------------------
+
+    const patchUpload = (uri: string, patch: Partial<UploadState>) =>
+        setUploads((prev) => ({
+            ...prev,
+            [uri]: { ...(prev[uri] ?? { status: 'uploading', progress: 0 }), ...patch },
+        }));
+
+    /** Edit mode: attach an uploaded key to the post, then show the server copy. */
+    const attachToPost = async (uri: string, key: string) => {
+        await attachPostImages(editId, [key]);
+        await editQuery.refetch();
+        queryClient.invalidateQueries({ queryKey: ['posts'] });
+        setForm((prev) => ({ ...prev, images: prev.images.filter((u) => u !== uri) }));
+    };
+
+    const startUpload = async (uri: string) => {
+        startedUploads.current.add(uri);
+        const existing = uploadsRef.current[uri];
+        // Retry after a failed attach (edit): the file is already in storage.
+        if (isEdit && existing?.key) {
+            patchUpload(uri, { status: 'uploading', progress: 1, error: undefined });
+            try {
+                await attachToPost(uri, existing.key);
+            } catch (e) {
+                patchUpload(uri, { status: 'error', error: uploadErrMessage(e) });
+            }
+            return;
+        }
+        patchUpload(uri, { status: 'uploading', progress: 0, error: undefined, key: undefined });
+        try {
+            const meta = assetMeta.current[uri] ?? {};
+            let last = 0;
+            const key = await uploadPhoto(uri, {
+                mimeType: meta.mimeType,
+                size: meta.size,
+                onProgress: (f) => {
+                    // ~5 % steps are enough for the ring and spare re-renders.
+                    if (f === 1 || f - last >= 0.05) {
+                        last = f;
+                        patchUpload(uri, { progress: f });
+                    }
+                },
+            });
+            if (isEdit) {
+                patchUpload(uri, { key, progress: 1 });
+                await attachToPost(uri, key);
+            }
+            patchUpload(uri, { status: 'done', progress: 1, key });
+        } catch (e) {
+            patchUpload(uri, { status: 'error', error: uploadErrMessage(e) });
+        }
+    };
+
+    // Upload every local photo once: freshly picked or restored from a draft.
+    useEffect(() => {
+        if (!draftReady) return;
+        form.images.forEach((uri) => {
+            if (!startedUploads.current.has(uri)) startUpload(uri);
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [form.images, draftReady]);
+
+    const uploadStates = form.images.map((uri) => uploads[uri]);
+    const uploadingCount = uploadStates.filter((u) => !u || u.status === 'uploading').length;
+    const failedCount = uploadStates.filter((u) => u?.status === 'error').length;
+
+    const saving = createMut.isPending || updateMut.isPending || !!pendingSubmit;
 
     // --- AI assist (W6.2) ---------------------------------------------------
 
@@ -564,8 +680,11 @@ export default function PostItemScreen() {
                       quality: 0.8,
                   });
             if (!result.canceled && result.assets[0]) {
+                const asset = result.assets[0];
                 haptics.light();
-                updateForm('images', [...form.images, result.assets[0].uri]);
+                assetMeta.current[asset.uri] = { mimeType: asset.mimeType, size: asset.fileSize };
+                setForm((prev) => ({ ...prev, images: [...prev.images, asset.uri] }));
+                if (errors.images) setErrors((prev) => ({ ...prev, images: '' }));
             }
         } catch {
             showToast.error('Erreur', 'Impossible d’accéder aux photos.');
@@ -573,11 +692,6 @@ export default function PostItemScreen() {
     };
 
     const handleAddImage = () => {
-        // Adding photos while editing is deferred (backend accepts new files only on create).
-        if (isEdit) {
-            showToast.info('Bientôt disponible', 'Ajout de photos en modification bientôt disponible.');
-            return;
-        }
         if (photoCount >= MAX_PHOTOS) {
             showToast.error('Limite atteinte', `Maximum ${MAX_PHOTOS} photos.`);
             return;
@@ -631,9 +745,37 @@ export default function PostItemScreen() {
             showToast.error('Annonce incomplète', Object.values(needed)[0]);
             return;
         }
+        if (failedCount > 0) {
+            setStep(0);
+            showToast.error(
+                failedCount > 1 ? `${failedCount} photos non envoyées` : 'Une photo n’a pas été envoyée',
+                'Touchez « Réessayer » sur la photo, ou retirez-la.',
+            );
+            return;
+        }
+        if (uploadingCount > 0) {
+            // Publish as soon as the last photo is in storage.
+            setPendingSubmit(state);
+            showToast.info('Envoi des photos…', 'L’annonce sera enregistrée dès la fin de l’envoi.');
+            return;
+        }
         if (isEdit) updateMut.mutate(state);
         else createMut.mutate(state);
     };
+
+    useEffect(() => {
+        if (!pendingSubmit || uploadingCount > 0) return;
+        const state = pendingSubmit;
+        setPendingSubmit(null);
+        if (failedCount > 0) {
+            setStep(0);
+            showToast.error('Envoi des photos incomplet', 'Touchez « Réessayer » sur la photo, ou retirez-la.');
+            return;
+        }
+        if (isEdit) updateMut.mutate(state);
+        else createMut.mutate(state);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pendingSubmit, uploadingCount, failedCount]);
 
     const handleShare = async () => {
         if (!published) return;
@@ -718,35 +860,103 @@ export default function PostItemScreen() {
                 title={isEdit ? 'Vos photos' : 'Commencez par une photo'}
                 subtitle={
                     isEdit
-                        ? 'Retirez les photos qui ne conviennent plus.'
+                        ? 'Ajoutez ou retirez des photos. Les nouvelles sont enregistrées aussitôt.'
                         : 'Une seule suffit pour démarrer : l’IA s’occupe du reste. La première photo sera la couverture.'
                 }
             />
             <View style={styles.photoGrid}>
-                {existingImages.map((img, i) => (
-                    <View key={`ex-${img.id}`} style={styles.photoCell}>
-                        <AppImage uri={img.url} style={styles.photo} accessibilityLabel={`Photo ${i + 1}`} />
-                        {i === 0 && <Badge label="Couverture" tone="overlay" style={styles.coverBadge} />}
-                        <IconButton
-                            icon="close"
-                            label="Supprimer la photo"
-                            variant="overlay"
-                            size={18}
-                            onPress={() => handleRemoveExisting(img)}
-                            style={styles.photoRemove}
-                        />
-                    </View>
-                ))}
+                {existingImages.map((img, i) => {
+                    const status = img.status ?? 'ready';
+                    const src = img.variants?.thumb || img.url;
+                    return (
+                        <View key={`ex-${img.id}`} style={styles.photoCell}>
+                            {status === 'ready' && !!src ? (
+                                <AppImage uri={src} style={styles.photo} accessibilityLabel={`Photo ${i + 1}`} />
+                            ) : (
+                                <View
+                                    style={[styles.photo, styles.photoState]}
+                                    accessibilityLabel={
+                                        status === 'failed' ? `Photo ${i + 1} : échec du traitement` : `Photo ${i + 1} : traitement en cours`
+                                    }>
+                                    {status === 'failed' ? (
+                                        <>
+                                            <Ionicons name="alert-circle-outline" size={24} color={t.colors.danger} />
+                                            <AppText variant="caption" color="danger" align="center">
+                                                Échec du traitement
+                                            </AppText>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <ActivityIndicator color={t.colors.brandStrong} />
+                                            <AppText variant="caption" color="inkMuted" align="center">
+                                                Traitement…
+                                            </AppText>
+                                        </>
+                                    )}
+                                </View>
+                            )}
+                            {i === 0 && status === 'ready' && <Badge label="Couverture" tone="overlay" style={styles.coverBadge} />}
+                            <IconButton
+                                icon="close"
+                                label="Supprimer la photo"
+                                variant="overlay"
+                                size={18}
+                                onPress={() => handleRemoveExisting(img)}
+                                style={styles.photoRemove}
+                            />
+                        </View>
+                    );
+                })}
                 {form.images.map((uri, i) => {
-                    const isCover = existingImages.length === 0 && i === 0;
+                    const isCover = existingImages.length === 0 && i === 0 && !isEdit;
+                    const up = uploads[uri];
+                    const uploading = !up || up.status === 'uploading';
+                    const failed = up?.status === 'error';
                     return (
                         <View key={`new-${uri}-${i}`} style={styles.photoCell}>
                             <Pressable
                                 accessibilityRole="button"
                                 accessibilityLabel={isCover ? `Photo ${i + 1}, couverture` : `Photo ${i + 1}, définir comme couverture`}
+                                disabled={isEdit}
                                 onPress={() => makeCover(i)}>
                                 <AppImage uri={uri} style={styles.photo} />
                             </Pressable>
+                            {uploading && (
+                                <View
+                                    style={[StyleSheet.absoluteFill, styles.uploadOverlay]}
+                                    accessibilityLiveRegion="polite"
+                                    accessibilityLabel={`Envoi de la photo ${i + 1} : ${Math.round((up?.progress ?? 0) * 100)} %`}>
+                                    <ActivityIndicator color={t.colors.onOverlay} />
+                                    <AppText variant="captionStrong" style={{ color: t.colors.onOverlay }}>
+                                        {Math.round((up?.progress ?? 0) * 100)} %
+                                    </AppText>
+                                    <View style={styles.uploadTrack}>
+                                        <View style={[styles.uploadFill, { width: `${Math.round((up?.progress ?? 0) * 100)}%` }]} />
+                                    </View>
+                                </View>
+                            )}
+                            {failed && (
+                                <Pressable
+                                    accessibilityRole="button"
+                                    accessibilityLabel={`Photo ${i + 1} non envoyée : ${up?.error ?? ''}. Réessayer`}
+                                    onPress={() => startUpload(uri)}
+                                    style={[StyleSheet.absoluteFill, styles.uploadOverlay]}>
+                                    <Ionicons name="refresh" size={22} color={t.colors.onOverlay} />
+                                    <AppText variant="captionStrong" style={{ color: t.colors.onOverlay }} align="center">
+                                        Réessayer
+                                    </AppText>
+                                    {!!up?.error && (
+                                        <AppText variant="caption" style={{ color: t.colors.onOverlay }} align="center" numberOfLines={2}>
+                                            {up.error}
+                                        </AppText>
+                                    )}
+                                </Pressable>
+                            )}
+                            {up?.status === 'done' && !isEdit && (
+                                <View style={styles.uploadDone} accessibilityLabel="Photo envoyée">
+                                    <Ionicons name="checkmark" size={12} color={t.colors.onOverlay} />
+                                </View>
+                            )}
                             {isCover && <Badge label="Couverture" tone="overlay" style={styles.coverBadge} />}
                             <IconButton
                                 icon="close"
@@ -759,7 +969,7 @@ export default function PostItemScreen() {
                         </View>
                     );
                 })}
-                {photoCount < MAX_PHOTOS && !isEdit && (
+                {photoCount < MAX_PHOTOS && (
                     <Pressable
                         accessibilityRole="button"
                         accessibilityLabel="Ajouter une photo"
@@ -785,14 +995,14 @@ export default function PostItemScreen() {
                     {errors.images}
                 </AppText>
             )}
-            {photoCount > 0 && photoCount < 3 && !isEdit && (
+            {uploadingCount > 0 && (
                 <AppText variant="caption" color="inkMuted" style={styles.hint}>
-                    Astuce : 3 photos (face, dos, détail) rassurent les acheteurs.
+                    Envoi en cours : vous pouvez continuer à remplir l’annonce.
                 </AppText>
             )}
-            {isEdit && (
+            {photoCount > 0 && photoCount < 3 && !isEdit && uploadingCount === 0 && (
                 <AppText variant="caption" color="inkMuted" style={styles.hint}>
-                    L’ajout de nouvelles photos en modification arrive bientôt.
+                    Astuce : 3 photos (face, dos, détail) rassurent les acheteurs.
                 </AppText>
             )}
         </>
@@ -1215,6 +1425,12 @@ export default function PostItemScreen() {
             <SellCelebration
                 visible={!!published}
                 title={published?.title ?? ''}
+                duplicateOfId={duplicateOf}
+                onViewDuplicate={() => {
+                    const id = duplicateOf;
+                    setPublished(null);
+                    if (id) router.replace({ pathname: '/item-details', params: { id: String(id) } });
+                }}
                 onShare={handleShare}
                 onView={() => {
                     const id = published?.id;
@@ -1270,6 +1486,39 @@ const makeStyles = createStyles((t: Theme) => ({
         backgroundColor: t.colors.brandTint,
     },
     addPhotoLarge: { width: '100%', aspectRatio: 4 / 3 },
+    photoState: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 4,
+        padding: 6,
+        backgroundColor: t.colors.surfaceAlt,
+    },
+    uploadOverlay: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 4,
+        padding: 6,
+        backgroundColor: t.colors.overlay,
+    },
+    uploadTrack: {
+        width: '70%',
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: 'rgba(255,255,255,0.35)',
+        overflow: 'hidden',
+    },
+    uploadFill: { height: 4, borderRadius: 2, backgroundColor: t.colors.brand },
+    uploadDone: {
+        position: 'absolute',
+        left: 6,
+        top: 6,
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: t.colors.success,
+    },
     aiNote: { flexDirection: 'row', gap: 8, alignItems: 'flex-start', marginTop: t.spacing.xs },
     aiButton: { marginTop: t.spacing.sm, alignSelf: 'flex-start' },
     previewWrap: { alignItems: 'center', marginBottom: t.spacing.lg },

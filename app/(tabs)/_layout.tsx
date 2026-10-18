@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
-import { Tabs, useRouter } from 'expo-router';
+import { Redirect, Tabs, useRouter } from 'expo-router';
 import React from 'react';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,7 +29,7 @@ export default function TabLayout() {
   const t = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   // Unread badge: kept live by the realtime provider; polls only while the
   // socket is disconnected.
   const pollMs = useFallbackInterval(30_000);
@@ -39,6 +39,10 @@ export default function TabLayout() {
     refetchInterval: pollMs,
   });
   const unread = totalUnread(conversations);
+
+  // Legal consent gate: the current terms / privacy versions must be
+  // accepted before using the app (server-reported, see /consent).
+  if (user?.consent_required?.length) return <Redirect href="/consent" />;
 
   return (
     <Tabs

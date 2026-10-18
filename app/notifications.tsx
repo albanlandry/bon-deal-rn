@@ -10,6 +10,7 @@ import { AppText, Button, EmptyState, ErrorState, ScreenHeader, showToast, Skele
 import type { BdNotification } from '@/constants/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { markAllRead, markRead, notificationsQuery } from '@/lib/api/notifications';
+import { filtersToRouteParams, savedSearchesQuery } from '@/lib/api/savedSearches';
 import { formatDayLabel, formatRelativeTime } from '@/lib/format';
 import { ColorTokens, createStyles, useStyles, useTheme } from '@/theme';
 
@@ -31,6 +32,14 @@ function iconFor(type: string): { name: IconName; color: keyof ColorTokens; tint
       return { name: 'close-circle-outline', color: 'danger', tint: 'dangerTint' };
     case 'negotiation_cancelled':
       return { name: 'ban-outline', color: 'inkMuted', tint: 'surfaceAlt' };
+    case 'staff_warning':
+      return { name: 'shield-outline', color: 'warning', tint: 'warningTint' };
+    case 'listing_expiring':
+      return { name: 'hourglass-outline', color: 'warning', tint: 'warningTint' };
+    case 'listing_expired':
+      return { name: 'time-outline', color: 'inkMuted', tint: 'surfaceAlt' };
+    case 'saved_search_match':
+      return { name: 'bookmark-outline', color: 'trust', tint: 'trustTint' };
     default:
       return { name: 'notifications-outline', color: 'inkMuted', tint: 'surfaceAlt' };
   }
@@ -97,7 +106,32 @@ export default function NotificationsScreen() {
     },
   });
 
+  // Saved-search alert: replay the search (or open the single new listing).
+  const openSavedSearchMatch = async (item: BdNotification) => {
+    const p = item.payload ?? {};
+    if (Number(p.count) === 1 && p.post_id != null) {
+      router.push({ pathname: '/item-details', params: { id: String(p.post_id) } });
+      return;
+    }
+    try {
+      const list = await queryClient.fetchQuery(savedSearchesQuery());
+      const ss = list.find((x) => x.id === Number(p.saved_search_id));
+      if (ss) {
+        router.push({ pathname: '/search-results', params: filtersToRouteParams(ss.filters) });
+        return;
+      }
+    } catch {
+      // fall through to the list
+    }
+    router.push('/saved-searches' as any);
+  };
+
   const targetOf = (item: BdNotification): (() => void) | null => {
+    if (item.type === 'staff_warning') return null;
+    if (item.type === 'listing_expiring' || item.type === 'listing_expired') {
+      return () => router.push('/my-listings');
+    }
+    if (item.type === 'saved_search_match') return () => openSavedSearchMatch(item);
     if (item.conversation_id) {
       return () =>
         router.push({ pathname: '/chatroom', params: { conversationId: String(item.conversation_id) } });
@@ -122,7 +156,7 @@ export default function NotificationsScreen() {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`${unread ? 'Non lu. ' : ''}${item.title}. ${item.body}`}
-        accessibilityHint={hasTarget ? 'Ouvre la conversation ou l’annonce' : undefined}
+        accessibilityHint={hasTarget ? 'Ouvre l’élément concerné' : undefined}
         onPress={() => handlePress(item)}
         style={({ pressed }) => [s.row, unread && s.rowUnread, pressed && s.pressed]}>
         <View style={[s.icon, { backgroundColor: t.colors[icon.tint] }]}>
@@ -137,9 +171,14 @@ export default function NotificationsScreen() {
               {formatRelativeTime(item.created_at)}
             </AppText>
           </View>
-          <AppText variant="small" color="inkMuted" numberOfLines={2}>
-            {item.body}
+          <AppText variant="small" color="inkMuted" numberOfLines={item.type === 'staff_warning' ? undefined : 2}>
+            {item.type === 'staff_warning' && item.payload?.message ? item.payload.message : item.body}
           </AppText>
+          {item.type === 'staff_warning' && (
+            <AppText variant="caption" color="warning" style={s.warnNote}>
+              Message de l’équipe de modération BonDeal
+            </AppText>
+          )}
         </View>
         {unread ? (
           <View style={s.dot} accessibilityElementsHidden />
@@ -259,5 +298,6 @@ const makeStyles = createStyles((t) => ({
   pressed: { backgroundColor: t.colors.surfaceAlt },
   icon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs },
+  warnNote: { marginTop: 4 },
   dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: t.colors.brand },
 }));

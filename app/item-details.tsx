@@ -21,6 +21,8 @@ import {
 } from '@/components/ui';
 import ItemGallery from '@/components/organisms/ItemGallery';
 import ItemPriceCheckCard from '@/components/molecules/ItemPriceCheckCard';
+import ReportSheet from '@/components/organisms/ReportSheet';
+import { blockedMessage } from '@/lib/api/safety';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   likePost,
@@ -33,6 +35,7 @@ import {
 import { getOrCreateConversation } from '@/lib/api/conversations';
 import { ApiError } from '@/lib/api';
 import { formatRelativeTime } from '@/lib/format';
+import { isReady, largeUrl } from '@/lib/images';
 import { haptics } from '@/lib/haptics';
 import { AGE_LABELS, categoryLabel, conditionLabel } from '@/constants/catalog';
 import type { BdPost, BdPriceCheck } from '@/constants/types';
@@ -77,6 +80,7 @@ export default function ItemDetailsScreen() {
   const queryClient = useQueryClient();
 
   const [bonPrix, setBonPrix] = useState<BdPriceCheck | null>(null);
+  const [reportOpen, setReportOpen] = useState(false);
   const { data: post, isLoading, error, refetch } = useQuery(postByIdQuery(postId));
 
   // Similar items: same first category, current post excluded.
@@ -135,7 +139,9 @@ export default function ItemDetailsScreen() {
       router.push({ pathname: '/chatroom', params: { conversationId: String(conv.id) } });
     },
     onError: (e: any) => {
-      showToast.error('Échec', e?.message || "Impossible d'ouvrir la conversation.");
+      // 403 between blocked users carries a French server message.
+      const blocked = blockedMessage(e);
+      showToast.error(blocked ? 'Contact impossible' : 'Échec', blocked ?? (e?.message || "Impossible d'ouvrir la conversation."));
     },
   });
 
@@ -172,7 +178,7 @@ export default function ItemDetailsScreen() {
     );
   }
 
-  const imageUrls = post.images.map((img) => img.url);
+  const imageUrls = post.images.filter(isReady).map((img) => largeUrl(img)!).filter(Boolean);
   const isOwner = !!user && user.id === post.owner_id;
   const available = post.state === 'published';
   const canOffer = !isOwner && available && post.allow_negotiation && !post.is_free;
@@ -206,6 +212,9 @@ export default function ItemDetailsScreen() {
       />
       <View style={styles.row}>
         <IconButton icon="share-social-outline" label="Partager l'annonce" variant="overlay" onPress={handleShare} />
+        {!isOwner && (
+          <IconButton icon="flag-outline" label="Signaler l'annonce" variant="overlay" onPress={() => setReportOpen(true)} />
+        )}
       </View>
     </View>
   );
@@ -289,11 +298,21 @@ export default function ItemDetailsScreen() {
               isMe={isOwner}
               onPress={() =>
                 router.push({
-                  pathname: '/reviews',
+                  pathname: '/seller-profile',
                   params: { userId: String(post.owner_id), username: post.owner_username ?? '' },
                 } as unknown as Href)
               }
             />
+            {!isOwner && (
+              <Button
+                label="Signaler cette annonce"
+                icon="flag-outline"
+                variant="ghost"
+                size="sm"
+                onPress={() => setReportOpen(true)}
+                style={styles.alignStart}
+              />
+            )}
           </View>
 
           {!!post.description && (
@@ -392,6 +411,13 @@ export default function ItemDetailsScreen() {
           </>
         )}
       </View>
+      <ReportSheet
+        visible={reportOpen}
+        onClose={() => setReportOpen(false)}
+        targetType="post"
+        targetId={post.id}
+        subject={post.title}
+      />
     </View>
   );
 }

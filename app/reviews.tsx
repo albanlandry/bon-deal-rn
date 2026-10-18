@@ -3,18 +3,16 @@
 // come from the API only (total + reviewee.avg_rating); nothing is invented.
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { useLocalSearchParams } from 'expo-router';
-import React from 'react';
+import React, { useState } from 'react';
 import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
 import { userReviewsInfiniteQuery } from '@/lib/api/reviews';
-import { formatDayLabel } from '@/lib/format';
 import { useTheme } from '@/theme';
-import type { BdReview } from '@/constants/types';
+import ReviewCard from '@/components/molecules/ReviewCard';
+import ReportSheet from '@/components/organisms/ReportSheet';
 import {
   AppText,
-  Avatar,
-  Badge,
   Card,
   EmptyState,
   ErrorState,
@@ -22,34 +20,6 @@ import {
   ScreenHeader,
   Skeleton,
 } from '@/components/ui';
-
-function ReviewItem({ review }: { review: BdReview }) {
-  const name = review.reviewer?.username ?? 'Membre BonDeal';
-  // direction = who wrote it: buyer_to_seller → written by the buyer.
-  const role = review.direction === 'buyer_to_seller' ? 'Acheteur' : 'Vendeur';
-  return (
-    <Card style={styles.item}>
-      <View style={styles.itemHeader}>
-        <Avatar uri={review.reviewer?.avatar_url} name={name} size={40} />
-        <View style={styles.flex}>
-          <AppText variant="labelStrong" numberOfLines={1}>
-            {name}
-          </AppText>
-          <AppText variant="caption" color="inkMuted">
-            {formatDayLabel(review.created_at)}
-          </AppText>
-        </View>
-        <Badge label={role} tone={role === 'Acheteur' ? 'brand' : 'trust'} />
-      </View>
-      <RatingStars value={review.rating} showValue={false} size={16} />
-      {!!review.comment && (
-        <AppText variant="body" style={styles.comment}>
-          {review.comment}
-        </AppText>
-      )}
-    </Card>
-  );
-}
 
 function ReviewSkeleton() {
   return (
@@ -79,6 +49,8 @@ export default function ReviewsScreen() {
   const reviews = q.data?.pages.flatMap((p) => p.reviews) ?? [];
   const total = q.data?.pages[0]?.total ?? 0;
   const avg = reviews[0]?.reviewee?.avg_rating ?? null;
+
+  const [reportId, setReportId] = useState<number | null>(null);
 
   const title = isMe ? 'Mes avis' : username ? `Avis sur ${username}` : 'Avis';
 
@@ -114,7 +86,12 @@ export default function ReviewsScreen() {
         <FlatList
           data={reviews}
           keyExtractor={(r) => String(r.id)}
-          renderItem={({ item }) => <ReviewItem review={item} />}
+          renderItem={({ item }) => (
+            <ReviewCard
+              review={item}
+              onReport={user && item.reviewer_id !== user.id ? () => setReportId(item.id) : undefined}
+            />
+          )}
           contentContainerStyle={[styles.list, reviews.length === 0 && styles.grow]}
           ListHeaderComponent={header}
           ListEmptyComponent={
@@ -145,6 +122,12 @@ export default function ReviewsScreen() {
           }
         />
       )}
+      <ReportSheet
+        visible={reportId != null}
+        onClose={() => setReportId(null)}
+        targetType="review"
+        targetId={reportId}
+      />
     </SafeAreaView>
   );
 }

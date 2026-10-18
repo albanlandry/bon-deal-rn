@@ -1,7 +1,7 @@
 // app/search.tsx — Recherche: instant suggestions, recent searches, "Trouve-moi ça".
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
@@ -13,6 +13,7 @@ import { CATEGORIES } from '@/constants/catalog';
 import type { BdParsedSearch } from '@/constants/types';
 import { ApiError } from '@/lib/api';
 import { parseSearch } from '@/lib/api/ai';
+import { searchSuggestQuery } from '@/lib/api/posts';
 import { createStyles, useStyles, useTheme } from '@/theme';
 
 // AsyncStorage key for recent searches (unchanged).
@@ -115,16 +116,35 @@ export default function SearchScreen() {
     await clearRecentSearches();
   };
 
-  // Instant suggestions from local, real data only: matching recent searches
-  // and matching categories (no suggestion endpoint on the backend yet).
+  // Debounced server suggestions (titles in the user's city).
+  const [debounced, setDebounced] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(searchQuery.trim()), 250);
+    return () => clearTimeout(id);
+  }, [searchQuery]);
+  const serverSuggest = useQuery(searchSuggestQuery(debounced));
+
+  // Instant suggestions: matching recent searches first, then server titles
+  // (deduped case- and accent-insensitively), then matching categories.
   const q = normalize(searchQuery.trim());
   const suggestions = useMemo(() => {
-    if (!q) return { recent: [] as string[], cats: [] as typeof CATEGORIES };
+    if (!q) return { recent: [] as string[], server: [] as string[], cats: [] as typeof CATEGORIES };
+    const recent = recentItems.filter((r) => normalize(r).includes(q)).slice(0, 5);
+    const seen = new Set([q, ...recent.map(normalize)]);
+    const server: string[] = [];
+    for (const title of serverSuggest.data ?? []) {
+      const k = normalize(title.trim());
+      if (!k || seen.has(k)) continue;
+      seen.add(k);
+      server.push(title.trim());
+      if (server.length >= 6) break;
+    }
     return {
-      recent: recentItems.filter((r) => normalize(r).includes(q)).slice(0, 5),
+      recent,
+      server,
       cats: CATEGORIES.filter((c) => normalize(c.label).includes(q)).slice(0, 4),
     };
-  }, [q, recentItems]);
+  }, [q, recentItems, serverSuggest.data]);
 
   const looksLikeSentence = searchQuery.trim().split(/\s+/).length >= 3;
 
@@ -206,6 +226,22 @@ export default function SearchScreen() {
                 <Ionicons name="time-outline" size={18} color={t.colors.inkMuted} />
                 <AppText variant="body" style={s.flex} numberOfLines={1}>
                   {r}
+                </AppText>
+              </Pressable>
+            ))}
+            {suggestions.server.map((title) => (
+              <Pressable
+                key={`s-${title}`}
+                accessibilityRole="button"
+                accessibilityLabel={`Suggestion : ${title}`}
+                onPress={() => {
+                  setSearchQuery(title);
+                  runSearch(title);
+                }}
+                style={({ pressed }) => [s.suggestion, pressed && s.pressed]}>
+                <Ionicons name="search-outline" size={18} color={t.colors.inkMuted} />
+                <AppText variant="body" style={s.flex} numberOfLines={1}>
+                  {title}
                 </AppText>
               </Pressable>
             ))}

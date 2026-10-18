@@ -5,6 +5,7 @@ import { useTheme } from '@/theme';
 import type { BdPost } from '@/constants/types';
 import { formatAmount, formatRelativeTime } from '@/lib/format';
 import { haptics } from '@/lib/haptics';
+import { coverThumb } from '@/lib/images';
 import AppImage from '../atoms/AppImage';
 import AppText from '../atoms/AppText';
 import Badge from '../atoms/Badge';
@@ -25,9 +26,20 @@ export interface ListingCardProps {
  * then title, then place + time. "Gratuit" / "Échange" badges are visually
  * distinct (von Restorff).
  */
+/** "850 m" / "1,2 km" / "12 km" (French decimal comma). */
+export function formatDistance(km: number | null | undefined): string | null {
+  if (km == null || !Number.isFinite(km)) return null;
+  if (km < 1) return `${Math.max(100, Math.round((km * 1000) / 100) * 100)} m`;
+  if (km < 10) return `${km.toFixed(1).replace('.', ',')} km`;
+  return `${Math.round(km)} km`;
+}
+
 function ListingCardBase({ post, onPress, onToggleLike, width, showState }: ListingCardProps) {
   const t = useTheme();
-  const place = post.pickup_quartier ?? post.city ?? null;
+  const cover = coverThumb(post.images);
+  const distance = formatDistance(post.distance_km);
+  const placeName = post.pickup_quartier ?? post.city ?? null;
+  const place = distance ? (placeName ? `${distance} · ${placeName}` : distance) : placeName;
   const time = formatRelativeTime(post.created_at);
   const stateBadge =
     post.state === 'sold'
@@ -38,7 +50,9 @@ function ListingCardBase({ post, onPress, onToggleLike, width, showState }: List
           ? { label: 'Brouillon', tone: 'neutral' as const }
           : showState && post.state === 'unpublished'
             ? { label: 'Masquée', tone: 'neutral' as const }
-            : null;
+            : showState && post.state === 'expired'
+              ? { label: 'Expirée', tone: 'danger' as const }
+              : null;
   const priceText = post.is_free ? 'Gratuit' : post.price != null ? formatAmount(post.price) : '';
 
   return (
@@ -58,11 +72,11 @@ function ListingCardBase({ post, onPress, onToggleLike, width, showState }: List
       ]}>
       <View>
         <AppImage
-          uri={post.images[0]?.url}
+          uri={cover}
           style={styles.image}
           recyclingKey={String(post.id)}
         />
-        {!post.images[0]?.url && (
+        {!cover && (
           <View style={[StyleSheet.absoluteFill, styles.noImage]}>
             <Ionicons name="image-outline" size={28} color={t.colors.inkSubtle} />
           </View>
@@ -99,7 +113,7 @@ function ListingCardBase({ post, onPress, onToggleLike, width, showState }: List
         <View style={styles.meta}>
           {place && (
             <>
-              <Ionicons name="location-outline" size={12} color={t.colors.inkMuted} />
+              <Ionicons name={distance ? 'navigate-outline' : 'location-outline'} size={12} color={t.colors.inkMuted} />
               <AppText variant="caption" color="inkMuted" numberOfLines={1} style={styles.flex}>
                 {place}
                 {time ? ` · ${time}` : ''}

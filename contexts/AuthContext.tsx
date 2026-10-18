@@ -30,6 +30,7 @@ import {
 import { getJwt, setJwt, clearJwt, getDevPhone, setDevPhone, clearDevPhone } from '@/lib/auth-storage';
 import { config } from '@/utils/config';
 import { registerPushToken, unregisterPushToken } from '@/lib/push';
+import type { BdNotificationPrefs, BdPrivacyPrefs } from '@/constants/types';
 
 export interface BackendUser {
   id: number;
@@ -47,6 +48,10 @@ export interface BackendUser {
   avg_rating: number | null;
   review_count: number;
   created_at: string | null;
+  /** Legal documents whose current version still needs acceptance. */
+  consent_required?: ('terms' | 'privacy')[];
+  notification_prefs?: BdNotificationPrefs;
+  privacy_prefs?: BdPrivacyPrefs;
 }
 
 interface TokenResponse {
@@ -61,7 +66,8 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   refreshUser: () => Promise<void>;
-  signOut: () => Promise<void>;
+  /** `local: true` skips server calls (e.g. after the account was deleted). */
+  signOut: (opts?: { local?: boolean }) => Promise<void>;
   /** Local test login (config.devLogin only). Throws ApiError on a wrong number/code. */
   signInWithDevOtp: (phone: string, code: string) => Promise<void>;
 }
@@ -180,11 +186,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const signOut = async () => {
-    try {
-      await unregisterPushToken();
-    } catch {
-      // best-effort — never block sign-out
+  const signOut = async (opts?: { local?: boolean }) => {
+    if (!opts?.local) {
+      try {
+        await unregisterPushToken();
+      } catch {
+        // best-effort — never block sign-out
+      }
     }
     if (await getDevPhone()) {
       // Test session: no Firebase user to sign out, so clear everything here.

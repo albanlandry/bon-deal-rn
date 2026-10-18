@@ -24,18 +24,19 @@ import {
   showToast,
 } from '@/components/ui';
 import { ApiError } from '@/lib/api';
-import { myPostsQuery, deletePost, updatePost } from '@/lib/api/posts';
+import { myPostsQuery, deletePost, renewPost, updatePost } from '@/lib/api/posts';
 import { haptics } from '@/lib/haptics';
 import { createStyles, Theme, useStyles, useTheme } from '@/theme';
 import type { BdPost, BdPostListResponse } from '@/constants/types';
 
-type FilterType = 'all' | 'published' | 'reserved' | 'sold' | 'draft' | 'unpublished';
+type FilterType = 'all' | 'published' | 'reserved' | 'sold' | 'expired' | 'draft' | 'unpublished';
 
 const FILTERS: { id: FilterType; label: string; states: string[] }[] = [
   { id: 'all', label: 'Toutes', states: [] },
   { id: 'published', label: 'En ligne', states: ['published'] },
   { id: 'reserved', label: 'Réservées', states: ['reserved'] },
   { id: 'sold', label: 'Vendues', states: ['sold'] },
+  { id: 'expired', label: 'Expirées', states: ['expired'] },
   { id: 'draft', label: 'Brouillons', states: ['draft'] },
   { id: 'unpublished', label: 'Masquées', states: ['unpublished'] },
 ];
@@ -43,6 +44,24 @@ const FILTERS: { id: FilterType; label: string; states: string[] }[] = [
 const MINE_KEY = ['posts', 'mine', null] as const;
 const GAP = 12;
 const PAD = 16;
+
+/** Whole days until `iso` (negative once past), or null. */
+function daysUntil(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  // Server timestamps are naive UTC.
+  const then = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : `${iso}Z`).getTime();
+  if (Number.isNaN(then)) return null;
+  return Math.ceil((then - Date.now()) / 86_400_000);
+}
+
+function expiryLabel(days: number): string {
+  if (days <= 0) return 'Expire aujourd’hui';
+  if (days === 1) return 'Expire demain';
+  return `Expire dans ${days} jours`;
+}
+
+/** Renewal is offered for expired listings and published ones close to expiry. */
+const RENEW_WINDOW_DAYS = 3;
 
 function errMessage(e: unknown): string {
   if (e instanceof ApiError) {
@@ -89,12 +108,45 @@ export default function MyListingsScreen() {
   };
 
   const delMut = useMutation({
-    mutationFn: (id: number) => deletePost(id),
+    mutationFn: (post: BdPost) => deletePost(post.id),
     onSuccess: () => {
       invalidate();
       showToast.success('Annonce supprimée');
     },
-    onError: (e) => showToast.error('Échec', errMessage(e)),
+    onError: (e, post) => {
+      // 409: the listing has a transaction — it must stay for the other party.
+      if (e instanceof ApiError && e.status === 409) {
+        Alert.alert(
+          'Suppression impossible',
+          `« ${post.title} » est liée à une vente (transaction en cours ou passée) : elle doit rester consultable par l’autre partie. Vous pouvez la masquer pour qu’elle n’apparaisse plus dans les recherches.`,
+          [
+            { text: 'Annuler', style: 'cancel' },
+            {
+              text: 'Masquer l’annonce',
+              onPress: () => stateMut.mutate({ id: post.id, state: 'unpublished', prev: post.state }),
+            },
+          ],
+        );
+        return;
+      }
+      showToast.error('Échec', errMessage(e));
+    },
+  });
+
+  const renewMut = useMutation({
+    mutationFn: (id: number) => renewPost(id),
+    onSuccess: () => {
+      haptics.success();
+      invalidate();
+      showToast.success('Annonce renouvelée', 'Elle est de nouveau en ligne pour une période complète.');
+    },
+    onError: (e) =>
+      showToast.error(
+        'Échec',
+        e instanceof ApiError && e.status === 409
+          ? 'Seules les annonces en ligne ou expirées peuvent être renouvelées.'
+          : errMessage(e),
+      ),
   });
 
   const stateMut = useMutation({
@@ -117,7 +169,7 @@ export default function MyListingsScreen() {
       `« ${post.title} » sera définitivement supprimée, avec ses photos. Cette action est irréversible.`,
       [
         { text: 'Annuler', style: 'cancel' },
-        { text: 'Supprimer', style: 'destructive', onPress: () => delMut.mutate(post.id) },
+        { text: 'Supprimer', style: 'destructive', onPress: () => delMut.mutate(post) },
       ],
     );
   };
@@ -131,9 +183,13 @@ export default function MyListingsScreen() {
     );
   };
 
-  const busy = delMut.isPending;
+  const busy = delMut.isPending || renewMut.isPending;
 
-  const renderItem = ({ item }: { item: BdPost }) => (
+  const renderItem = ({ item }: { item: BdPost }) => {
+    const days = item.state === 'published' ? daysUntil(item.expires_at) : null;
+    const canRenew =
+      item.state === 'expired' || (days != null && days <= RENEW_WINDOW_DAYS);
+    return (
     <View style={{ width: cardWidth }}>
       <ListingCard
         post={item}
@@ -159,6 +215,37 @@ export default function MyListingsScreen() {
           </>
         )}
       </View>
+      {item.state === 'expired' ? (
+        <View style={styles.expiry}>
+          <Ionicons name="alert-circle-outline" size={14} color={t.colors.danger} />
+          <AppText variant="caption" color="danger">
+            Expirée · plus visible
+          </AppText>
+        </View>
+      ) : days != null ? (
+        <View style={styles.expiry}>
+          <Ionicons
+            name="time-outline"
+            size={14}
+            color={days <= RENEW_WINDOW_DAYS ? t.colors.warning : t.colors.inkMuted}
+          />
+          <AppText variant="caption" color={days <= RENEW_WINDOW_DAYS ? 'warning' : 'inkMuted'}>
+            {expiryLabel(days)}
+          </AppText>
+        </View>
+      ) : null}
+      {canRenew && (
+        <Button
+          label="Renouveler"
+          icon="refresh-outline"
+          size="sm"
+          variant={item.state === 'expired' ? 'primary' : 'secondary'}
+          onPress={() => renewMut.mutate(item.id)}
+          loading={renewMut.isPending && renewMut.variables === item.id}
+          disabled={busy}
+          style={styles.renew}
+        />
+      )}
       <View style={styles.actions}>
         {(item.state === 'published' || item.state === 'reserved') && (
           <IconButton
@@ -190,7 +277,8 @@ export default function MyListingsScreen() {
         />
       </View>
     </View>
-  );
+    );
+  };
 
   const filterLabel = FILTERS.find((f) => f.id === selectedFilter)?.label ?? '';
 
@@ -287,5 +375,7 @@ const makeStyles = createStyles((t: Theme) => ({
   stats: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6, paddingHorizontal: 2 },
   statGap: { marginLeft: 8 },
   actions: { flexDirection: 'row', marginTop: 2, marginLeft: -2 },
+  expiry: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, paddingHorizontal: 2 },
+  renew: { marginTop: 6 },
 }));
 

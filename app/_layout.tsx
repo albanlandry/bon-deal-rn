@@ -107,6 +107,7 @@ function RootLayoutNav() {
               <Stack.Screen name="index" />
               <Stack.Screen name="onboarding" options={{ animation: t.reduceMotion ? 'none' : 'fade' }} />
               <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="consent" options={{ gestureEnabled: false }} />
               <Stack.Screen name="make-offer" options={{ presentation: 'modal' }} />
               <Stack.Screen name="post-item" options={{ presentation: 'fullScreenModal' }} />
               <Stack.Screen
