@@ -78,6 +78,94 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Staff Login
+         * @description Sign in with username or e-mail. Sets the dashboard session cookies.
+         */
+        post: operations["staff_login_v1_admin_auth_login_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Staff Logout */
+        post: operations["staff_logout_v1_admin_auth_logout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Staff Me */
+        get: operations["staff_me_v1_admin_auth_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/auth/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Change Own Password */
+        post: operations["change_own_password_v1_admin_auth_password_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/auth/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Staff Refresh */
+        post: operations["staff_refresh_v1_admin_auth_refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/ban_user/{user_id}": {
         parameters: {
             query?: never;
@@ -183,6 +271,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/posts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Admin List Posts
+         * @description Every post, any state and city, for moderation.
+         */
+        get: operations["admin_list_posts_v1_admin_posts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/posts/{post_id}": {
         parameters: {
             query?: never;
@@ -190,7 +298,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Admin Get Post
+         * @description One post for moderation. Unlike GET /posts/{id}, records no view.
+         */
+        get: operations["admin_get_post_v1_admin_posts__post_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -230,7 +342,11 @@ export interface paths {
         /** Admin List Quartiers */
         get: operations["admin_list_quartiers_v1_admin_quartiers_get"];
         put?: never;
-        post?: never;
+        /**
+         * Admin Add Quartier
+         * @description Staff-curated quartier: approved and not marked as user-added.
+         */
+        post: operations["admin_add_quartier_v1_admin_quartiers_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -358,6 +474,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/staff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Staff */
+        get: operations["list_staff_v1_admin_staff_get"];
+        put?: never;
+        /** Create Staff */
+        post: operations["create_staff_v1_admin_staff_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/staff/{staff_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Staff */
+        patch: operations["update_staff_v1_admin_staff__staff_id__patch"];
+        trace?: never;
+    };
     "/v1/admin/stats": {
         parameters: {
             query?: never;
@@ -375,6 +526,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/transactions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Admin List Transactions
+         * @description All transactions, optionally for one user (as buyer or seller).
+         */
+        get: operations["admin_list_transactions_v1_admin_transactions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/transactions/{transaction_id}": {
         parameters: {
             query?: never;
@@ -382,7 +553,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Admin Get Transaction */
+        get: operations["admin_get_transaction_v1_admin_transactions__transaction_id__get"];
         put?: never;
         post?: never;
         /**
@@ -413,6 +585,26 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/transactions/{transaction_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Admin Update Transaction Status
+         * @description Staff correct a transaction's status (ALLOWED_ADMIN_TRANSITIONS).
+         */
+        patch: operations["admin_update_transaction_status_v1_admin_transactions__transaction_id__status_patch"];
         trace?: never;
     };
     "/v1/admin/users": {
@@ -464,6 +656,26 @@ export interface paths {
          * @description Admin uploads a custom avatar for any user. Same 2 MB cap as self-upload.
          */
         post: operations["admin_upload_user_avatar_v1_admin_users__user_id__avatar_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/users/{user_id}/reviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Admin List User Reviews
+         * @description Every review of a user, hidden ones included.
+         */
+        get: operations["admin_list_user_reviews_v1_admin_users__user_id__reviews_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -699,7 +911,7 @@ export interface paths {
         };
         /**
          * List Negotiations
-         * @description List negotiations. Admin sees all; users see ones where they're buyer or seller.
+         * @description The caller's negotiations (as buyer or seller). (Staff: GET /admin/negotiations.)
          */
         get: operations["list_negotiations_v1_negotiations_get"];
         put?: never;
@@ -907,7 +1119,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Posts */
+        /**
+         * Get Posts
+         * @description App feed: published posts in the caller's city. (Staff: GET /admin/posts.)
+         */
         get: operations["get_posts_v1_posts_get"];
         put?: never;
         /** Create Post */
@@ -1265,14 +1480,14 @@ export interface paths {
         };
         /**
          * List Transactions
-         * @description List transactions. Admin sees all; users see their own (buyer or seller).
+         * @description The caller's own transactions (as buyer or seller).
          */
         get: operations["list_transactions_v1_transactions_get"];
         put?: never;
         /**
          * Create Transaction
          * @description Open a pending transaction. The current user is the seller (post owner).
-         *     Buyer is named in the body. Admin can create on anyone's behalf.
+         *     Buyer is named in the body.
          */
         post: operations["create_transaction_v1_transactions_post"];
         delete?: never;
@@ -1353,8 +1568,7 @@ export interface paths {
         head?: never;
         /**
          * Update Transaction Status
-         * @description Move a transaction between statuses. Allowed transitions depend on role
-         *     (see ALLOWED_PARTY_TRANSITIONS / ALLOWED_ADMIN_TRANSITIONS).
+         * @description A party moves a transaction along (ALLOWED_PARTY_TRANSITIONS).
          */
         patch: operations["update_transaction_status_v1_transactions__transaction_id__status_patch"];
         trace?: never;
@@ -1475,6 +1689,30 @@ export interface components {
             /** Username */
             username: string;
         };
+        /** Body_staff_login_v1_admin_auth_login_post */
+        Body_staff_login_v1_admin_auth_login_post: {
+            /** Client Id */
+            client_id?: string | null;
+            /**
+             * Client Secret
+             * Format: password
+             */
+            client_secret?: string | null;
+            /** Grant Type */
+            grant_type?: string | null;
+            /**
+             * Password
+             * Format: password
+             */
+            password: string;
+            /**
+             * Scope
+             * @default
+             */
+            scope: string;
+            /** Username */
+            username: string;
+        };
         /** Body_upload_images_v1_upload_post */
         Body_upload_images_v1_upload_post: {
             /** Files */
@@ -1489,6 +1727,13 @@ export interface components {
         BulkDraftRequest: {
             /** Image Urls */
             image_urls: string[];
+        };
+        /** ChangePassword */
+        ChangePassword: {
+            /** Current Password */
+            current_password: string;
+            /** New Password */
+            new_password: string;
         };
         /** CounterOffer */
         CounterOffer: {
@@ -1520,6 +1765,23 @@ export interface components {
             comment?: string | null;
             /** Rating */
             rating: number;
+        };
+        /** CreateStaff */
+        CreateStaff: {
+            /** Display Name */
+            display_name?: string | null;
+            /** Email */
+            email?: string | null;
+            /** Password */
+            password: string;
+            /**
+             * Role
+             * @default moderator
+             * @enum {string}
+             */
+            role: "admin" | "moderator";
+            /** Username */
+            username: string;
         };
         /** CreateTransaction */
         CreateTransaction: {
@@ -1668,6 +1930,15 @@ export interface components {
             /** Is Visible */
             is_visible: boolean;
         };
+        /** StaffTokenResponse */
+        StaffTokenResponse: {
+            /** Access Token */
+            access_token: string;
+            /** Expires In */
+            expires_in: number;
+            /** Token Type */
+            token_type: string;
+        };
         /** TokenResponse */
         TokenResponse: {
             /** Access Token */
@@ -1764,6 +2035,19 @@ export interface components {
             /** Platform Name */
             platform_name?: string | null;
         };
+        /** UpdateStaff */
+        UpdateStaff: {
+            /** Display Name */
+            display_name?: string | null;
+            /** Email */
+            email?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Password */
+            password?: string | null;
+            /** Role */
+            role?: ("admin" | "moderator") | null;
+        };
         /** UpdateTransactionStatus */
         UpdateTransactionStatus: {
             /** Cancellation Reason */
@@ -1796,8 +2080,6 @@ export interface components {
             phone_number?: string | null;
             /** Quartier */
             quartier?: string | null;
-            /** Role */
-            role?: ("user" | "admin") | null;
             /** Username */
             username?: string | null;
         };
@@ -1921,6 +2203,132 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    staff_login_v1_admin_auth_login_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/x-www-form-urlencoded": components["schemas"]["Body_staff_login_v1_admin_auth_login_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTokenResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    staff_logout_v1_admin_auth_logout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    staff_me_v1_admin_auth_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    change_own_password_v1_admin_auth_password_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePassword"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    staff_refresh_v1_admin_auth_refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffTokenResponse"];
                 };
             };
         };
@@ -2116,6 +2524,77 @@ export interface operations {
             };
         };
     };
+    admin_list_posts_v1_admin_posts_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                limit?: number;
+                states?: string | null;
+                cities?: string | null;
+                search?: string | null;
+                sort?: string | null;
+                categories?: string | null;
+                min_price?: number | null;
+                max_price?: number | null;
+                condition?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_get_post_v1_admin_posts__post_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                post_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     update_post_v1_admin_posts__post_id__patch: {
         parameters: {
             query?: never;
@@ -2202,6 +2681,39 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_add_quartier_v1_admin_quartiers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateQuartier"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2510,6 +3022,94 @@ export interface operations {
             };
         };
     };
+    list_staff_v1_admin_staff_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    create_staff_v1_admin_staff_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateStaff"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_staff_v1_admin_staff__staff_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                staff_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateStaff"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_stats_v1_admin_stats_get: {
         parameters: {
             query?: never;
@@ -2526,6 +3126,71 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    admin_list_transactions_v1_admin_transactions_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                limit?: number;
+                status?: string | null;
+                user_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_get_transaction_v1_admin_transactions__transaction_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                transaction_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -2573,6 +3238,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ResolveDispute"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_update_transaction_status_v1_admin_transactions__transaction_id__status_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                transaction_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateTransactionStatus"];
             };
         };
         responses: {
@@ -2711,6 +3411,40 @@ export interface operations {
                 "multipart/form-data": components["schemas"]["Body_admin_upload_user_avatar_v1_admin_users__user_id__avatar_post"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_list_user_reviews_v1_admin_users__user_id__reviews_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -4212,7 +4946,6 @@ export interface operations {
                 page?: number;
                 limit?: number;
                 status?: string | null;
-                user_id?: number | null;
             };
             header?: never;
             path?: never;
