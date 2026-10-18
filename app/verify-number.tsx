@@ -8,8 +8,11 @@ import Button from '@/components/atoms/Button';
 import { showToast } from '@/components/atoms/Toast';
 import OTPInput, { OTPInputHandle } from '@/components/molecules/OTPInput';
 import AuthScaffold from '@/components/organisms/AuthScaffold';
+import { DEV_OTP_CODE, useAuth } from '@/contexts/AuthContext';
 import { usePhoneAuth } from '@/contexts/PhoneAuthContext';
+import { ApiError } from '@/lib/api';
 import { haptics } from '@/lib/haptics';
+import { config } from '@/utils/config';
 
 const RESEND_COOLDOWN_S = 30;
 
@@ -17,6 +20,7 @@ export default function VerifyNumberScreen() {
   const router = useRouter();
   const { phone, mode } = useLocalSearchParams<{ phone?: string; mode?: string }>();
   const { confirmation, phoneNumber, setConfirmation, clearAuth } = usePhoneAuth();
+  const { signInWithDevOtp } = useAuth();
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
@@ -31,8 +35,39 @@ export default function VerifyNumberScreen() {
     return () => clearTimeout(id);
   }, [cooldown]);
 
+  const goNext = () => {
+    haptics.success();
+    clearAuth();
+    if (mode === 'login') {
+      router.replace('/(tabs)/home');
+    } else {
+      router.push({ pathname: '/setup-profile', params: { phone: phoneToShow } });
+    }
+  };
+
+  /** Local test login: the backend checks the number and the fixed code. */
+  const verifyDev = async (code: string) => {
+    setError(null);
+    setLoading(true);
+    try {
+      await signInWithDevOtp(phoneToShow, code);
+      goNext();
+    } catch (e) {
+      setLoading(false);
+      haptics.error();
+      setError(
+        e instanceof ApiError && e.status === 401
+          ? `Code incorrect. En mode test, le code est ${DEV_OTP_CODE}.`
+          : "Connexion impossible. Le serveur accepte-t-il la connexion de test (DEV_OTP_ENABLED) ?",
+      );
+      setOtp('');
+      otpRef.current?.clear();
+    }
+  };
+
   const verify = async (code: string) => {
     if (code.length !== 6 || loading) return;
+    if (config.devLogin.enabled) return verifyDev(code);
     if (!confirmation) {
       setError('La session a expiré. Demandez un nouveau code.');
       return;
@@ -43,13 +78,7 @@ export default function VerifyNumberScreen() {
       await confirmation.confirm(code);
       // Firebase is now signed in — AuthContext exchanges the Firebase ID
       // token for a backend JWT in the background.
-      haptics.success();
-      clearAuth();
-      if (mode === 'login') {
-        router.replace('/(tabs)/home');
-      } else {
-        router.push({ pathname: '/setup-profile', params: { phone: phoneToShow } });
-      }
+      goNext();
     } catch (e: any) {
       setLoading(false);
       console.error('Firebase verification error:', e);
@@ -71,6 +100,11 @@ export default function VerifyNumberScreen() {
   const handleResend = async () => {
     if (!phoneToShow) {
       setError('Numéro introuvable. Revenez en arrière et réessayez.');
+      return;
+    }
+    if (config.devLogin.enabled) {
+      showToast.success('Mode test', `Aucun SMS n'est envoyé : le code est ${DEV_OTP_CODE}.`);
+      setCooldown(RESEND_COOLDOWN_S);
       return;
     }
     setResending(true);
@@ -97,7 +131,13 @@ export default function VerifyNumberScreen() {
   return (
     <AuthScaffold
       title="Entrez le code"
-      subtitle={phoneToShow ? `Envoyé par SMS au ${phoneToShow}` : 'Envoyé par SMS'}
+      subtitle={
+        config.devLogin.enabled
+          ? `Mode test pour le ${phoneToShow} : saisissez ${DEV_OTP_CODE}.`
+          : phoneToShow
+            ? `Envoyé par SMS au ${phoneToShow}`
+            : 'Envoyé par SMS'
+      }
       icon="chatbox-ellipses"
       onBack={() => router.back()}>
       <OTPInput

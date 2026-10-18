@@ -109,6 +109,10 @@ module.exports = {
       enableCrashlytics: process.env.ENABLE_CRASHLYTICS === 'true',
       enableLogging: process.env.ENABLE_LOGGING !== 'false',
       debugMode: process.env.DEBUG_MODE === 'true',
+      // Local test login without Firebase: one number + fixed code (backend DEV_OTP_*).
+      // Never in production builds.
+      devOtpEnabled: process.env.DEV_OTP_ENABLED === 'true' && (process.env.APP_ENV || 'local') !== 'production',
+      devOtpPhone: process.env.DEV_OTP_PHONE || '+24106123456',
       logLevel: process.env.LOG_LEVEL || 'debug',
       appName: process.env.APP_NAME || 'BonDeal',
       appVersion: process.env.APP_VERSION || '1.0.0',

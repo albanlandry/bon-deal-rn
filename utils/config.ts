@@ -34,6 +34,11 @@ export interface AppConfig {
     crashlytics: boolean;
     logging: boolean;
   };
+  /** Local test login without Firebase (backend DEV_OTP_*). Never on in production. */
+  devLogin: {
+    enabled: boolean;
+    phone: string;
+  };
   debug: {
     enabled: boolean;
     logLevel: 'debug' | 'info' | 'warn' | 'error';
@@ -109,6 +114,10 @@ const buildConfig = (): AppConfig => {
       analytics: getEnvBool('ENABLE_ANALYTICS', env === 'production'),
       crashlytics: getEnvBool('ENABLE_CRASHLYTICS', env === 'production'),
       logging: getEnvBool('ENABLE_LOGGING', env !== 'production'),
+    },
+    devLogin: {
+      enabled: env !== 'production' && Constants.expoConfig?.extra?.devOtpEnabled === true,
+      phone: String(Constants.expoConfig?.extra?.devOtpPhone || '+24106123456'),
     },
     debug: {
       enabled: getEnvBool('DEBUG_MODE', env === 'local'),

@@ -2,6 +2,9 @@
  * Phone-number form shared by login and signup: country picker (defaults to
  * Gabon, +241), national number, inline validation, and the Firebase
  * `signInWithPhoneNumber` call. The caller decides where to go next.
+ *
+ * Local test login (config.devLogin): no SMS is sent; only the configured
+ * number is accepted, and the code screen takes the fixed code 123456.
  */
 import { Ionicons } from '@expo/vector-icons';
 import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
@@ -21,11 +24,17 @@ import Button from '@/components/atoms/Button';
 import TextField from '@/components/atoms/TextField';
 import { haptics } from '@/lib/haptics';
 import { useTheme } from '@/theme';
+import { config } from '@/utils/config';
+
+const DEV = config.devLogin;
+const devPhone = DEV.enabled ? parsePhoneNumberFromString(DEV.phone) : undefined;
+/** The test number as typed in the national field, e.g. "06 12 34 56". */
+const DEV_NATIONAL = devPhone ? devPhone.formatNational() : '';
 
 export interface AuthPhoneFormProps {
   submitLabel: string;
-  /** Called with the Firebase confirmation and the E.164 number. */
-  onCodeSent: (confirmation: FirebaseAuthTypes.ConfirmationResult, e164: string) => void;
+  /** Called with the Firebase confirmation (null in local test login) and the E.164 number. */
+  onCodeSent: (confirmation: FirebaseAuthTypes.ConfirmationResult | null, e164: string) => void;
 }
 
 function firebaseErrorMessage(code: string | undefined): string {
@@ -48,7 +57,7 @@ export default function AuthPhoneForm({ submitLabel, onCodeSent }: AuthPhoneForm
   const insets = useSafeAreaInsets();
   const [countryCode, setCountryCode] = useState<CountryCode>('GA');
   const [callingCode, setCallingCode] = useState<string>('241');
-  const [nationalNumber, setNationalNumber] = useState('');
+  const [nationalNumber, setNationalNumber] = useState(DEV_NATIONAL);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -87,6 +96,15 @@ export default function AuthPhoneForm({ submitLabel, onCodeSent }: AuthPhoneForm
       return;
     }
     setError(null);
+    if (DEV.enabled) {
+      if (parsed.number !== DEV.phone) {
+        setError(`Mode test : seul le ${devPhone?.formatInternational() ?? DEV.phone} est accepté.`);
+        haptics.error();
+        return;
+      }
+      onCodeSent(null, parsed.number);
+      return;
+    }
     setLoading(true);
     try {
       const confirmation = await auth().signInWithPhoneNumber(fullE164);
@@ -146,7 +164,7 @@ export default function AuthPhoneForm({ submitLabel, onCodeSent }: AuthPhoneForm
           returnKeyType="done"
           onSubmitEditing={handleSubmit}
           error={error}
-          helper="Nous vous enverrons un code par SMS."
+          helper={DEV.enabled ? 'Mode test, sans SMS : le code est 123456.' : 'Nous vous enverrons un code par SMS.'}
         />
       </View>
       <Button
