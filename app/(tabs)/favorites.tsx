@@ -1,48 +1,23 @@
-// app/(tabs)/favorites.tsx - Favorites Tab Screen
-import { Ionicons } from '@expo/vector-icons';
+// app/(tabs)/favorites.tsx — Favoris tab
 import { useRouter } from 'expo-router';
 import React from 'react';
-import { StatusBar, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import FavoritesList from '../../components/organisms/FavoritesList';
-import { theme } from '../../utils/theme';
+import { IconButton, ScreenHeader } from '@/components/ui';
+import FavoritesList from '@/components/organisms/FavoritesList';
+import { useTheme } from '@/theme';
 
-export default function FavoritesScreen() {
+export default function FavoritesTab() {
   const router = useRouter();
+  const t = useTheme();
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={theme.colors.white} />
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Favoris</Text>
-        <TouchableOpacity style={styles.searchButton} onPress={() => router.push('/search')}>
-          <Ionicons name="search-outline" size={24} color={theme.colors.gray} />
-        </TouchableOpacity>
-      </View>
+    <SafeAreaView style={{ flex: 1, backgroundColor: t.colors.canvas }} edges={['top']}>
+      <ScreenHeader
+        title="Favoris"
+        large
+        back={false}
+        right={<IconButton icon="search" label="Rechercher" onPress={() => router.push('/search')} />}
+      />
       <FavoritesList />
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.white,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#333',
-  },
-  searchButton: {
-    padding: theme.spacing.sm,
-  },
-});

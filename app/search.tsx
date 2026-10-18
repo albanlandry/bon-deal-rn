@@ -1,32 +1,22 @@
+// app/search.tsx — Recherche: instant suggestions, recent searches, "Trouve-moi ça".
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMutation } from '@tanstack/react-query';
-import { theme } from '../utils/theme';
-import { showToast } from '../components/atoms/Toast';
+import { useRouter } from 'expo-router';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { AppText, Button, Card, Chip, IconButton, showToast } from '@/components/ui';
+import { CATEGORY_ICONS } from '@/components/molecules/CategorySheet';
 import { CATEGORIES } from '@/constants/catalog';
+import type { BdParsedSearch } from '@/constants/types';
 import { ApiError } from '@/lib/api';
 import { parseSearch } from '@/lib/api/ai';
-import type { BdParsedSearch } from '@/constants/types';
+import { createStyles, useStyles, useTheme } from '@/theme';
 
-// AsyncStorage key for recent searches
+// AsyncStorage key for recent searches (unchanged).
 const RECENT_SEARCHES_KEY = '@bondeal_recent_searches';
-
-// "Trouve-moi ça": natural-language search. True voice capture needs
-// expo-speech-recognition (future); for now the search box is the utterance.
-const VOICE_SEARCH_ENABLED = true;
 
 function nlErrMessage(e: unknown): string {
   if (e instanceof ApiError) {
@@ -63,17 +53,21 @@ const clearRecentSearches = async (): Promise<void> => {
   }
 };
 
+const normalize = (s: string) =>
+  s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
 export default function SearchScreen() {
+  const t = useTheme();
+  const s = useStyles(makeStyles);
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [recentItems, setRecentItems] = useState<string[]>([]);
-  const router = useRouter();
 
-  // Load recent searches on component mount
   useEffect(() => {
     loadRecentSearches().then(setRecentItems);
   }, []);
 
-  // Synchronous: persist the term (dedupe, move-to-top, max 10) then navigate.
+  // Persist the term (dedupe, move-to-top, max 10).
   const rememberRecent = (q: string) => {
     const updated = [q, ...recentItems.filter((x) => x !== q)].slice(0, 10);
     setRecentItems(updated);
@@ -106,15 +100,10 @@ export default function SearchScreen() {
   const handleNlSearch = () => {
     const utter = searchQuery.trim();
     if (!utter) {
-      showToast.info('Recherche intelligente', 'Décrivez ce que vous cherchez, ex : « un frigo pas cher ».');
+      showToast.info('Trouve-moi ça', 'Décrivez ce que vous cherchez, ex : « un frigo pas cher ».');
       return;
     }
     nlSearch.mutate(utter);
-  };
-
-  const handleRecentSearch = (item: string) => {
-    setSearchQuery(item);
-    runSearch(item);
   };
 
   const browseCategory = (value: string) => {
@@ -126,236 +115,213 @@ export default function SearchScreen() {
     await clearRecentSearches();
   };
 
-  const handleCancel = () => router.back();
+  // Instant suggestions from local, real data only: matching recent searches
+  // and matching categories (no suggestion endpoint on the backend yet).
+  const q = normalize(searchQuery.trim());
+  const suggestions = useMemo(() => {
+    if (!q) return { recent: [] as string[], cats: [] as typeof CATEGORIES };
+    return {
+      recent: recentItems.filter((r) => normalize(r).includes(q)).slice(0, 5),
+      cats: CATEGORIES.filter((c) => normalize(c.label).includes(q)).slice(0, 4),
+    };
+  }, [q, recentItems]);
 
-  const renderRecentItem = ({ item }: { item: string }) => (
-    <TouchableOpacity style={styles.tagButton} onPress={() => handleRecentSearch(item)}>
-      <Text style={styles.tagText}>{item}</Text>
-    </TouchableOpacity>
-  );
+  const looksLikeSentence = searchQuery.trim().split(/\s+/).length >= 3;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={theme.colors.white} />
-
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <TouchableOpacity style={styles.backButton} onPress={handleCancel}>
-          <Ionicons name="chevron-back" size={24} color={theme.colors.gray} />
-        </TouchableOpacity>
-        <View style={styles.searchInputContainer}>
-          <Ionicons name="search" size={20} color={theme.colors.gray} style={styles.searchIcon} />
+    <SafeAreaView style={s.container}>
+      {/* Search bar */}
+      <View style={s.searchRow}>
+        <IconButton icon="arrow-back" label="Retour" onPress={() => router.back()} />
+        <View style={s.inputWrap}>
+          <Ionicons name="search" size={20} color={t.colors.inkMuted} />
           <TextInput
-            style={styles.searchInput}
-            placeholder="Rechercher..."
+            style={[t.type.body, s.input]}
+            placeholder="Que cherchez-vous ?"
+            placeholderTextColor={t.colors.inkSubtle}
+            selectionColor={t.colors.brandStrong}
             value={searchQuery}
             onChangeText={setSearchQuery}
             onSubmitEditing={() => runSearch(searchQuery)}
-            autoFocus={true}
+            autoFocus
             returnKeyType="search"
+            accessibilityLabel="Rechercher"
+            maxFontSizeMultiplier={1.3}
           />
-          {/* Trouve-moi ça — natural-language search on the typed sentence */}
-          {VOICE_SEARCH_ENABLED && (
-            <TouchableOpacity
-              style={styles.micButton}
-              onPress={handleNlSearch}
-              disabled={nlSearch.isPending}>
-              {nlSearch.isPending ? (
-                <ActivityIndicator size="small" color={theme.colors.primary} />
-              ) : (
-                <Ionicons name="sparkles-outline" size={20} color={theme.colors.primary} />
-              )}
-            </TouchableOpacity>
+          {!!searchQuery && (
+            <IconButton icon="close-circle" label="Effacer" color="inkSubtle" size={20} onPress={() => setSearchQuery('')} />
           )}
         </View>
-        <TouchableOpacity style={styles.cancelButton} onPress={handleCancel}>
-          <Text style={styles.cancelText}>Annuler</Text>
-        </TouchableOpacity>
       </View>
 
-      {/* Recent Searches Section */}
-      {recentItems.length > 0 && (
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recherches récentes</Text>
-            <TouchableOpacity onPress={handleClearRecentSearches}>
-              <Text style={styles.clearAllText}>Tout supprimer</Text>
-            </TouchableOpacity>
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={s.content}>
+        {/* Trouve-moi ça — turns a vague need into a short ranked list (choice overload) */}
+        <Card tone="brand" style={s.aiCard}>
+          <View style={s.aiHeader}>
+            <Ionicons name="sparkles" size={20} color={t.colors.brandStrong} />
+            <AppText variant="labelStrong" style={s.flex}>
+              Trouve-moi ça
+            </AppText>
           </View>
-          <FlatList
-            data={recentItems}
-            renderItem={renderRecentItem}
-            keyExtractor={(item, index) => `recent-${index}`}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.tagsContainer}
+          <AppText variant="small" color="inkMuted">
+            {looksLikeSentence
+              ? 'Laissez l’IA transformer votre phrase en filtres (catégorie, prix, état).'
+              : 'Décrivez ce que vous cherchez avec vos mots, ex : « un frigo pas cher en bon état ».'}
+          </AppText>
+          <Button
+            label={nlSearch.isPending ? 'Analyse de votre demande…' : 'Chercher avec l’IA'}
+            icon="sparkles-outline"
+            onPress={handleNlSearch}
+            loading={nlSearch.isPending}
+            disabled={!searchQuery.trim()}
+            disabledReason="Tapez d’abord ce que vous cherchez."
+            size="sm"
+            style={s.aiButton}
           />
-        </View>
-      )}
+        </Card>
 
-      {/* Browse by category */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Parcourir par catégorie</Text>
-        <View style={styles.categoryGrid}>
-          {CATEGORIES.map((c) => (
-            <TouchableOpacity
-              key={c.value}
-              style={styles.tagButton}
-              onPress={() => browseCategory(c.value)}
-            >
-              <Text style={styles.tagText}>{c.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
+        {q ? (
+          <View style={s.section}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Rechercher ${searchQuery.trim()}`}
+              onPress={() => runSearch(searchQuery)}
+              style={({ pressed }) => [s.suggestion, pressed && s.pressed]}>
+              <Ionicons name="search" size={18} color={t.colors.inkMuted} />
+              <AppText variant="body" style={s.flex} numberOfLines={1}>
+                Rechercher « {searchQuery.trim()} »
+              </AppText>
+              <Ionicons name="arrow-forward" size={18} color={t.colors.inkSubtle} />
+            </Pressable>
+            {suggestions.recent.map((r) => (
+              <Pressable
+                key={`r-${r}`}
+                accessibilityRole="button"
+                accessibilityLabel={`Recherche récente : ${r}`}
+                onPress={() => {
+                  setSearchQuery(r);
+                  runSearch(r);
+                }}
+                style={({ pressed }) => [s.suggestion, pressed && s.pressed]}>
+                <Ionicons name="time-outline" size={18} color={t.colors.inkMuted} />
+                <AppText variant="body" style={s.flex} numberOfLines={1}>
+                  {r}
+                </AppText>
+              </Pressable>
+            ))}
+            {suggestions.cats.map((c) => (
+              <Pressable
+                key={`c-${c.value}`}
+                accessibilityRole="button"
+                accessibilityLabel={`Catégorie ${c.label}`}
+                onPress={() => browseCategory(c.value)}
+                style={({ pressed }) => [s.suggestion, pressed && s.pressed]}>
+                <Ionicons name={CATEGORY_ICONS[c.value] ?? 'pricetag-outline'} size={18} color={t.colors.inkMuted} />
+                <AppText variant="body" style={s.flex}>
+                  {c.label}
+                </AppText>
+                <AppText variant="caption" color="inkSubtle">
+                  Catégorie
+                </AppText>
+              </Pressable>
+            ))}
+          </View>
+        ) : (
+          <>
+            {recentItems.length > 0 && (
+              <View style={s.section}>
+                <View style={s.sectionHeader}>
+                  <AppText variant="h3" accessibilityRole="header">
+                    Recherches récentes
+                  </AppText>
+                  <Button label="Tout effacer" variant="ghost" size="sm" onPress={handleClearRecentSearches} />
+                </View>
+                <View style={s.wrap}>
+                  {recentItems.map((item) => (
+                    <Chip
+                      key={item}
+                      label={item}
+                      icon="time-outline"
+                      kind="action"
+                      onPress={() => {
+                        setSearchQuery(item);
+                        runSearch(item);
+                      }}
+                    />
+                  ))}
+                </View>
+              </View>
+            )}
+
+            <View style={s.section}>
+              <AppText variant="h3" style={s.sectionTitle} accessibilityRole="header">
+                Parcourir par catégorie
+              </AppText>
+              <View style={s.wrap}>
+                {CATEGORIES.map((c) => (
+                  <Chip
+                    key={c.value}
+                    label={c.label}
+                    icon={CATEGORY_ICONS[c.value]}
+                    kind="action"
+                    onPress={() => browseCategory(c.value)}
+                  />
+                ))}
+              </View>
+            </View>
+          </>
+        )}
+        {nlSearch.isPending && (
+          <View style={s.pending}>
+            <ActivityIndicator color={t.colors.brandStrong} />
+          </View>
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.white,
-  },
-  searchContainer: {
+const makeStyles = createStyles((t) => ({
+  container: { flex: 1, backgroundColor: t.colors.canvas },
+  flex: { flex: 1 },
+  searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    backgroundColor: theme.colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.grayLight,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.grayLight,
+    paddingHorizontal: 4,
+    paddingRight: t.spacing.md,
+    paddingVertical: t.spacing.xs,
+    gap: 4,
   },
-  backButton: {
-    padding: theme.spacing.sm,
-    marginRight: theme.spacing.sm,
-  },
-  searchInputContainer: {
+  inputWrap: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.xs,
-    marginRight: theme.spacing.md,
+    gap: t.spacing.xs,
+    minHeight: 48,
+    paddingLeft: t.spacing.md,
+    borderRadius: t.radius.full,
+    borderWidth: 1.5,
+    borderColor: t.colors.brandStrong,
+    backgroundColor: t.colors.surface,
   },
-  searchIcon: {
-    marginRight: theme.spacing.sm,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 15,
-    color: '#333',
-  },
-  cancelButton: {
-    paddingVertical: theme.spacing.sm,
-  },
-  cancelText: {
-    fontSize: 16,
-    color: theme.colors.gray,
-    fontWeight: '500',
-  },
-  section: {
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: theme.spacing.md,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-  },
-  clearAllText: {
-    fontSize: 14,
-    color: theme.colors.gray,
-    fontWeight: '500',
-  },
-  tagsContainer: {
-    paddingRight: theme.spacing.lg,
-  },
-  categoryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-  },
-  micButton: {
-    padding: theme.spacing.xs,
-    marginLeft: theme.spacing.xs,
-  },
-  tagButton: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: 20,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: 8,
-    marginRight: theme.spacing.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.grayLight,
-  },
-  tagText: {
-    fontSize: 14,
-    color: '#333',
-    fontWeight: '500',
-  },
-  loadingIndicator: {
-    marginLeft: theme.spacing.sm,
-  },
-  // Suggestion styles
-  suggestionsContainer: {
-    backgroundColor: theme.colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.grayLight,
-    maxHeight: 300,
-  },
-  suggestionsList: {
-    maxHeight: 300,
-  },
-  suggestionItem: {
+  input: { flex: 1, color: t.colors.ink, paddingVertical: 10 },
+  content: { padding: t.spacing.md, paddingBottom: t.spacing.xxl },
+  aiCard: { gap: t.spacing.xs },
+  aiHeader: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs },
+  aiButton: { alignSelf: 'flex-start', marginTop: 4 },
+  section: { marginTop: t.spacing.xl },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: t.spacing.xs },
+  sectionTitle: { marginBottom: t.spacing.sm },
+  wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.xs },
+  suggestion: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    backgroundColor: theme.colors.white,
+    gap: t.spacing.sm,
+    minHeight: 52,
+    paddingHorizontal: 4,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: t.colors.line,
   },
-  suggestionContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  suggestionIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#F8F9FA',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: theme.spacing.md,
-  },
-  suggestionTextContainer: {
-    flex: 1,
-  },
-  suggestionText: {
-    fontSize: 16,
-    color: '#333',
-    fontWeight: '500',
-    marginBottom: 2,
-  },
-  suggestionCategory: {
-    fontSize: 12,
-    color: theme.colors.gray,
-    fontWeight: '400',
-  },
-  suggestionSeparator: {
-    height: 1,
-    backgroundColor: theme.colors.grayLight,
-    marginLeft: theme.spacing.lg,
-  },
-});
+  pressed: { backgroundColor: t.colors.surfaceAlt },
+  pending: { paddingTop: t.spacing.xl },
+}));

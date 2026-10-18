@@ -23,7 +23,8 @@
     "prebuild:clean": "expo prebuild --clean",
     "prebuild:local": "cross-env APP_ENV=local expo prebuild",
     "prebuild:test": "cross-env APP_ENV=test expo prebuild",
-    "prebuild:prod": "cross-env APP_ENV=production expo prebuild"
+    "prebuild:prod": "cross-env APP_ENV=production expo prebuild",
+    "gen:api": "openapi-typescript ${OPENAPI_SPEC:-../bon-deal-fastapi/openapi/openapi.json} -o lib/api/schema.d.ts"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
@@ -40,6 +41,8 @@
     "expo-constants": "~18.0.9",
     "expo-dev-client": "~6.0.16",
     "expo-font": "~14.0.9",
+    "expo-haptics": "~15.0.8",
+    "expo-image": "~3.0.11",
     "expo-image-picker": "^17.0.8",
     "expo-linear-gradient": "^15.0.7",
     "expo-linking": "~8.0.8",
@@ -73,6 +76,7 @@
     "@types/react": "~19.1.0",
     "cross-env": "^7.0.3",
     "dotenv": "^16.4.5",
+    "openapi-typescript": "7.13.0",
     "react-test-renderer": "19.1.0",
     "typescript": "~5.9.2"
   },

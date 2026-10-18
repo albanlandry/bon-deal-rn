@@ -97,7 +97,7 @@ module.exports = {
     extra: {
       // Environment variables accessible via Constants.expoConfig.extra
       env: process.env.APP_ENV || 'local',
-      apiBaseUrl: process.env.API_BASE_URL || 'http://localhost:8000',
+      apiBaseUrl: process.env.API_BASE_URL || 'http://localhost:8000/v1', // versioned API base
       apiTimeout: parseInt(process.env.API_TIMEOUT || '30000', 10),
       firebaseApiKey: process.env.FIREBASE_API_KEY || '',
       firebaseAuthDomain: process.env.FIREBASE_AUTH_DOMAIN || '',

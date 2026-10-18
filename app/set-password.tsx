@@ -1,174 +1,127 @@
-// app/set-password.tsx - Set password after phone verification
+// app/set-password.tsx — Choose a password after phone verification
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
-import {
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { theme } from '../utils/theme';
+import { StyleSheet, View } from 'react-native';
+import AppText from '@/components/atoms/AppText';
+import Button from '@/components/atoms/Button';
+import IconButton from '@/components/atoms/IconButton';
+import TextField from '@/components/atoms/TextField';
+import AuthScaffold from '@/components/organisms/AuthScaffold';
+import { haptics } from '@/lib/haptics';
+import { useTheme } from '@/theme';
+
+/**
+ * Rules mirror the backend password policy (letters and digits only,
+ * at least one of each, ≥ 8 characters), shown as a live checklist so the
+ * user sees progress instead of an error after the fact (Norman).
+ */
+function passwordRules(pw: string, repeat: string) {
+  return {
+    length: pw.length >= 8,
+    letter: /[A-Za-z]/.test(pw),
+    digit: /[0-9]/.test(pw),
+    charset: pw.length > 0 && /^[A-Za-z0-9]+$/.test(pw),
+    match: pw.length > 0 && pw === repeat,
+  };
+}
+
+function Rule({ ok, label }: { ok: boolean; label: string }) {
+  const t = useTheme();
+  return (
+    <View
+      style={styles.rule}
+      accessibilityRole="text"
+      accessibilityLabel={`${label} : ${ok ? 'validé' : 'non validé'}`}>
+      <Ionicons
+        name={ok ? 'checkmark-circle' : 'ellipse-outline'}
+        size={18}
+        color={ok ? t.colors.success : t.colors.inkSubtle}
+      />
+      <AppText variant="small" color={ok ? 'ink' : 'inkMuted'}>
+        {label}
+      </AppText>
+    </View>
+  );
+}
 
 export default function SetPasswordScreen() {
   const router = useRouter();
   const { phone } = useLocalSearchParams<{ phone?: string }>();
-
   const [password, setPassword] = useState('');
   const [repeatPassword, setRepeatPassword] = useState('');
+  const [visible, setVisible] = useState(false);
 
-  const requirements = useMemo(() => ({
-    length: password.length >= 8,
-    upper: /[A-Z]/.test(password),
-    lower: /[a-z]/.test(password),
-    number: /[0-9]/.test(password),
-    special: /[!@#$%^&*(),.?":{}|<>_\-]/.test(password),
-    match: password.length > 0 && password === repeatPassword,
-  }), [password, repeatPassword]);
-
-  const canContinue = requirements.length && requirements.upper && requirements.lower && requirements.number && requirements.special && requirements.match;
+  const r = useMemo(() => passwordRules(password, repeatPassword), [password, repeatPassword]);
+  const canContinue = r.length && r.letter && r.digit && r.charset && r.match;
 
   const handleContinue = () => {
     if (!canContinue) return;
-    // Here you would persist the password for the verified phone user
-    // For now, just navigate to home or profile
+    haptics.success();
+    // Persisting the password is not wired yet (phone OTP is the login
+    // method); behaviour unchanged: continue into the app.
     router.replace('/(tabs)/home');
   };
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}>
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}>
-          {/* Title */}
-          <Text style={styles.title}>Set your password</Text>
-          {phone ? <Text style={styles.subtitle}>{phone}</Text> : null}
-
-          {/* Password Input */}
-          <TextInput
-            style={styles.input}
-            placeholder="Password"
-            placeholderTextColor="#999"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            autoCapitalize="none"
-          />
-
-          {/* Repeat Password Input */}
-          <TextInput
-            style={styles.input}
-            placeholder="Repeat password"
-            placeholderTextColor="#999"
-            value={repeatPassword}
-            onChangeText={setRepeatPassword}
-            secureTextEntry
-            autoCapitalize="none"
-          />
-
-          {/* Password Requirements */}
-          <View style={styles.requirementsContainer}>
-            <Requirement ok={requirements.length} label="Minimum of 8 characters" />
-            <Requirement ok={requirements.upper} label="At least one uppercase letter (A-Z)" />
-            <Requirement ok={requirements.lower} label="At least one lowercase letter (a-z)" />
-            <Requirement ok={requirements.number} label="At least one number (0-9)" />
-            <Requirement ok={requirements.special} label="At least one special character (!@#$%^&*)" />
-            <Requirement ok={requirements.match} label="Passwords match" />
-          </View>
-
-          {/* Continue Button */}
-          <TouchableOpacity
-            style={[styles.continueButton, !canContinue && styles.continueButtonDisabled]}
-            onPress={handleContinue}
-            disabled={!canContinue}>
-            <Text style={styles.continueButtonText}>Continue</Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+  const eye = (
+    <IconButton
+      icon={visible ? 'eye-off-outline' : 'eye-outline'}
+      label={visible ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+      onPress={() => setVisible((v) => !v)}
+      color="inkMuted"
+      size={20}
+    />
   );
-}
 
-function Requirement({ ok, label }: { ok: boolean; label: string }) {
   return (
-    <Text style={[styles.requirementText, ok && styles.requirementOk]}>
-      {label}
-    </Text>
+    <AuthScaffold
+      title="Choisissez un mot de passe"
+      subtitle={phone ? `Pour le compte ${phone}` : undefined}
+      icon="lock-closed"
+      onBack={() => router.back()}>
+      <TextField
+        label="Mot de passe"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry={!visible}
+        autoCapitalize="none"
+        autoComplete="password-new"
+        textContentType="newPassword"
+        right={eye}
+      />
+      <TextField
+        label="Confirmez le mot de passe"
+        value={repeatPassword}
+        onChangeText={setRepeatPassword}
+        secureTextEntry={!visible}
+        autoCapitalize="none"
+        textContentType="newPassword"
+        error={repeatPassword.length > 0 && !r.match ? 'Les mots de passe ne correspondent pas' : null}
+        containerStyle={styles.gap}
+      />
+
+      <View style={styles.rules}>
+        <Rule ok={r.length} label="Au moins 8 caractères" />
+        <Rule ok={r.letter} label="Au moins une lettre" />
+        <Rule ok={r.digit} label="Au moins un chiffre" />
+        <Rule ok={r.charset} label="Lettres et chiffres uniquement" />
+        <Rule ok={r.match} label="Les deux mots de passe sont identiques" />
+      </View>
+
+      <Button
+        label="Terminer"
+        onPress={handleContinue}
+        disabled={!canContinue}
+        disabledReason={!canContinue ? 'Cochez toutes les règles pour continuer' : undefined}
+        fullWidth
+        size="lg"
+      />
+    </AuthScaffold>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.white,
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingTop: 40,
-    paddingBottom: 40,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#000',
-    marginBottom: 8,
-    lineHeight: 40,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 24,
-  },
-  input: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    fontSize: 16,
-    marginBottom: 16,
-    color: '#333',
-  },
-  requirementsContainer: {
-    marginTop: 8,
-    marginBottom: 24,
-    paddingLeft: 4,
-  },
-  requirementText: {
-    fontSize: 13,
-    color: '#666',
-    marginBottom: 4,
-    lineHeight: 20,
-  },
-  requirementOk: {
-    color: '#0A7D2E',
-  },
-  continueButton: {
-    backgroundColor: theme.colors.primary,
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 'auto',
-  },
-  continueButtonDisabled: {
-    backgroundColor: '#B0B0B0',
-    opacity: 0.6,
-  },
-  continueButtonText: {
-    color: theme.colors.white,
-    fontSize: 18,
-    fontWeight: '600',
-  },
+  gap: { marginTop: 8 },
+  rules: { gap: 8, marginVertical: 20 },
+  rule: { flexDirection: 'row', alignItems: 'center', gap: 8 },
 });
-
-

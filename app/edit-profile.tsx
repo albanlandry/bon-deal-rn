@@ -1,4 +1,6 @@
-// app/edit-profile.tsx - Edit Profile Screen
+// app/edit-profile.tsx — Modifier le profil
+// Themed fields with inline validation (Norman); avatar upload is optimistic
+// (Doherty). API calls unchanged: PATCH /auth/me, POST /auth/me/avatar.
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
@@ -6,20 +8,25 @@ import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Image,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { showToast } from '../components/atoms/Toast';
-import { theme } from '../utils/theme';
+import { useTheme } from '@/theme';
+import {
+  AppText,
+  Avatar,
+  Button,
+  Chip,
+  ScreenHeader,
+  TextField,
+  showToast,
+} from '@/components/ui';
 import { ApiError } from '@/lib/api';
 import { updateMe, uploadAvatar } from '@/lib/api/me';
 import { quartiersQuery } from '@/lib/api/quartiers';
@@ -40,6 +47,7 @@ function saveErrorMessage(e: unknown): string {
 
 export default function EditProfileScreen() {
   const router = useRouter();
+  const t = useTheme();
   const { user, refreshUser } = useAuth();
 
   const [firstName, setFirstName] = useState(user?.first_name ?? '');
@@ -113,9 +121,20 @@ export default function EditProfileScreen() {
     }
   };
 
+  const validateEmail = (value: string) => {
+    const v = value.trim();
+    setEmailError(v && !EMAIL_RE.test(v) ? 'Adresse e-mail invalide (ex. nom@exemple.com)' : '');
+  };
+
+  const dirty =
+    firstName !== (user?.first_name ?? '') ||
+    lastName !== (user?.last_name ?? '') ||
+    email !== (user?.email ?? '') ||
+    quartier !== (user?.quartier ?? '');
+
   const handleSave = () => {
     if (email.trim() && !EMAIL_RE.test(email.trim())) {
-      setEmailError('Email invalide');
+      setEmailError('Adresse e-mail invalide (ex. nom@exemple.com)');
       return;
     }
     const patch: Record<string, unknown> = {};
@@ -132,312 +151,181 @@ export default function EditProfileScreen() {
     save.mutate(patch);
   };
 
+  const displayName = [firstName, lastName].filter(Boolean).join(' ') || user?.username;
+
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: t.colors.canvas }]}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()}>
-            <Ionicons name="chevron-back" size={24} color="#000" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Modifier le profil</Text>
-          <View style={{ width: 24 }} />
-        </View>
+        style={styles.flex}>
+        <ScreenHeader title="Modifier le profil" />
 
         <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
+          style={styles.flex}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
-          {/* Avatar Section */}
+          {/* Avatar */}
           <View style={styles.avatarSection}>
-            <TouchableOpacity onPress={handlePickImage} style={styles.avatarContainer}>
-              {avatarUri ? (
-                <Image source={{ uri: avatarUri }} style={styles.avatar} />
-              ) : (
-                <View style={[styles.avatar, styles.avatarFallback]}>
-                  <Ionicons name="person" size={44} color={theme.colors.gray} />
-                </View>
-              )}
+            <Pressable
+              onPress={handlePickImage}
+              disabled={upload.isPending}
+              accessibilityRole="button"
+              accessibilityLabel="Changer la photo de profil">
+              <Avatar uri={avatarUri || null} name={displayName} size={104} />
               {upload.isPending && (
-                <View style={styles.avatarUploading}>
-                  <ActivityIndicator color="#fff" />
+                <View style={[styles.avatarUploading, { backgroundColor: t.colors.scrim }]}>
+                  <ActivityIndicator color="#FFFFFF" />
                 </View>
               )}
-              <View style={styles.avatarEditBadge}>
-                <Ionicons name="camera" size={20} color="#fff" />
+              <View
+                style={[
+                  styles.avatarEditBadge,
+                  { backgroundColor: t.colors.brand, borderColor: t.colors.canvas },
+                ]}>
+                <Ionicons name="camera" size={18} color={t.colors.onBrand} />
               </View>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handlePickImage} disabled={upload.isPending}>
-              <Text style={styles.changePhotoText}>Changer la photo</Text>
-            </TouchableOpacity>
+            </Pressable>
+            <Button
+              label={upload.isPending ? 'Envoi de la photo…' : 'Changer la photo'}
+              variant="ghost"
+              size="sm"
+              onPress={handlePickImage}
+              disabled={upload.isPending}
+            />
           </View>
 
-          {/* Form Fields */}
-          <View style={styles.formSection}>
-            <View style={styles.formField}>
-              <Text style={styles.label}>Prénom</Text>
-              <TextInput
-                style={styles.input}
-                value={firstName}
-                onChangeText={setFirstName}
-                placeholder="Votre prénom"
-                placeholderTextColor="#999"
-              />
-            </View>
+          <View style={styles.form}>
+            <TextField
+              label="Prénom"
+              value={firstName}
+              onChangeText={setFirstName}
+              placeholder="Votre prénom"
+              autoCapitalize="words"
+              textContentType="givenName"
+              maxLength={60}
+            />
+            <TextField
+              label="Nom"
+              value={lastName}
+              onChangeText={setLastName}
+              placeholder="Votre nom"
+              autoCapitalize="words"
+              textContentType="familyName"
+              maxLength={60}
+            />
+            <TextField
+              label="E-mail"
+              value={email}
+              onChangeText={(v) => {
+                setEmail(v);
+                if (emailError) validateEmail(v);
+              }}
+              onBlur={() => validateEmail(email)}
+              error={emailError || null}
+              helper="Facultatif. Utile pour récupérer votre compte."
+              placeholder="votre@email.com"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              textContentType="emailAddress"
+            />
+            <TextField
+              label="Téléphone"
+              value={user?.phone_number ?? ''}
+              editable={false}
+              placeholder="—"
+              helper={
+                user?.phone_number
+                  ? 'Vérifié par SMS. Le numéro ne peut pas être modifié.'
+                  : 'Le numéro de téléphone ne peut pas être modifié ici.'
+              }
+              right={
+                user?.phone_number ? (
+                  <Ionicons name="shield-checkmark" size={18} color={t.colors.trust} />
+                ) : undefined
+              }
+            />
+            <TextField
+              label="Ville"
+              value={user?.city ?? ''}
+              editable={false}
+              placeholder="Ville non définie"
+              helper="Votre ville détermine votre fil d’annonces ; non modifiable ici."
+            />
 
-            <View style={styles.formField}>
-              <Text style={styles.label}>Nom</Text>
-              <TextInput
-                style={styles.input}
-                value={lastName}
-                onChangeText={setLastName}
-                placeholder="Votre nom"
-                placeholderTextColor="#999"
-              />
-            </View>
-
-            <View style={styles.formField}>
-              <Text style={styles.label}>Email</Text>
-              <TextInput
-                style={[styles.input, emailError && styles.inputError]}
-                value={email}
-                onChangeText={(t) => {
-                  setEmail(t);
-                  if (emailError) setEmailError('');
-                }}
-                placeholder="votre@email.com"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                placeholderTextColor="#999"
-              />
-              {!!emailError && <Text style={styles.errorText}>{emailError}</Text>}
-            </View>
-
-            <View style={styles.formField}>
-              <Text style={styles.label}>Téléphone</Text>
-              <TextInput
-                style={styles.input}
-                value={user?.phone_number ?? ''}
-                editable={false}
-                placeholder="—"
-                placeholderTextColor="#999"
-              />
-              <Text style={styles.helperText}>Le numéro de téléphone ne peut pas être modifié.</Text>
-            </View>
-
-            <View style={styles.formField}>
-              <Text style={styles.label}>Ville</Text>
-              <TextInput
-                style={styles.input}
-                value={user?.city ?? ''}
-                editable={false}
-                placeholder="Ville non définie"
-                placeholderTextColor="#999"
-              />
-              <Text style={styles.helperText}>
-                Changer de ville modifie tout votre fil ; non modifiable ici.
-              </Text>
-            </View>
-
-            <View style={styles.formField}>
-              <Text style={styles.label}>Quartier</Text>
-              <View style={styles.quartierChips}>
-                <TouchableOpacity
-                  style={[styles.chip, !quartier && styles.chipActive]}
-                  onPress={() => setQuartier('')}>
-                  <Text style={[styles.chipText, !quartier && styles.chipTextActive]}>Aucun</Text>
-                </TouchableOpacity>
-                {quartiers.map((q) => (
-                  <TouchableOpacity
-                    key={q.id}
-                    style={[styles.chip, quartier === q.name && styles.chipActive]}
-                    onPress={() => setQuartier(q.name)}>
-                    <Text
-                      style={[styles.chipText, quartier === q.name && styles.chipTextActive]}>
-                      {q.name}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              {!user?.city && (
-                <Text style={styles.helperText}>Définissez d’abord votre ville.</Text>
+            <View>
+              <AppText variant="labelStrong" style={styles.label}>
+                Quartier
+              </AppText>
+              {!user?.city ? (
+                <AppText variant="caption" color="inkMuted">
+                  Définissez d’abord votre ville.
+                </AppText>
+              ) : quartiersData.isLoading ? (
+                <ActivityIndicator color={t.colors.brandStrong} style={styles.quartierLoading} />
+              ) : (
+                <View style={styles.chips} accessibilityRole="radiogroup">
+                  <Chip label="Aucun" selected={!quartier} onPress={() => setQuartier('')} />
+                  {quartiers.map((q) => (
+                    <Chip
+                      key={q.id}
+                      label={q.name}
+                      selected={quartier === q.name}
+                      onPress={() => setQuartier(q.name)}
+                    />
+                  ))}
+                </View>
               )}
+              <AppText variant="caption" color="inkMuted" style={styles.helper}>
+                Sert de lieu de retrait par défaut pour vos annonces.
+              </AppText>
             </View>
           </View>
-
-          {/* Save Button */}
-          <TouchableOpacity
-            style={[styles.saveButton, save.isPending && styles.saveButtonDisabled]}
-            onPress={handleSave}
-            disabled={save.isPending}>
-            {save.isPending ? (
-              <ActivityIndicator color={theme.colors.white} />
-            ) : (
-              <Text style={styles.saveButtonText}>Enregistrer</Text>
-            )}
-          </TouchableOpacity>
         </ScrollView>
+
+        <View style={[styles.footer, { borderTopColor: t.colors.line, backgroundColor: t.colors.surface }]}>
+          <Button
+            label="Enregistrer"
+            onPress={handleSave}
+            loading={save.isPending}
+            disabled={!dirty || !!emailError}
+            disabledReason={emailError ? 'Corrigez l’adresse e-mail' : !dirty ? 'Aucune modification' : undefined}
+            fullWidth
+            haptic
+          />
+        </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.white,
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#333',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 40,
-  },
-  avatarSection: {
-    alignItems: 'center',
-    paddingVertical: theme.spacing.xl,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  avatarContainer: {
-    position: 'relative',
-    marginBottom: theme.spacing.md,
-  },
-  avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    borderWidth: 3,
-    borderColor: theme.colors.primary,
-  },
-  avatarFallback: {
-    backgroundColor: '#F0F0F0',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  container: { flex: 1 },
+  flex: { flex: 1 },
+  content: { padding: 16, paddingBottom: 32 },
+  avatarSection: { alignItems: 'center', gap: 4, marginBottom: 16 },
   avatarUploading: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderRadius: 50,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 52,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarEditBadge: {
     position: 'absolute',
-    bottom: 0,
     right: 0,
+    bottom: 0,
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: theme.colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
     borderWidth: 3,
-    borderColor: theme.colors.white,
-  },
-  changePhotoText: {
-    fontSize: 14,
-    color: theme.colors.primary,
-    fontWeight: '600',
-  },
-  formSection: {
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-  },
-  formField: {
-    marginBottom: theme.spacing.lg,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
-  input: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: '#333',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  inputError: {
-    borderColor: '#FF6B6B',
-  },
-  errorText: {
-    fontSize: 12,
-    color: '#FF6B6B',
-    marginTop: 4,
-  },
-  helperText: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 4,
-  },
-  quartierChips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-  },
-  chip: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: 20,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  chipActive: {
-    backgroundColor: theme.colors.primary,
-    borderColor: theme.colors.primary,
-  },
-  chipText: {
-    fontSize: 14,
-    color: '#333',
-    fontWeight: '500',
-  },
-  chipTextActive: {
-    color: theme.colors.white,
-  },
-  saveButton: {
-    backgroundColor: theme.colors.primary,
-    borderRadius: 12,
-    paddingVertical: 16,
     alignItems: 'center',
-    marginHorizontal: theme.spacing.lg,
-    marginTop: theme.spacing.lg,
+    justifyContent: 'center',
   },
-  saveButtonDisabled: {
-    opacity: 0.6,
-  },
-  saveButtonText: {
-    color: theme.colors.white,
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  form: { gap: 8 },
+  label: { marginBottom: 8 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  helper: { marginTop: 6 },
+  quartierLoading: { alignSelf: 'flex-start' },
+  footer: { padding: 16, borderTopWidth: StyleSheet.hairlineWidth },
 });

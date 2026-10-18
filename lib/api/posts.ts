@@ -120,3 +120,8 @@ export async function priceCheck(postId: number): Promise<BdPriceCheck> {
   );
   return res.price_check;
 }
+
+/** Increment the share counter after the native share sheet (fire-and-forget). */
+export async function sharePost(postId: number): Promise<void> {
+  await apiFetch(`/posts/${postId}/share`, { method: 'POST' });
+}

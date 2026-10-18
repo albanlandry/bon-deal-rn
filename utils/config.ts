@@ -137,6 +137,13 @@ export const getApiUrl = (endpoint: string = ''): string => {
   return `${baseUrl}${path}`;
 };
 
+/**
+ * WebSocket URL derived from the API base URL: http → ws, https → wss,
+ * same host and path prefix, then `/ws`.
+ */
+export const getWsUrl = (endpoint: string = '/ws'): string =>
+  getApiUrl(endpoint).replace(/^http(s?):\/\//i, (_m, s) => `ws${s ? 's' : ''}://`);
+
 // Log configuration on startup (only in development)
 if (__DEV__ && config.debug.enabled) {
   console.log('🔧 App Configuration:', {

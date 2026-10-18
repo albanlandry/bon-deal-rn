@@ -1,186 +1,83 @@
-// app/privacy-settings.tsx - Privacy Settings Screen
+// app/privacy-settings.tsx — Confidentialité
+// TODO(backend): no endpoint for privacy settings yet (MB-PRF-03), and no
+// block/report endpoints (MB-TS-02); settings are stored locally only
+// (AsyncStorage) and are not yet enforced by the server.
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import React from 'react';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { showToast } from '../components/atoms/Toast';
-import { theme } from '../utils/theme';
+import { useTheme } from '@/theme';
+import { AppText, Card, ScreenHeader } from '@/components/ui';
+import SettingsLocalToggles, { LocalToggleGroup } from '@/components/organisms/SettingsLocalToggles';
 
-interface PrivacySetting {
-  id: string;
-  title: string;
-  description: string;
-  enabled: boolean;
-}
+export const PRIVACY_SETTINGS_KEY = 'bondeal.settings.privacy.v1';
 
-const privacySettings: PrivacySetting[] = [
+const GROUPS: LocalToggleGroup[] = [
   {
-    id: 'profileVisibility',
-    title: 'Profil public',
-    description: 'Autoriser les autres utilisateurs à voir votre profil',
-    enabled: true,
+    title: 'Mon profil',
+    items: [
+      {
+        id: 'profileVisibility',
+        title: 'Profil public',
+        description: 'Les autres membres peuvent voir votre profil et vos avis',
+        icon: 'person-circle-outline',
+        defaultValue: true,
+      },
+      {
+        id: 'showLocation',
+        title: 'Afficher mon quartier',
+        description: 'Votre quartier apparaît sur votre profil',
+        icon: 'location-outline',
+        defaultValue: true,
+      },
+      {
+        id: 'showPhone',
+        title: 'Afficher mon téléphone',
+        description: 'Désactivé par défaut. Préférez la messagerie BonDeal.',
+        icon: 'call-outline',
+        defaultValue: false,
+      },
+    ],
   },
   {
-    id: 'showLocation',
-    title: 'Afficher la localisation',
-    description: 'Afficher votre localisation sur votre profil',
-    enabled: true,
-  },
-  {
-    id: 'showPhone',
-    title: 'Afficher le téléphone',
-    description: 'Autoriser les autres à voir votre numéro de téléphone',
-    enabled: false,
-  },
-  {
-    id: 'allowMessages',
-    title: 'Accepter les messages',
-    description: 'Autoriser les autres utilisateurs à vous envoyer des messages',
-    enabled: true,
+    title: 'Messages',
+    items: [
+      {
+        id: 'allowMessages',
+        title: 'Accepter les messages',
+        description: 'Les membres peuvent vous contacter au sujet de vos annonces',
+        icon: 'chatbubbles-outline',
+        defaultValue: true,
+      },
+    ],
   },
 ];
 
 export default function PrivacySettingsScreen() {
-  const router = useRouter();
-  const [settings, setSettings] = useState(privacySettings);
-
-  const toggleSetting = (id: string) => {
-    setSettings(
-      settings.map(setting =>
-        setting.id === id ? { ...setting, enabled: !setting.enabled } : setting
-      )
-    );
-  };
-
-  const handleSave = () => {
-    // TODO: Save settings to API
-    showToast.success('Paramètres sauvegardés', 'Vos préférences de confidentialité ont été mises à jour.');
-    router.back();
-  };
-
+  const t = useTheme();
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="chevron-back" size={24} color="#000" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Confidentialité</Text>
-        <View style={{ width: 24 }} />
-      </View>
-
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <View style={styles.content}>
-          {settings.map((setting) => (
-            <View key={setting.id} style={styles.settingItem}>
-              <View style={styles.settingContent}>
-                <Text style={styles.settingTitle}>{setting.title}</Text>
-                <Text style={styles.settingDescription}>{setting.description}</Text>
-              </View>
-              <Switch
-                value={setting.enabled}
-                onValueChange={() => toggleSetting(setting.id)}
-                trackColor={{ false: '#e0e0e0', true: theme.colors.primary + '80' }}
-                thumbColor={setting.enabled ? theme.colors.primary : '#f4f3f4'}
-              />
-            </View>
-          ))}
-        </View>
-
-        {/* Info Section */}
-        <View style={styles.infoSection}>
-          <Ionicons name="information-circle-outline" size={20} color={theme.colors.primary} />
-          <Text style={styles.infoText}>
-            Vos informations personnelles sont protégées et ne seront jamais partagées avec des tiers sans votre consentement.
-          </Text>
-        </View>
-
-        {/* Save Button */}
-        <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-          <Text style={styles.saveButtonText}>Enregistrer</Text>
-        </TouchableOpacity>
+    <SafeAreaView style={[styles.container, { backgroundColor: t.colors.canvas }]}>
+      <ScreenHeader title="Confidentialité" />
+      <ScrollView contentContainerStyle={styles.content}>
+        <SettingsLocalToggles storageKey={PRIVACY_SETTINGS_KEY} groups={GROUPS} />
+        <Card tone="trust" style={styles.info}>
+          <Ionicons name="shield-checkmark-outline" size={20} color={t.colors.trust} />
+          <View style={styles.flex}>
+            <AppText variant="labelStrong">Vos données vous appartiennent</AppText>
+            <AppText variant="caption" color="inkMuted">
+              BonDeal ne vend pas vos données personnelles. Pour exporter ou supprimer vos
+              données, passez par Paramètres › Supprimer mon compte ou contactez le support.
+            </AppText>
+          </View>
+        </Card>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.white,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#333',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
-    padding: theme.spacing.lg,
-  },
-  settingItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  settingContent: {
-    flex: 1,
-    marginRight: theme.spacing.md,
-  },
-  settingTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-  },
-  settingDescription: {
-    fontSize: 14,
-    color: theme.colors.gray,
-    lineHeight: 20,
-  },
-  infoSection: {
-    flexDirection: 'row',
-    backgroundColor: '#F0F8FF',
-    borderRadius: 12,
-    padding: theme.spacing.md,
-    marginHorizontal: theme.spacing.lg,
-    marginTop: theme.spacing.md,
-  },
-  infoText: {
-    flex: 1,
-    fontSize: 13,
-    color: '#666',
-    marginLeft: theme.spacing.sm,
-    lineHeight: 18,
-  },
-  saveButton: {
-    backgroundColor: theme.colors.primary,
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginHorizontal: theme.spacing.lg,
-    marginTop: theme.spacing.lg,
-    marginBottom: 40,
-  },
-  saveButtonText: {
-    color: theme.colors.white,
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  container: { flex: 1 },
+  content: { padding: 16, paddingBottom: 32 },
+  info: { flexDirection: 'row', gap: 12, marginTop: 20 },
+  flex: { flex: 1 },
 });
-

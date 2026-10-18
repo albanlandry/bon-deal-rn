@@ -114,6 +114,8 @@ export interface BdChatMessage {
   payload: Record<string, any> | null;
   created_at: string | null;
   read_at: string | null;
+  /** Client-only: optimistic message state (never sent by the server). */
+  client_status?: 'sending' | 'failed';
 }
 
 export interface BdNegotiationOffer {
@@ -249,4 +251,28 @@ export interface BdNotification {
   payload: Record<string, any> | null;
   read_at: string | null;
   created_at: string | null;
+}
+
+/** Public review (GET /users/{id}/reviews → transaction_service._serialize_review). */
+export interface BdReview {
+  id: number;
+  transaction_id: number;
+  reviewer_id: number;
+  reviewee_id: number;
+  reviewer: BdUserBriefFull | null;
+  reviewee: BdUserBriefFull | null;
+  rating: number;
+  comment: string | null;
+  is_visible: boolean;
+  direction: 'buyer_to_seller' | 'seller_to_buyer';
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface BdReviewListResponse {
+  success: boolean;
+  total: number;
+  offset: number;
+  limit: number;
+  reviews: BdReview[];
 }

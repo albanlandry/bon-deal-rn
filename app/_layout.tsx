@@ -1,29 +1,31 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { DarkTheme, DefaultTheme, Theme as NavTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect, useState } from 'react';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect, useMemo, useState } from 'react';
 import 'react-native-reanimated';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { QueryClientProvider } from '@tanstack/react-query';
 
 import AnimatedSplashScreen from '@/components/AnimatedSplashScreen';
-import { useColorScheme } from '@/components/useColorScheme';
-import Toast from '@/components/atoms/Toast';
+import Toast, { toastConfig } from '@/components/atoms/Toast';
 import { PhoneAuthProvider } from '@/contexts/PhoneAuthContext';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { RealtimeProvider } from '@/contexts/RealtimeContext';
 import { queryClient } from '@/lib/queryClient';
 import { useForegroundMessageHandler } from '@/lib/push';
+import { AppThemeProvider, useTheme } from '@/theme';
 
 export {
-    // Catch any errors thrown by the Layout component.
-    ErrorBoundary
+  // Catch any errors thrown by the Layout component.
+  ErrorBoundary
 } from 'expo-router';
 
 export const unstable_settings = {
-  // Ensure that reloading on `/modal` keeps a back button present.
-  initialRouteName: '(tabs)',
+  initialRouteName: 'index',
 };
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
@@ -59,54 +61,63 @@ export default function RootLayout() {
     return <AnimatedSplashScreen onFinish={handleSplashFinish} />;
   }
 
-  return <RootLayoutNav />;
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <QueryClientProvider client={queryClient}>
+        <AppThemeProvider>
+          <RootLayoutNav />
+        </AppThemeProvider>
+      </QueryClientProvider>
+    </GestureHandlerRootView>
+  );
 }
 
 function RootLayoutNav() {
-  const colorScheme = useColorScheme();
+  const t = useTheme();
   useForegroundMessageHandler();
 
+  const navTheme = useMemo<NavTheme>(() => {
+    const base = t.isDark ? DarkTheme : DefaultTheme;
+    return {
+      ...base,
+      colors: {
+        ...base.colors,
+        primary: t.colors.brandStrong,
+        background: t.colors.canvas,
+        card: t.colors.surface,
+        text: t.colors.ink,
+        border: t.colors.line,
+        notification: t.colors.brand,
+      },
+    };
+  }, [t]);
+
   return (
-    <QueryClientProvider client={queryClient}>
-      <PhoneAuthProvider>
-        <AuthProvider>
-          <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-            <Stack>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-            <Stack.Screen name="make-offer" options={{ presentation: 'modal', headerShown: false }} />
-            <Stack.Screen name="login" options={{ headerShown: false }} />
-            <Stack.Screen name="signup" options={{ headerShown: false }} />
-            <Stack.Screen name="terms-and-conditions" options={{ headerShown: false }} />
-            <Stack.Screen name="verify-number" options={{ headerShown: false }} />
-            <Stack.Screen name="set-password" options={{ headerShown: false }} />
-            <Stack.Screen name="item-details" options={{ headerShown: false }} />
-            <Stack.Screen name="chatroom" options={{ headerShown: false }} />
-            <Stack.Screen name="post-item" options={{ headerShown: false }} />
-            <Stack.Screen name="notifications" options={{ headerShown: false }} />
-            <Stack.Screen name="search-results" options={{ headerShown: false }} />
-            <Stack.Screen name="splash" options={{ headerShown: false }} />
-            <Stack.Screen name="edit-profile" options={{ headerShown: false }} />
-            <Stack.Screen name="my-listings" options={{ headerShown: false }} />
-            <Stack.Screen name="boutique-eclair" options={{ headerShown: false }} />
-            <Stack.Screen name="favorites" options={{ headerShown: false }} />
-            <Stack.Screen name="settings" options={{ headerShown: false }} />
-            <Stack.Screen name="notification-settings" options={{ headerShown: false }} />
-            <Stack.Screen name="privacy-settings" options={{ headerShown: false }} />
-            <Stack.Screen name="help-support" options={{ headerShown: false }} />
-            <Stack.Screen
-              name="search"
-              options={{
+    <PhoneAuthProvider>
+      <AuthProvider>
+        <RealtimeProvider>
+          <ThemeProvider value={navTheme}>
+            <StatusBar style={t.isDark ? 'light' : 'dark'} />
+            <Stack
+              screenOptions={{
                 headerShown: false,
-                animation: 'slide_from_right',
-                animationDuration: 200
-              }}
-            />
+                contentStyle: { backgroundColor: t.colors.canvas },
+                animation: t.reduceMotion ? 'none' : 'default',
+              }}>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="onboarding" options={{ animation: t.reduceMotion ? 'none' : 'fade' }} />
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="make-offer" options={{ presentation: 'modal' }} />
+              <Stack.Screen name="post-item" options={{ presentation: 'fullScreenModal' }} />
+              <Stack.Screen
+                name="search"
+                options={{ animation: t.reduceMotion ? 'none' : 'fade', animationDuration: 200 }}
+              />
             </Stack>
-            <Toast />
+            <Toast config={toastConfig} />
           </ThemeProvider>
-        </AuthProvider>
-      </PhoneAuthProvider>
-    </QueryClientProvider>
+        </RealtimeProvider>
+      </AuthProvider>
+    </PhoneAuthProvider>
   );
 }

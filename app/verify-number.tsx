@@ -1,22 +1,17 @@
-// app/verify-number.tsx - Number verification screen
+// app/verify-number.tsx — Confirm the SMS code (Firebase phone auth)
 import auth from '@react-native-firebase/auth';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
-import {
-    ActivityIndicator,
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import OTPInput from '../components/molecules/OTPInput';
-import { theme } from '../utils/theme';
+import React, { useEffect, useRef, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
+import AppText from '@/components/atoms/AppText';
+import Button from '@/components/atoms/Button';
+import { showToast } from '@/components/atoms/Toast';
+import OTPInput, { OTPInputHandle } from '@/components/molecules/OTPInput';
+import AuthScaffold from '@/components/organisms/AuthScaffold';
 import { usePhoneAuth } from '@/contexts/PhoneAuthContext';
+import { haptics } from '@/lib/haptics';
+
+const RESEND_COOLDOWN_S = 30;
 
 export default function VerifyNumberScreen() {
   const router = useRouter();
@@ -25,208 +20,132 @@ export default function VerifyNumberScreen() {
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [cooldown, setCooldown] = useState(RESEND_COOLDOWN_S);
+  const otpRef = useRef<OTPInputHandle>(null);
+  const phoneToShow = phone || phoneNumber || '';
 
-  const handleOtpComplete = (code: string) => {
-    setOtp(code);
-  };
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const id = setTimeout(() => setCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(id);
+  }, [cooldown]);
 
-  const handleContinue = async () => {
-    if (otp.length !== 6) {
-      return;
-    }
-
+  const verify = async (code: string) => {
+    if (code.length !== 6 || loading) return;
     if (!confirmation) {
-      Alert.alert('Error', 'Verification session expired. Please request a new code.');
+      setError('La session a expiré. Demandez un nouveau code.');
       return;
     }
-
+    setError(null);
     setLoading(true);
-
     try {
-      // Verify the OTP code with Firebase
-      await confirmation.confirm(otp);
-
-      // Firebase is now signed in — AuthContext's onAuthStateChanged handler
-      // exchanges the Firebase ID token for a backend JWT in the background.
+      await confirmation.confirm(code);
+      // Firebase is now signed in — AuthContext exchanges the Firebase ID
+      // token for a backend JWT in the background.
+      haptics.success();
       clearAuth();
-
       if (mode === 'login') {
-        // Returning user — straight into the app.
         router.replace('/(tabs)/home');
       } else {
-        // New user — continue onboarding (profile setup → password).
-        router.push({
-          pathname: '/setup-profile',
-          params: { phone: phone || phoneNumber || '' },
-        });
+        router.push({ pathname: '/setup-profile', params: { phone: phoneToShow } });
       }
-    } catch (error: any) {
+    } catch (e: any) {
       setLoading(false);
-      console.error('Firebase verification error:', error);
-      
-      let errorMessage = 'Invalid verification code. Please try again.';
-      
-      if (error.code === 'auth/invalid-verification-code') {
-        errorMessage = 'Invalid verification code. Please check and try again.';
-      } else if (error.code === 'auth/code-expired') {
-        errorMessage = 'Verification code has expired. Please request a new code.';
+      console.error('Firebase verification error:', e);
+      haptics.error();
+      let msg = 'Code incorrect. Vérifiez le SMS et réessayez.';
+      if (e?.code === 'auth/code-expired') {
+        msg = 'Ce code a expiré. Demandez-en un nouveau.';
         clearAuth();
-      } else if (error.code === 'auth/session-expired') {
-        errorMessage = 'Verification session expired. Please request a new code.';
+      } else if (e?.code === 'auth/session-expired') {
+        msg = 'La session a expiré. Demandez un nouveau code.';
         clearAuth();
       }
-      
-      Alert.alert('Verification Failed', errorMessage);
-      setOtp(''); // Clear OTP on error
+      setError(msg);
+      setOtp('');
+      otpRef.current?.clear();
     }
   };
 
   const handleResend = async () => {
-    const phoneToUse = phone || phoneNumber;
-    
-    if (!phoneToUse) {
-      Alert.alert('Error', 'Phone number not found. Please go back and try again.');
+    if (!phoneToShow) {
+      setError('Numéro introuvable. Revenez en arrière et réessayez.');
       return;
     }
-
     setResending(true);
-
     try {
-      // Resend OTP code via Firebase Auth
-      const newConfirmation = await auth().signInWithPhoneNumber(phoneToUse);
-      
-      // Update confirmation in context
-      setConfirmation(newConfirmation);
-      
-      Alert.alert('Success', 'Verification code has been resent.');
-    } catch (error: any) {
-      console.error('Firebase resend error:', error);
-      
-      let errorMessage = 'Failed to resend verification code. Please try again.';
-      
-      if (error.code === 'auth/invalid-phone-number') {
-        errorMessage = 'Invalid phone number format. Please check and try again.';
-      } else if (error.code === 'auth/too-many-requests') {
-        errorMessage = 'Too many requests. Please try again later.';
-      } else if (error.code === 'auth/quota-exceeded') {
-        errorMessage = 'SMS quota exceeded. Please try again later.';
-      }
-      
-      Alert.alert('Error', errorMessage);
+      const next = await auth().signInWithPhoneNumber(phoneToShow);
+      setConfirmation(next);
+      setError(null);
+      setCooldown(RESEND_COOLDOWN_S);
+      showToast.success('Code renvoyé', `Un nouveau SMS a été envoyé au ${phoneToShow}.`);
+    } catch (e: any) {
+      console.error('Firebase resend error:', e);
+      const msg =
+        e?.code === 'auth/too-many-requests'
+          ? 'Trop de tentatives. Réessayez plus tard.'
+          : e?.code === 'auth/quota-exceeded'
+            ? 'Quota SMS dépassé. Réessayez plus tard.'
+            : "Impossible de renvoyer le code. Réessayez.";
+      setError(msg);
     } finally {
       setResending(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}>
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}>
-          {/* Title */}
-          <Text style={styles.title}>Confirmez votre numéro</Text>
+    <AuthScaffold
+      title="Entrez le code"
+      subtitle={phoneToShow ? `Envoyé par SMS au ${phoneToShow}` : 'Envoyé par SMS'}
+      icon="chatbox-ellipses"
+      onBack={() => router.back()}>
+      <OTPInput
+        ref={otpRef}
+        length={6}
+        error={!!error}
+        onChange={(v) => {
+          setOtp(v);
+          if (error) setError(null);
+        }}
+        onComplete={verify}
+      />
+      <View style={styles.errorSlot}>
+        {!!error && (
+          <AppText variant="small" color="danger" align="center" accessibilityLiveRegion="polite">
+            {error}
+          </AppText>
+        )}
+      </View>
 
-          {/* OTP Input */}
-          <View style={styles.otpContainer}>
-            <OTPInput
-              length={6}
-              onComplete={handleOtpComplete}
-              onChange={setOtp}
-            />
-          </View>
+      <Button
+        label="Vérifier"
+        onPress={() => verify(otp)}
+        loading={loading}
+        disabled={otp.length !== 6}
+        disabledReason={otp.length !== 6 ? 'Saisissez les 6 chiffres du code' : undefined}
+        fullWidth
+        size="lg"
+      />
 
-          {/* Resend Code Link */}
-          <TouchableOpacity
-            style={styles.resendContainer}
-            onPress={handleResend}
-            disabled={resending}>
-            {resending ? (
-              <ActivityIndicator size="small" color={theme.colors.primary} />
-            ) : (
-              <Text style={styles.resendText}>
-                Vous n'avez pas reçu le code?{' '}
-                <Text style={styles.resendLink}>Renvoyer</Text>
-              </Text>
-            )}
-          </TouchableOpacity>
-
-          {/* Continue Button */}
-          <TouchableOpacity
-            style={[
-              styles.continueButton,
-              (otp.length !== 6 || loading) && styles.continueButtonDisabled,
-            ]}
-            onPress={handleContinue}
-            disabled={otp.length !== 6 || loading}>
-            {loading ? (
-              <ActivityIndicator color={theme.colors.white} />
-            ) : (
-              <Text style={styles.continueButtonText}>Continuer</Text>
-            )}
-          </TouchableOpacity>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+      <View style={styles.resend}>
+        <AppText variant="small" color="inkMuted">
+          Pas reçu le code ?
+        </AppText>
+        <Button
+          label={cooldown > 0 ? `Renvoyer dans ${cooldown} s` : 'Renvoyer'}
+          variant="ghost"
+          size="sm"
+          onPress={handleResend}
+          loading={resending}
+          disabled={cooldown > 0}
+        />
+      </View>
+    </AuthScaffold>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.white,
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingTop: 60,
-    paddingBottom: 40,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#000',
-    marginBottom: 60,
-    textAlign: 'center',
-    lineHeight: 40,
-  },
-  otpContainer: {
-    marginBottom: 40,
-    alignItems: 'center',
-  },
-  resendContainer: {
-    alignItems: 'center',
-    marginBottom: 60,
-  },
-  resendText: {
-    fontSize: 15,
-    color: '#666',
-    textAlign: 'center',
-  },
-  resendLink: {
-    color: theme.colors.primary,
-    fontWeight: '600',
-  },
-  continueButton: {
-    backgroundColor: theme.colors.primary,
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 'auto',
-  },
-  continueButtonDisabled: {
-    backgroundColor: '#B0B0B0',
-    opacity: 0.6,
-  },
-  continueButtonText: {
-    color: theme.colors.white,
-    fontSize: 18,
-    fontWeight: '600',
-  },
+  errorSlot: { minHeight: 44, justifyContent: 'center', paddingVertical: 8 },
+  resend: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 16, flexWrap: 'wrap' },
 });
-

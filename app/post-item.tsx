@@ -1,32 +1,56 @@
-// app/post-item.tsx - Post/Edit Item Screen
+// app/post-item.tsx — Sell flow (create + edit), doc §4.1 "Sell (post item)".
+//
+// 4-step stepper (Hick + goal-gradient): Photos → Suggestions IA → Prix →
+// Aperçu & publier. One photo is enough to start (foot-in-the-door); the AI
+// pre-fills the details as editable suggestions (Tesler + IKEA effect); the
+// price step shows a comparables range before the input (anchoring); the
+// draft is autosaved locally (Zeigarnik) and publishing is celebrated
+// (peak–end). Edit mode reuses the same steps without autosave.
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
     Alert,
-    Dimensions,
-    Image,
     KeyboardAvoidingView,
     Platform,
+    Pressable,
     ScrollView,
+    Share,
     StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { showToast } from '../components/atoms/Toast';
-import { theme } from '../utils/theme';
+import {
+    AppImage,
+    AppText,
+    Badge,
+    Button,
+    Card,
+    ErrorState,
+    IconButton,
+    ListingCard,
+    ListRow,
+    ListGroup,
+    ScreenHeader,
+    SegmentedControl,
+    Sheet,
+    Skeleton,
+    Stepper,
+    TextField,
+    showToast,
+} from '@/components/ui';
+import SellLaborSteps from '@/components/molecules/SellLaborSteps';
+import SellOptionSheet from '@/components/molecules/SellOptionSheet';
+import SellCelebration from '@/components/organisms/SellCelebration';
 import { ApiError } from '@/lib/api';
 import {
     createPost,
     updatePost,
     deletePostImage,
     postByIdQuery,
+    sharePost,
 } from '@/lib/api/posts';
 import { quartiersQuery } from '@/lib/api/quartiers';
 import { uploadImages, aiDraft, priceSuggestion } from '@/lib/api/ai';
@@ -39,8 +63,13 @@ import {
     AGE_LABELS,
 } from '@/constants/catalog';
 import { formatAmount } from '@/lib/format';
+import { haptics } from '@/lib/haptics';
+import { clearSellDraft, loadSellDraft, saveSellDraft } from '@/lib/sellDraft';
 import { useAuth } from '@/contexts/AuthContext';
-import type { BdPostImage, BdPriceSuggestion } from '@/constants/types';
+import { createStyles, Theme, useStyles, useTheme } from '@/theme';
+import type { BdAiDraft, BdPost, BdPostImage, BdPriceSuggestion } from '@/constants/types';
+
+type ListingType = 'sell' | 'share' | 'exchange';
 
 // Renamed from FormData to avoid shadowing the global FormData used for uploads.
 interface ListingForm {
@@ -50,12 +79,37 @@ interface ListingForm {
     category: string;        // enum value (electronics, ...)
     condition: string;       // enum value (excellent, ...)
     ageBucket: string;       // enum value or ''
-    listingType: 'sell' | 'share' | 'exchange';
+    listingType: ListingType;
+    negotiable: boolean;     // default ON (default effect)
     exchangeItems: string;   // csv, "Contre quoi ?"
     pickupQuartier: string;
     pickupNote: string;
     images: string[];        // new local URIs to upload (create only)
 }
+
+const EMPTY_FORM: ListingForm = {
+    title: '',
+    description: '',
+    price: '',
+    category: '',
+    condition: '',
+    ageBucket: '',
+    listingType: 'sell',
+    negotiable: true,
+    exchangeItems: '',
+    pickupQuartier: '',
+    pickupNote: '',
+    images: [],
+};
+
+const STEPS = ['Photos', 'Détails', 'Prix', 'Aperçu'];
+const MAX_PHOTOS = 10;
+
+const AI_STEPS = [
+    'Analyse des photos…',
+    'Identification de la catégorie…',
+    'Rédaction de l’annonce…',
+];
 
 /** ApiError → French toast message. */
 function errMessage(e: unknown): string {
@@ -87,346 +141,96 @@ function parsePrice(raw: string): number | null {
     return n > 0 ? n : null;
 }
 
-const FormHeader = ({ title, onSaveDraft, saving }: { title: string; onSaveDraft: () => void; saving: boolean }) => (
-    <View style={styles.header}>
-        <TouchableOpacity
-            style={styles.headerButton}
-            onPress={() => router.back()}
-        >
-            <Ionicons name="chevron-back" size={24} color="#000" />
-        </TouchableOpacity>
+function hasContent(f: ListingForm): boolean {
+    return f.images.length > 0 || !!f.title.trim() || !!f.description.trim();
+}
 
-        <Text style={styles.headerTitle} numberOfLines={1}>{title}</Text>
+// ---------------------------------------------------------------------------
 
-        <TouchableOpacity style={styles.saveButton} onPress={onSaveDraft} disabled={saving}>
-            <Text style={styles.saveButtonText}>Brouillon</Text>
-        </TouchableOpacity>
-    </View>
-);
-
-const ListingTypeSelector = ({ 
-    selectedType, 
-    onTypeChange 
-}: {
-    selectedType: 'sell' | 'share' | 'exchange';
-    onTypeChange: (type: 'sell' | 'share' | 'exchange') => void;
-}) => (
-    <View style={styles.listingTypeContainer}>
-        <TouchableOpacity
-            style={[
-                styles.listingTypeButton,
-                selectedType === 'sell' && styles.listingTypeButtonActive
-            ]}
-            onPress={() => onTypeChange('sell')}
-        >
-            <Text style={[
-                styles.listingTypeText,
-                selectedType === 'sell' && styles.listingTypeTextActive
-            ]}>
-                Vendre
-            </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-            style={[
-                styles.listingTypeButton,
-                selectedType === 'share' && styles.listingTypeButtonActive
-            ]}
-            onPress={() => onTypeChange('share')}
-        >
-            <Text style={[
-                styles.listingTypeText,
-                selectedType === 'share' && styles.listingTypeTextActive
-            ]}>
-                Partager
-            </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-            style={[
-                styles.listingTypeButton,
-                selectedType === 'exchange' && styles.listingTypeButtonActive
-            ]}
-            onPress={() => onTypeChange('exchange')}
-        >
-            <Text style={[
-                styles.listingTypeText,
-                selectedType === 'exchange' && styles.listingTypeTextActive
-            ]}>
-                Échanger
-            </Text>
-        </TouchableOpacity>
-    </View>
-);
-
-const ImageUploadSection = ({
-    existingImages,
-    images,
-    onAddImage,
-    onRemoveImage,
-    onRemoveExisting,
-    onImagePress,
-}: {
-    existingImages: BdPostImage[];
-    images: string[];
-    onAddImage: () => void;
-    onRemoveImage: (index: number) => void;
-    onRemoveExisting: (image: BdPostImage) => void;
-    onImagePress: (index: number) => void;
-}) => {
-    const total = existingImages.length + images.length;
-    return (
-        <View style={styles.imageSection}>
-            <View style={styles.imageGrid}>
-                {/* Already-uploaded images (edit mode) — delete hits the backend */}
-                {existingImages.map((img) => (
-                    <View key={`ex-${img.id}`} style={styles.imageContainer}>
-                        <Image source={{ uri: img.url }} style={styles.uploadedImage} />
-                        <TouchableOpacity
-                            style={styles.removeImageButton}
-                            onPress={() => onRemoveExisting(img)}
-                        >
-                            <Ionicons name="close" size={16} color="#FF6B6B" />
-                        </TouchableOpacity>
-                    </View>
-                ))}
-
-                {/* Newly-picked local images (create mode) */}
-                {images.map((image, index) => (
-                    <View key={`new-${index}`} style={styles.imageContainer}>
-                        <TouchableOpacity onPress={() => onImagePress(index)} activeOpacity={0.9}>
-                            <Image source={{ uri: image }} style={styles.uploadedImage} />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={styles.removeImageButton}
-                            onPress={() => onRemoveImage(index)}
-                        >
-                            <Ionicons name="close" size={16} color="#FF6B6B" />
-                        </TouchableOpacity>
-                    </View>
-                ))}
-
-                {total < 10 && (
-                    <TouchableOpacity style={styles.addImageButton} onPress={onAddImage}>
-                        <Ionicons name="camera" size={24} color="#666" />
-                        <Text style={styles.addImageText}>{total + 1}/10</Text>
-                    </TouchableOpacity>
-                )}
-            </View>
-        </View>
-    );
-};
-
-const FormField = ({ 
-    label, 
-    value, 
-    onChangeText, 
-    placeholder, 
-    multiline = false,
-    required = false,
-    keyboardType = 'default'
-}: {
-    label: string;
-    value: string;
-    onChangeText: (text: string) => void;
-    placeholder: string;
-    multiline?: boolean;
-    required?: boolean;
-    keyboardType?: 'default' | 'numeric' | 'phone-pad';
-}) => (
-    <View style={styles.formField}>
-        <Text style={styles.fieldLabel}>
-            {label} {required && <Text style={styles.required}>*</Text>}
-        </Text>
-        <TextInput
-            style={[styles.textInput, multiline && styles.multilineInput]}
-            value={value}
-            onChangeText={onChangeText}
-            placeholder={placeholder}
-            multiline={multiline}
-            keyboardType={keyboardType}
-            placeholderTextColor="#999"
-        />
-    </View>
-);
-
-const PickerField = ({ 
-    label, 
-    value, 
-    onPress, 
+function PickerField({
+    label,
+    value,
     placeholder,
-    required = false 
+    onPress,
+    error,
 }: {
     label: string;
     value: string;
-    onPress: () => void;
     placeholder: string;
-    required?: boolean;
-}) => (
-    <View style={styles.formField}>
-        <Text style={styles.fieldLabel}>
-            {label} {required && <Text style={styles.required}>*</Text>}
-        </Text>
-        <TouchableOpacity style={styles.pickerButton} onPress={onPress}>
-            <Text style={[styles.pickerText, !value && styles.placeholderText]}>
-                {value || placeholder}
-            </Text>
-            <Ionicons name="chevron-down" size={20} color="#666" />
-        </TouchableOpacity>
-    </View>
-);
-
-
-const FullscreenCarousel = ({ 
-    visible, 
-    images, 
-    currentIndex, 
-    onClose 
-}: {
-    visible: boolean;
-    images: string[];
-    currentIndex: number;
-    onClose: () => void;
-}) => {
-    if (!visible) return null;
-
+    onPress: () => void;
+    error?: string;
+}) {
+    const t = useTheme();
+    const styles = useStyles(makeStyles);
     return (
-        <View style={styles.fullscreenContainer}>
-            <TouchableOpacity
-                style={styles.closeButton}
-                onPress={onClose}
-            >
-                <Ionicons name="close" size={24} color="white" />
-            </TouchableOpacity>
-            
-            <ScrollView
-                horizontal
-                pagingEnabled
-                showsHorizontalScrollIndicator={false}
-                style={styles.fullscreenScrollView}
-                contentOffset={{ x: currentIndex * Dimensions.get('window').width, y: 0 }}
-            >
-                {images.map((image, index) => (
-                    <TouchableOpacity
-                        key={index}
-                        style={styles.fullscreenImageContainer}
-                        onPress={onClose}
-                        activeOpacity={1}
-                    >
-                        <Image source={{ uri: image }} style={styles.fullscreenImage} />
-                    </TouchableOpacity>
-                ))}
-            </ScrollView>
-            
-            {/* Pagination Dots */}
-            <View style={styles.fullscreenPagination}>
-                {images.map((_, index) => (
-                    <View
-                        key={index}
-                        style={[
-                            styles.fullscreenPaginationDot,
-                            index === currentIndex && styles.fullscreenPaginationDotActive,
-                        ]}
-                    />
-                ))}
-            </View>
+        <View style={styles.field}>
+            <AppText variant="labelStrong" style={styles.fieldLabel}>
+                {label}
+            </AppText>
+            <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`${label} : ${value || placeholder}`}
+                accessibilityHint={error}
+                onPress={onPress}
+                style={[
+                    styles.picker,
+                    { borderColor: error ? t.colors.danger : t.colors.line },
+                ]}>
+                <AppText variant="body" color={value ? 'ink' : 'inkSubtle'} style={styles.flex} numberOfLines={1}>
+                    {value || placeholder}
+                </AppText>
+                <Ionicons name="chevron-down" size={18} color={t.colors.inkMuted} />
+            </Pressable>
+            {!!error && (
+                <AppText variant="caption" color="danger" style={styles.errorText}>
+                    {error}
+                </AppText>
+            )}
         </View>
     );
-};
+}
 
-/** Generic bottom-sheet single-select over {value,label} options. */
-const OptionModal = ({
-    visible,
-    title,
-    options,
-    selectedValue,
-    emptyText,
-    onClose,
-    onSelect,
-}: {
-    visible: boolean;
-    title: string;
-    options: { value: string; label: string }[];
-    selectedValue: string;
-    emptyText?: string;
-    onClose: () => void;
-    onSelect: (value: string) => void;
-}) => {
-    if (!visible) return null;
-
+function SectionTitle({ title, subtitle }: { title: string; subtitle?: string }) {
+    const styles = useStyles(makeStyles);
     return (
-        <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-                <View style={styles.modalHeader}>
-                    <Text style={styles.modalTitle}>{title}</Text>
-                    <TouchableOpacity onPress={onClose}>
-                        <Ionicons name="close" size={24} color="#000" />
-                    </TouchableOpacity>
-                </View>
-
-                <ScrollView style={styles.modalList}>
-                    {options.length === 0 && (
-                        <Text style={styles.modalEmptyText}>{emptyText || 'Aucune option.'}</Text>
-                    )}
-                    {options.map((opt) => (
-                        <TouchableOpacity
-                            key={opt.value}
-                            style={[
-                                styles.modalItem,
-                                selectedValue === opt.value && styles.modalItemSelected,
-                            ]}
-                            onPress={() => {
-                                onSelect(opt.value);
-                                onClose();
-                            }}
-                        >
-                            <Text style={[
-                                styles.modalItemText,
-                                selectedValue === opt.value && styles.modalItemTextSelected,
-                            ]}>
-                                {opt.label}
-                            </Text>
-                            {selectedValue === opt.value && (
-                                <Ionicons name="checkmark" size={20} color={theme.colors.primary} />
-                            )}
-                        </TouchableOpacity>
-                    ))}
-                </ScrollView>
-            </View>
+        <View style={styles.sectionTitle}>
+            <AppText variant="h2" accessibilityRole="header">
+                {title}
+            </AppText>
+            {!!subtitle && (
+                <AppText variant="small" color="inkMuted">
+                    {subtitle}
+                </AppText>
+            )}
         </View>
     );
-};
+}
+
+// ---------------------------------------------------------------------------
 
 export default function PostItemScreen() {
     const params = useLocalSearchParams<{ id?: string; mode?: string }>();
     const editId = params.id ? Number(params.id) : NaN;
     const isEdit = params.mode === 'edit' && Number.isFinite(editId) && editId > 0;
 
+    const t = useTheme();
+    const styles = useStyles(makeStyles);
     const { user } = useAuth();
     const queryClient = useQueryClient();
 
-    const [form, setForm] = useState<ListingForm>({
-        title: '',
-        description: '',
-        price: '',
-        category: '',
-        condition: '',
-        ageBucket: '',
-        listingType: 'sell',
-        exchangeItems: '',
-        pickupQuartier: '',
-        pickupNote: '',
-        images: [],
-    });
+    const [step, setStep] = useState(0);
+    const [form, setForm] = useState<ListingForm>(EMPTY_FORM);
     const [existingImages, setExistingImages] = useState<BdPostImage[]>([]);
-
-    const [showCategoryModal, setShowCategoryModal] = useState(false);
-    const [showConditionModal, setShowConditionModal] = useState(false);
-    const [showAgeModal, setShowAgeModal] = useState(false);
-    const [showQuartierModal, setShowQuartierModal] = useState(false);
-    const [showFullscreenCarousel, setShowFullscreenCarousel] = useState(false);
-    const [currentImageIndex, setCurrentImageIndex] = useState(0);
     const [errors, setErrors] = useState<Record<string, string>>({});
+
+    const [sheet, setSheet] = useState<null | 'category' | 'condition' | 'age' | 'quartier' | 'photo'>(null);
+    const [restored, setRestored] = useState(false);       // draft banner visible
+    const [draftReady, setDraftReady] = useState(isEdit);  // autosave may start
+    const [aiResult, setAiResult] = useState<BdAiDraft | null>(null);
+    const [aiTried, setAiTried] = useState(false);
+    const [priceSug, setPriceSug] = useState<BdPriceSuggestion | null>(null);
+    const priceSugKey = useRef<string>('');
+    const [published, setPublished] = useState<BdPost | null>(null);
 
     // Edit mode: load the post to prefill, and pull the city's quartiers.
     const editQuery = useQuery(postByIdQuery(isEdit ? editId : 0));
@@ -447,6 +251,7 @@ export default function PostItemScreen() {
             condition: post.condition ?? '',
             ageBucket: post.age_bucket ?? '',
             listingType: post.is_free ? 'share' : post.exchange_items ? 'exchange' : 'sell',
+            negotiable: post.allow_negotiation,
             exchangeItems: post.exchange_items ?? '',
             pickupQuartier: post.pickup_quartier ?? '',
             pickupNote: post.pickup_location_note ?? '',
@@ -456,17 +261,85 @@ export default function PostItemScreen() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [editQuery.data?.id, isEdit]);
 
-    const updateForm = (field: keyof ListingForm, value: any) => {
+    // Create mode: restore the autosaved draft (Zeigarnik).
+    useEffect(() => {
+        if (isEdit) return;
+        let alive = true;
+        loadSellDraft().then((d) => {
+            if (!alive) return;
+            if (d && d.form) {
+                const restoredForm = { ...EMPTY_FORM, ...(d.form as Partial<ListingForm>), images: d.images ?? [] };
+                if (hasContent(restoredForm)) {
+                    setForm(restoredForm);
+                    setStep(Math.max(0, Math.min(STEPS.length - 1, d.step ?? 0)));
+                    setRestored(true);
+                    if (restoredForm.title) setAiTried(true);
+                    showToast.info('Brouillon restauré', 'Reprenez là où vous vous étiez arrêté.');
+                }
+            }
+            setDraftReady(true);
+        });
+        return () => {
+            alive = false;
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Default the pickup quartier to the user's own (default effect).
+    useEffect(() => {
+        if (isEdit || !draftReady) return;
+        if (!form.pickupQuartier && user?.quartier) {
+            setForm((prev) => (prev.pickupQuartier ? prev : { ...prev, pickupQuartier: user.quartier! }));
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [draftReady, user?.quartier, isEdit]);
+
+    // Debounced autosave (create mode only).
+    useEffect(() => {
+        if (isEdit || !draftReady || published) return;
+        if (!hasContent(form)) return;
+        const id = setTimeout(() => {
+            const { images, ...rest } = form;
+            saveSellDraft({ step, images, title: form.title, form: rest as Record<string, unknown> }, queryClient);
+        }, 600);
+        return () => clearTimeout(id);
+    }, [form, step, isEdit, draftReady, published, queryClient]);
+
+    const updateForm = <K extends keyof ListingForm>(field: K, value: ListingForm[K]) => {
         setForm((prev) => ({ ...prev, [field]: value }));
-        if (errors[field]) setErrors((prev) => ({ ...prev, [field]: '' }));
+        if (errors[field as string]) setErrors((prev) => ({ ...prev, [field as string]: '' }));
     };
+
+    const startOver = () => {
+        Alert.alert('Recommencer ?', 'Le brouillon enregistré sur ce téléphone sera effacé.', [
+            { text: 'Annuler', style: 'cancel' },
+            {
+                text: 'Effacer',
+                style: 'destructive',
+                onPress: () => {
+                    clearSellDraft(queryClient);
+                    setForm({ ...EMPTY_FORM, pickupQuartier: user?.quartier ?? '' });
+                    setStep(0);
+                    setAiResult(null);
+                    setAiTried(false);
+                    setPriceSug(null);
+                    setRestored(false);
+                    setErrors({});
+                },
+            },
+        ]);
+    };
+
+    // --- payload builders (unchanged API contract) --------------------------
+
+    const allowNegotiation = form.listingType === 'sell' && form.negotiable;
 
     const buildFormData = (state: 'draft' | 'published'): FormData => {
         const fd = new FormData();
         fd.append('title', form.title.trim());
         fd.append('description', form.description.trim());
         fd.append('state', state);
-        fd.append('allow_negotiation', form.listingType === 'sell' ? 'true' : 'false');
+        fd.append('allow_negotiation', allowNegotiation ? 'true' : 'false');
         if (form.listingType === 'share') {
             fd.append('is_free', 'true');
         } else {
@@ -493,7 +366,7 @@ export default function PostItemScreen() {
             title: form.title.trim(),
             description: form.description.trim(),
             state,
-            allow_negotiation: form.listingType === 'sell',
+            allow_negotiation: allowNegotiation,
             categories: form.category ? [form.category] : [],
             condition: form.condition || null,
             age_bucket: form.ageBucket || null,
@@ -513,30 +386,65 @@ export default function PostItemScreen() {
         return patch;
     };
 
-    const validate = (forPublish: boolean): boolean => {
+    // --- per-step validation (inline, Norman) ------------------------------
+
+    const photoCount = existingImages.length + form.images.length;
+
+    const stepErrors = (s: number): Record<string, string> => {
         const e: Record<string, string> = {};
-        if (!form.title.trim()) e.title = 'Le titre est requis';
-        if (!form.description.trim()) e.description = 'La description est requise';
-        if (forPublish) {
+        if (s === 0 && photoCount === 0) e.images = 'Ajoutez au moins une photo';
+        if (s === 1) {
+            if (!form.title.trim()) e.title = 'Le titre est requis';
+            if (!form.description.trim()) e.description = 'La description est requise';
             if (!form.category) e.category = 'La catégorie est requise';
             if (!form.condition) e.condition = "L'état est requis";
+        }
+        if (s === 2) {
             if (form.listingType === 'sell' && parsePrice(form.price) == null)
                 e.price = 'Le prix est requis';
             if (form.listingType === 'exchange' && !form.exchangeItems.trim())
                 e.exchangeItems = 'Précisez contre quoi échanger';
-            if (existingImages.length + form.images.length === 0)
-                e.images = 'Au moins une photo est requise';
         }
-        setErrors(e);
-        return Object.keys(e).length === 0;
+        return e;
     };
+
+    const currentErrors = stepErrors(step);
+    const nextDisabledReason = Object.values(currentErrors)[0];
+
+    const goNext = () => {
+        const e = stepErrors(step);
+        if (Object.keys(e).length) {
+            setErrors(e);
+            return;
+        }
+        haptics.light();
+        setErrors({});
+        setStep((s) => Math.min(STEPS.length - 1, s + 1));
+    };
+
+    const goBack = () => {
+        if (step === 0) {
+            router.back();
+            return;
+        }
+        setErrors({});
+        setStep((s) => Math.max(0, s - 1));
+    };
+
+    // --- mutations ---------------------------------------------------------
 
     const createMut = useMutation({
         mutationFn: (state: 'draft' | 'published') => createPost(buildFormData(state)),
-        onSuccess: (_post, state) => {
+        onSuccess: (post, state) => {
             queryClient.invalidateQueries({ queryKey: ['posts'] });
-            showToast.success(state === 'published' ? 'Annonce publiée' : 'Brouillon enregistré');
-            router.back();
+            clearSellDraft(queryClient);
+            if (state === 'published') {
+                haptics.success();
+                setPublished(post);
+            } else {
+                showToast.success('Brouillon enregistré', 'Retrouvez-le dans « Mes annonces ».');
+                router.back();
+            }
         },
         onError: (e) => showToast.error('Échec', errMessage(e)),
     });
@@ -546,6 +454,7 @@ export default function PostItemScreen() {
         onSuccess: (_post, state) => {
             queryClient.invalidateQueries({ queryKey: ['posts'] });
             queryClient.invalidateQueries({ queryKey: ['post', editId] });
+            haptics.success();
             showToast.success(state === 'published' ? 'Annonce mise à jour' : 'Brouillon enregistré');
             router.back();
         },
@@ -565,7 +474,6 @@ export default function PostItemScreen() {
     const saving = createMut.isPending || updateMut.isPending;
 
     // --- AI assist (W6.2) ---------------------------------------------------
-    const [priceSug, setPriceSug] = useState<BdPriceSuggestion | null>(null);
 
     const aiDraftMut = useMutation({
         mutationFn: async () => {
@@ -573,6 +481,7 @@ export default function PostItemScreen() {
             return aiDraft(urls, form.title || undefined);
         },
         onSuccess: (draft) => {
+            setAiResult(draft);
             setForm((prev) => ({
                 ...prev,
                 title: prev.title || draft.title,
@@ -580,13 +489,21 @@ export default function PostItemScreen() {
                 category: prev.category || draft.categories[0] || prev.category,
             }));
             setErrors({});
-            showToast.success(
-                'Suggestions IA',
-                `Champs pré-remplis (confiance ${Math.round(draft.confidence * 100)}%).`,
-            );
+            haptics.light();
         },
         onError: (e) => showToast.error('Suggestions IA', aiErrMessage(e)),
     });
+
+    // Tesler: run the AI automatically the first time the user reaches step 2
+    // with fresh photos and an empty title — they only confirm.
+    useEffect(() => {
+        if (step !== 1 || isEdit || aiTried || aiDraftMut.isPending) return;
+        if (form.images.length > 0 && !form.title.trim()) {
+            setAiTried(true);
+            aiDraftMut.mutate();
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [step]);
 
     const priceSugMut = useMutation({
         mutationFn: () =>
@@ -596,892 +513,777 @@ export default function PostItemScreen() {
                 condition: form.condition || null,
                 age_bucket: form.ageBucket || null,
             }),
-        onSuccess: (sug) => {
-            setPriceSug(sug);
-            if (sug.source === 'no_data' || sug.suggested == null) {
-                showToast.info('Prix conseillé', sug.message || 'Pas de référence trouvée.');
-            } else {
-                updateForm('price', String(sug.suggested));
-                showToast.success('Prix conseillé', `Suggéré : ${formatAmount(sug.suggested)}`);
-            }
-        },
+        onSuccess: (sug) => setPriceSug(sug),
         onError: (e) => showToast.error('Prix conseillé', aiErrMessage(e)),
     });
 
     const canPriceSuggest = !!form.title.trim() && !!form.category;
+    const priceEditable = form.listingType !== 'share';
+
+    // Anchoring: fetch the comparables range when the price step opens, before
+    // the seller types a number. Re-fetch only if the item details changed.
+    useEffect(() => {
+        if (step !== 2 || !priceEditable || !canPriceSuggest) return;
+        const key = `${form.title.trim()}|${form.category}|${form.condition}|${form.ageBucket}`;
+        if (priceSugKey.current === key) return;
+        priceSugKey.current = key;
+        priceSugMut.mutate();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [step, priceEditable]);
+
+    // --- photos ------------------------------------------------------------
 
     const pickImage = async (fromCamera: boolean) => {
-        const result = fromCamera
-            ? await ImagePicker.launchCameraAsync({
-                  mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                  allowsEditing: true,
-                  aspect: [4, 3],
-                  quality: 0.8,
-              })
-            : await ImagePicker.launchImageLibraryAsync({
-                  mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                  allowsMultipleSelection: false,
-                  allowsEditing: true,
-                  aspect: [4, 3],
-                  quality: 0.8,
-              });
-        if (!result.canceled && result.assets[0]) {
-            updateForm('images', [...form.images, result.assets[0].uri]);
-        }
-    };
-
-    const handleAddImage = async () => {
-        // Adding photos while editing is deferred (backend accepts new files only on create).
-        if (isEdit) {
-            showToast.info?.('Bientôt disponible', 'Ajout de photos en modification bientôt disponible.');
-            return;
-        }
-        if (existingImages.length + form.images.length >= 10) {
-            showToast.error('Limite atteinte', 'Maximum 10 photos.');
-            return;
-        }
+        setSheet(null);
         try {
-            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-            if (status !== 'granted') {
-                showToast.error('Permission requise', 'Autorisez l’accès à vos photos.');
-                return;
+            if (fromCamera) {
+                const { status } = await ImagePicker.requestCameraPermissionsAsync();
+                if (status !== 'granted') {
+                    showToast.error('Permission requise', 'Autorisez l’accès à l’appareil photo.');
+                    return;
+                }
+            } else {
+                const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                if (status !== 'granted') {
+                    showToast.error('Permission requise', 'Autorisez l’accès à vos photos.');
+                    return;
+                }
             }
-            Alert.alert('Ajouter une photo', 'Choisissez une option', [
-                { text: 'Annuler', style: 'cancel' },
-                { text: 'Prendre une photo', onPress: () => pickImage(true) },
-                { text: 'Choisir depuis la galerie', onPress: () => pickImage(false) },
-            ]);
+            const result = fromCamera
+                ? await ImagePicker.launchCameraAsync({
+                      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                      allowsEditing: true,
+                      aspect: [4, 3],
+                      quality: 0.8,
+                  })
+                : await ImagePicker.launchImageLibraryAsync({
+                      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                      allowsMultipleSelection: false,
+                      allowsEditing: true,
+                      aspect: [4, 3],
+                      quality: 0.8,
+                  });
+            if (!result.canceled && result.assets[0]) {
+                haptics.light();
+                updateForm('images', [...form.images, result.assets[0].uri]);
+            }
         } catch {
             showToast.error('Erreur', 'Impossible d’accéder aux photos.');
         }
     };
 
+    const handleAddImage = () => {
+        // Adding photos while editing is deferred (backend accepts new files only on create).
+        if (isEdit) {
+            showToast.info('Bientôt disponible', 'Ajout de photos en modification bientôt disponible.');
+            return;
+        }
+        if (photoCount >= MAX_PHOTOS) {
+            showToast.error('Limite atteinte', `Maximum ${MAX_PHOTOS} photos.`);
+            return;
+        }
+        setSheet('photo');
+    };
+
     const handleRemoveImage = (index: number) => {
+        const removed = form.images[index];
         updateForm('images', form.images.filter((_, i) => i !== index));
+        showToast.undo('Photo retirée', () =>
+            setForm((prev) => {
+                const imgs = [...prev.images];
+                imgs.splice(index, 0, removed);
+                return { ...prev, images: imgs };
+            }),
+        );
+    };
+
+    const makeCover = (index: number) => {
+        if (index === 0) return;
+        haptics.selection();
+        const imgs = [...form.images];
+        const [img] = imgs.splice(index, 1);
+        updateForm('images', [img, ...imgs]);
     };
 
     const handleRemoveExisting = (img: BdPostImage) => {
-        Alert.alert('Supprimer la photo', 'Retirer cette photo de l’annonce ?', [
+        Alert.alert('Supprimer la photo', 'Cette photo sera définitivement retirée de l’annonce.', [
             { text: 'Annuler', style: 'cancel' },
             { text: 'Supprimer', style: 'destructive', onPress: () => deleteImageMut.mutate(img.id) },
         ]);
     };
 
-    const handleImagePress = (index: number) => {
-        setCurrentImageIndex(index);
-        setShowFullscreenCarousel(true);
-    };
+    // --- submit ------------------------------------------------------------
 
     const submit = (state: 'draft' | 'published') => {
-        if (!validate(state === 'published')) {
-            showToast.error('Formulaire incomplet', 'Veuillez corriger les champs indiqués.');
+        const all = { ...stepErrors(0), ...stepErrors(1), ...stepErrors(2) };
+        const needed =
+            state === 'published'
+                ? all
+                : Object.fromEntries(
+                      Object.entries(all).filter(([k]) => k === 'title' || k === 'description'),
+                  );
+        if (Object.keys(needed).length) {
+            setErrors(needed);
+            const firstBad = [0, 1, 2].find((s) =>
+                Object.keys(stepErrors(s)).some((k) => k in needed),
+            );
+            if (firstBad != null) setStep(firstBad);
+            showToast.error('Annonce incomplète', Object.values(needed)[0]);
             return;
         }
         if (isEdit) updateMut.mutate(state);
         else createMut.mutate(state);
     };
 
-    // Edit-mode load guards (all hooks above are already declared).
+    const handleShare = async () => {
+        if (!published) return;
+        const priceText = published.is_free ? 'Gratuit' : formatAmount(published.price);
+        try {
+            const res = await Share.share({
+                message: `${published.title} — ${priceText} sur BonDeal`,
+            });
+            if (res.action === Share.sharedAction) {
+                sharePost(published.id).catch(() => {});
+            }
+        } catch {
+            // user dismissed / share unavailable
+        }
+    };
+
+    // --- preview object (local only, for the "Aperçu" step) ----------------
+
+    const previewPost = useMemo<BdPost>(
+        () => ({
+            id: isEdit ? editId : 0,
+            title: form.title.trim() || 'Titre de votre annonce',
+            description: form.description,
+            price: form.listingType === 'share' ? null : parsePrice(form.price),
+            is_free: form.listingType === 'share',
+            exchange_items: form.listingType === 'exchange' ? form.exchangeItems.trim() || null : null,
+            allow_negotiation: allowNegotiation,
+            state: 'published',
+            owner_id: user?.id ?? 0,
+            owner_username: user?.username ?? null,
+            city: user?.city ?? null,
+            categories: form.category ? [form.category] : [],
+            pickup_quartier: form.pickupQuartier || null,
+            pickup_location_note: form.pickupNote || null,
+            condition: form.condition || null,
+            age_bucket: form.ageBucket || null,
+            views_count: 0,
+            likes_count: 0,
+            liked_by_me: false,
+            shares_count: 0,
+            offer_count: 0,
+            active_offer_count: 0,
+            images: [
+                ...existingImages,
+                ...form.images.map((uri, i) => ({ id: -(i + 1), url: uri })),
+            ],
+            created_at: null,
+            updated_at: null,
+        }),
+        [form, existingImages, user, isEdit, editId, allowNegotiation],
+    );
+
+    // --- edit-mode load guards (all hooks above) ---------------------------
+
     if (isEdit && editQuery.isLoading) {
         return (
-            <SafeAreaView style={styles.centered}>
-                <ActivityIndicator color={theme.colors.primary} />
+            <SafeAreaView style={styles.container}>
+                <ScreenHeader title="Modifier l’annonce" />
+                <View style={styles.loading}>
+                    <Skeleton height={28} width="60%" />
+                    <Skeleton height={180} />
+                    <Skeleton height={48} />
+                    <Skeleton height={48} />
+                </View>
             </SafeAreaView>
         );
     }
     if (isEdit && (editQuery.error || !editQuery.data)) {
         return (
-            <SafeAreaView style={styles.centered}>
-                <Ionicons name="alert-circle-outline" size={48} color="#FF6B6B" />
-                <Text style={styles.stateText}>Impossible de charger cette annonce.</Text>
-                <TouchableOpacity style={styles.stateButton} onPress={() => editQuery.refetch()}>
-                    <Text style={styles.stateButtonText}>Réessayer</Text>
-                </TouchableOpacity>
+            <SafeAreaView style={styles.container}>
+                <ScreenHeader title="Modifier l’annonce" />
+                <ErrorState message="Impossible de charger cette annonce." onRetry={() => editQuery.refetch()} />
             </SafeAreaView>
         );
     }
 
-    const priceEditable = form.listingType !== 'share';
+    // --- step renderers ----------------------------------------------------
+
+    const renderPhotos = () => (
+        <>
+            <SectionTitle
+                title={isEdit ? 'Vos photos' : 'Commencez par une photo'}
+                subtitle={
+                    isEdit
+                        ? 'Retirez les photos qui ne conviennent plus.'
+                        : 'Une seule suffit pour démarrer : l’IA s’occupe du reste. La première photo sera la couverture.'
+                }
+            />
+            <View style={styles.photoGrid}>
+                {existingImages.map((img, i) => (
+                    <View key={`ex-${img.id}`} style={styles.photoCell}>
+                        <AppImage uri={img.url} style={styles.photo} accessibilityLabel={`Photo ${i + 1}`} />
+                        {i === 0 && <Badge label="Couverture" tone="overlay" style={styles.coverBadge} />}
+                        <IconButton
+                            icon="close"
+                            label="Supprimer la photo"
+                            variant="overlay"
+                            size={18}
+                            onPress={() => handleRemoveExisting(img)}
+                            style={styles.photoRemove}
+                        />
+                    </View>
+                ))}
+                {form.images.map((uri, i) => {
+                    const isCover = existingImages.length === 0 && i === 0;
+                    return (
+                        <View key={`new-${uri}-${i}`} style={styles.photoCell}>
+                            <Pressable
+                                accessibilityRole="button"
+                                accessibilityLabel={isCover ? `Photo ${i + 1}, couverture` : `Photo ${i + 1}, définir comme couverture`}
+                                onPress={() => makeCover(i)}>
+                                <AppImage uri={uri} style={styles.photo} />
+                            </Pressable>
+                            {isCover && <Badge label="Couverture" tone="overlay" style={styles.coverBadge} />}
+                            <IconButton
+                                icon="close"
+                                label="Retirer la photo"
+                                variant="overlay"
+                                size={18}
+                                onPress={() => handleRemoveImage(i)}
+                                style={styles.photoRemove}
+                            />
+                        </View>
+                    );
+                })}
+                {photoCount < MAX_PHOTOS && !isEdit && (
+                    <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Ajouter une photo"
+                        onPress={handleAddImage}
+                        style={({ pressed }) => [
+                            styles.photoCell,
+                            styles.addPhoto,
+                            photoCount === 0 && styles.addPhotoLarge,
+                            pressed && { opacity: 0.8 },
+                        ]}>
+                        <Ionicons name="camera-outline" size={photoCount === 0 ? 36 : 26} color={t.colors.brandStrong} />
+                        <AppText variant="labelStrong" color="brandStrong">
+                            {photoCount === 0 ? 'Ajouter une photo' : 'Ajouter'}
+                        </AppText>
+                        <AppText variant="caption" color="inkMuted">
+                            {photoCount}/{MAX_PHOTOS}
+                        </AppText>
+                    </Pressable>
+                )}
+            </View>
+            {!!errors.images && (
+                <AppText variant="caption" color="danger" style={styles.errorText}>
+                    {errors.images}
+                </AppText>
+            )}
+            {photoCount > 0 && photoCount < 3 && !isEdit && (
+                <AppText variant="caption" color="inkMuted" style={styles.hint}>
+                    Astuce : 3 photos (face, dos, détail) rassurent les acheteurs.
+                </AppText>
+            )}
+            {isEdit && (
+                <AppText variant="caption" color="inkMuted" style={styles.hint}>
+                    L’ajout de nouvelles photos en modification arrive bientôt.
+                </AppText>
+            )}
+        </>
+    );
+
+    const renderDetails = () => (
+        <>
+            <SectionTitle
+                title="Décrivez l’article"
+                subtitle={
+                    form.images.length > 0 && !isEdit
+                        ? 'L’IA propose, vous validez : tout reste modifiable.'
+                        : 'Quelques mots suffisent.'
+                }
+            />
+
+            {/* AI assist — labor illusion tied to the real aiDraft call */}
+            {!isEdit && form.images.length > 0 && (
+                <View style={styles.block}>
+                    <SellLaborSteps
+                        steps={AI_STEPS}
+                        running={aiDraftMut.isPending}
+                        done={!!aiResult && !aiDraftMut.isPending}
+                    />
+                    {aiResult && !aiDraftMut.isPending && (
+                        <View style={styles.aiNote}>
+                            <Ionicons name="sparkles" size={16} color={t.colors.brandStrong} />
+                            <AppText variant="caption" color="inkMuted" style={styles.flex}>
+                                Suggestions IA (confiance {Math.round(aiResult.confidence * 100)} %) — vérifiez et
+                                ajustez avant de continuer.
+                            </AppText>
+                        </View>
+                    )}
+                    {!aiDraftMut.isPending && (
+                        <Button
+                            label={aiResult ? 'Relancer les suggestions IA' : 'Remplir avec l’IA'}
+                            icon="sparkles-outline"
+                            variant="secondary"
+                            size="sm"
+                            onPress={() => {
+                                setAiTried(true);
+                                aiDraftMut.mutate();
+                            }}
+                            style={styles.aiButton}
+                        />
+                    )}
+                </View>
+            )}
+
+            <Card style={styles.block}>
+                <AppText variant="captionStrong" color="inkMuted" style={styles.chunkTitle}>
+                    L’ESSENTIEL
+                </AppText>
+                <TextField
+                    label="Titre"
+                    value={form.title}
+                    onChangeText={(v) => updateForm('title', v)}
+                    placeholder="Ex : Téléphone Samsung A14, 64 Go"
+                    error={errors.title}
+                    maxLength={80}
+                    showCount
+                    editable={!aiDraftMut.isPending}
+                />
+                <TextField
+                    label="Description"
+                    value={form.description}
+                    onChangeText={(v) => updateForm('description', v)}
+                    placeholder="État, marque, taille, raison de la vente…"
+                    multiline
+                    error={errors.description}
+                    editable={!aiDraftMut.isPending}
+                    containerStyle={styles.fieldGap}
+                />
+            </Card>
+
+            <Card style={styles.block}>
+                <AppText variant="captionStrong" color="inkMuted" style={styles.chunkTitle}>
+                    CARACTÉRISTIQUES
+                </AppText>
+                <PickerField
+                    label="Catégorie"
+                    value={form.category ? categoryLabel(form.category) : ''}
+                    placeholder="Choisir une catégorie"
+                    onPress={() => setSheet('category')}
+                    error={errors.category}
+                />
+                <PickerField
+                    label="État"
+                    value={form.condition ? conditionLabel(form.condition) ?? '' : ''}
+                    placeholder="Choisir l’état"
+                    onPress={() => setSheet('condition')}
+                    error={errors.condition}
+                />
+                <PickerField
+                    label="Ancienneté (optionnel)"
+                    value={form.ageBucket ? AGE_LABELS[form.ageBucket] ?? '' : ''}
+                    placeholder="Depuis quand l’avez-vous ?"
+                    onPress={() => setSheet('age')}
+                />
+            </Card>
+        </>
+    );
+
+    const sug = priceSug;
+    const hasRange = !!sug && sug.source !== 'no_data' && sug.range_min != null && sug.range_max != null;
+
+    const renderPrice = () => (
+        <>
+            <SectionTitle title="Fixez votre prix" subtitle="Vendre, donner ou échanger : à vous de choisir." />
+
+            <View style={styles.block}>
+                <SegmentedControl<ListingType>
+                    accessibilityLabel="Type d’annonce"
+                    segments={[
+                        { value: 'sell', label: 'Vendre' },
+                        { value: 'share', label: 'Donner' },
+                        { value: 'exchange', label: 'Échanger' },
+                    ]}
+                    value={form.listingType}
+                    onChange={(v) => updateForm('listingType', v)}
+                />
+            </View>
+
+            {form.listingType === 'share' ? (
+                <Card tone="trust" style={styles.block}>
+                    <View style={styles.row}>
+                        <Ionicons name="gift-outline" size={24} color={t.colors.trust} />
+                        <View style={styles.flex}>
+                            <AppText variant="bodyStrong">Donnez une seconde vie</AppText>
+                            <AppText variant="small" color="inkMuted">
+                                Votre article sera affiché « Gratuit ». Un voisin en profitera.
+                            </AppText>
+                        </View>
+                    </View>
+                </Card>
+            ) : (
+                <>
+                    {/* Anchor: comparables range BEFORE the input */}
+                    {priceSugMut.isPending ? (
+                        <Card tone="brand" style={styles.block}>
+                            <AppText variant="labelStrong">Recherche d’articles similaires…</AppText>
+                            <Skeleton height={14} width="70%" style={styles.fieldGap} />
+                        </Card>
+                    ) : hasRange ? (
+                        <Card tone="brand" style={styles.block} accessibilityLabel="Prix conseillé">
+                            <View style={styles.row}>
+                                <Ionicons name="pricetags-outline" size={20} color={t.colors.brandStrong} />
+                                <AppText variant="labelStrong" color="brandStrong">
+                                    Prix conseillé
+                                </AppText>
+                            </View>
+                            <AppText variant="h3" style={styles.fieldGap}>
+                                {formatAmount(sug!.range_min)} – {formatAmount(sug!.range_max)}
+                            </AppText>
+                            <AppText variant="caption" color="inkMuted">
+                                {sug!.source === 'similar_items' && sug!.comparable_count
+                                    ? `D’après ${sug!.comparable_count} annonce${sug!.comparable_count > 1 ? 's' : ''} similaire${sug!.comparable_count > 1 ? 's' : ''} près de chez vous.`
+                                    : 'Estimation selon l’âge et l’état de l’article.'}
+                            </AppText>
+                            {sug!.suggested != null && (
+                                <Button
+                                    label={`Utiliser ${formatAmount(sug!.suggested)}`}
+                                    variant="secondary"
+                                    size="sm"
+                                    onPress={() => {
+                                        haptics.selection();
+                                        updateForm('price', String(sug!.suggested));
+                                    }}
+                                    style={styles.aiButton}
+                                />
+                            )}
+                        </Card>
+                    ) : sug ? (
+                        <AppText variant="caption" color="inkMuted" style={styles.block}>
+                            {sug.message || 'Pas encore de référence de prix pour cet article.'}
+                        </AppText>
+                    ) : !canPriceSuggest ? null : (
+                        <Button
+                            label="Voir le prix conseillé"
+                            icon="pricetag-outline"
+                            variant="secondary"
+                            size="sm"
+                            onPress={() => priceSugMut.mutate()}
+                            style={styles.block}
+                        />
+                    )}
+
+                    <TextField
+                        label={form.listingType === 'exchange' ? 'Prix (optionnel)' : 'Prix'}
+                        value={form.price}
+                        onChangeText={(v) => updateForm('price', v.replace(/[^\d]/g, ''))}
+                        placeholder="0"
+                        keyboardType="numeric"
+                        error={errors.price}
+                        helper={parsePrice(form.price) != null ? formatAmount(parsePrice(form.price)) : undefined}
+                        right={<AppText variant="labelStrong" color="inkMuted">FCFA</AppText>}
+                        containerStyle={styles.block}
+                    />
+
+                    {form.listingType === 'exchange' && (
+                        <TextField
+                            label="Contre quoi ?"
+                            value={form.exchangeItems}
+                            onChangeText={(v) => updateForm('exchangeItems', v)}
+                            placeholder="Ex : téléphone, vélo… (séparés par des virgules)"
+                            error={errors.exchangeItems}
+                            containerStyle={styles.block}
+                        />
+                    )}
+
+                    {form.listingType === 'sell' && (
+                        <ListGroup>
+                            <ListRow
+                                icon="swap-vertical-outline"
+                                title="Prix négociable"
+                                subtitle="Les acheteurs pourront vous faire une offre."
+                                toggle={{ value: form.negotiable, onChange: (v) => updateForm('negotiable', v) }}
+                                last
+                            />
+                        </ListGroup>
+                    )}
+                </>
+            )}
+
+            <Card style={styles.block}>
+                <AppText variant="captionStrong" color="inkMuted" style={styles.chunkTitle}>
+                    REMISE EN MAIN PROPRE
+                </AppText>
+                <PickerField
+                    label="Quartier"
+                    value={form.pickupQuartier}
+                    placeholder={user?.city ? 'Choisir un quartier' : 'Ville non définie'}
+                    onPress={() => setSheet('quartier')}
+                />
+                <TextField
+                    label="Point de rencontre (optionnel)"
+                    value={form.pickupNote}
+                    onChangeText={(v) => updateForm('pickupNote', v)}
+                    placeholder="Ex : devant la pharmacie, au marché…"
+                    helper="Privilégiez un lieu public et fréquenté."
+                />
+            </Card>
+        </>
+    );
+
+    const renderPreview = () => (
+        <>
+            <SectionTitle
+                title="Dernière vérification"
+                subtitle="Voici comment les acheteurs verront votre annonce."
+            />
+            <View style={styles.previewWrap}>
+                <ListingCard post={previewPost} onPress={() => {}} width={220} />
+            </View>
+            <ListGroup title="Récapitulatif">
+                <ListRow icon="images-outline" title="Photos" value={String(photoCount)} onPress={() => setStep(0)} />
+                <ListRow
+                    icon="pricetag-outline"
+                    title="Catégorie"
+                    value={form.category ? categoryLabel(form.category) : '—'}
+                    onPress={() => setStep(1)}
+                />
+                <ListRow
+                    icon="star-outline"
+                    title="État"
+                    value={conditionLabel(form.condition) ?? '—'}
+                    onPress={() => setStep(1)}
+                />
+                <ListRow
+                    icon="cash-outline"
+                    title="Prix"
+                    value={
+                        form.listingType === 'share'
+                            ? 'Gratuit'
+                            : parsePrice(form.price) != null
+                              ? formatAmount(parsePrice(form.price))
+                              : form.listingType === 'exchange'
+                                ? 'Échange'
+                                : '—'
+                    }
+                    subtitle={form.listingType === 'sell' ? (form.negotiable ? 'Négociable' : 'Prix ferme') : undefined}
+                    onPress={() => setStep(2)}
+                />
+                <ListRow
+                    icon="location-outline"
+                    title="Quartier"
+                    value={form.pickupQuartier || '—'}
+                    onPress={() => setStep(2)}
+                    last
+                />
+            </ListGroup>
+            <Button
+                label="Enregistrer en brouillon"
+                variant="ghost"
+                icon="save-outline"
+                onPress={() => submit('draft')}
+                disabled={saving}
+            />
+        </>
+    );
+
+    const isLast = step === STEPS.length - 1;
 
     return (
-        <SafeAreaView style={styles.container}>
-            <FormHeader
-                title={isEdit ? 'Modifier l’annonce' : 'Nouvelle annonce'}
-                onSaveDraft={() => submit('draft')}
-                saving={saving}
+        <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+            <ScreenHeader
+                title={isEdit ? 'Modifier l’annonce' : 'Vendre un article'}
+                onBack={goBack}
+                right={
+                    step > 0 ? (
+                        <IconButton icon="close" label="Fermer" onPress={() => router.back()} />
+                    ) : undefined
+                }
             />
+            <Stepper steps={STEPS} current={step} />
 
             <KeyboardAvoidingView
-                style={styles.content}
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            >
+                style={styles.flex}
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
                 <ScrollView
-                    style={styles.scrollView}
-                    showsVerticalScrollIndicator={false}
-                    contentContainerStyle={styles.scrollContent}
-                >
-                    {/* Title Field */}
-                    <View style={styles.formField}>
-                        <TextInput
-                            style={styles.titleInput}
-                            value={form.title}
-                            onChangeText={(text) => updateForm('title', text)}
-                            placeholder="Titre"
-                            placeholderTextColor="#999"
-                        />
-                        {errors.title && <Text style={styles.errorText}>{errors.title}</Text>}
-                    </View>
-
-                    {/* Description Field */}
-                    <View style={styles.formField}>
-                        <TextInput
-                            style={styles.descriptionInput}
-                            value={form.description}
-                            onChangeText={(text) => updateForm('description', text)}
-                            placeholder="Décrivez votre article : état, marque, taille, raison de la vente…"
-                            multiline
-                            placeholderTextColor="#999"
-                        />
-                        {errors.description && <Text style={styles.errorText}>{errors.description}</Text>}
-                    </View>
-
-                    {/* Listing Type Selector */}
-                    <ListingTypeSelector
-                        selectedType={form.listingType}
-                        onTypeChange={(type) => updateForm('listingType', type)}
-                    />
-
-                    {/* "Contre quoi ?" for exchange listings */}
-                    {form.listingType === 'exchange' && (
-                        <View style={styles.formField}>
-                            <Text style={styles.fieldLabel}>Contre quoi ?</Text>
-                            <TextInput
-                                style={styles.textInput}
-                                value={form.exchangeItems}
-                                onChangeText={(text) => updateForm('exchangeItems', text)}
-                                placeholder="Ex : téléphone, vélo… (séparés par des virgules)"
-                                placeholderTextColor="#999"
-                            />
-                            {errors.exchangeItems && (
-                                <Text style={styles.errorText}>{errors.exchangeItems}</Text>
-                            )}
-                        </View>
+                    style={styles.flex}
+                    contentContainerStyle={styles.scroll}
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}>
+                    {restored && !isEdit && (
+                        <Card tone="muted" style={styles.block}>
+                            <View style={styles.row}>
+                                <Ionicons name="time-outline" size={20} color={t.colors.inkMuted} />
+                                <AppText variant="small" style={styles.flex}>
+                                    Brouillon restauré
+                                </AppText>
+                                <Button label="Recommencer" variant="ghost" size="sm" onPress={startOver} />
+                            </View>
+                        </Card>
                     )}
-
-                    {/* Image Upload Section */}
-                    <ImageUploadSection
-                        existingImages={existingImages}
-                        images={form.images}
-                        onAddImage={handleAddImage}
-                        onRemoveImage={handleRemoveImage}
-                        onRemoveExisting={handleRemoveExisting}
-                        onImagePress={handleImagePress}
-                    />
-                    {errors.images && <Text style={styles.errorText}>{errors.images}</Text>}
-
-                    {/* AI assist: draft title/description/category from photos */}
-                    {form.images.length > 0 && (
-                        <TouchableOpacity
-                            style={[styles.aiButton, aiDraftMut.isPending && styles.aiButtonDisabled]}
-                            onPress={() => aiDraftMut.mutate()}
-                            disabled={aiDraftMut.isPending}
-                        >
-                            {aiDraftMut.isPending ? (
-                                <ActivityIndicator color={theme.colors.primary} />
-                            ) : (
-                                <>
-                                    <Ionicons name="sparkles-outline" size={18} color={theme.colors.primary} />
-                                    <Text style={styles.aiButtonText}>Suggestions IA (photos)</Text>
-                                </>
-                            )}
-                        </TouchableOpacity>
-                    )}
-
-                    {/* Category Field */}
-                    <PickerField
-                        label="Catégorie"
-                        value={form.category ? categoryLabel(form.category) : ''}
-                        onPress={() => setShowCategoryModal(true)}
-                        placeholder="Sélectionner une catégorie"
-                        required
-                    />
-                    {errors.category && <Text style={styles.errorText}>{errors.category}</Text>}
-
-                    {/* Condition Field */}
-                    <PickerField
-                        label="État"
-                        value={form.condition ? conditionLabel(form.condition) ?? '' : ''}
-                        onPress={() => setShowConditionModal(true)}
-                        placeholder="Sélectionner l'état"
-                        required
-                    />
-                    {errors.condition && <Text style={styles.errorText}>{errors.condition}</Text>}
-
-                    {/* Age bucket (optional) */}
-                    <PickerField
-                        label="Ancienneté"
-                        value={form.ageBucket ? AGE_LABELS[form.ageBucket] ?? '' : ''}
-                        onPress={() => setShowAgeModal(true)}
-                        placeholder="Ancienneté de l'article (optionnel)"
-                    />
-
-                    {/* Quartier de remise (optional) */}
-                    <PickerField
-                        label="Quartier de remise"
-                        value={form.pickupQuartier}
-                        onPress={() => setShowQuartierModal(true)}
-                        placeholder={user?.city ? 'Choisir un quartier' : 'Ville non définie'}
-                    />
-
-                    {/* Pickup note (optional) */}
-                    <View style={styles.formField}>
-                        <Text style={styles.fieldLabel}>Point de rencontre</Text>
-                        <TextInput
-                            style={styles.textInput}
-                            value={form.pickupNote}
-                            onChangeText={(text) => updateForm('pickupNote', text)}
-                            placeholder="Ex : devant la pharmacie, marché… (optionnel)"
-                            placeholderTextColor="#999"
-                        />
-                    </View>
+                    {step === 0 && renderPhotos()}
+                    {step === 1 && renderDetails()}
+                    {step === 2 && renderPrice()}
+                    {step === 3 && renderPreview()}
                 </ScrollView>
 
-                {/* AI price suggestion hint */}
-                {priceEditable && priceSug && priceSug.suggested != null && (
-                    <Text style={styles.priceSugHint}>
-                        💡 Suggéré : {formatAmount(priceSug.suggested)}
-                        {priceSug.range_min != null && priceSug.range_max != null
-                            ? ` (${formatAmount(priceSug.range_min)} – ${formatAmount(priceSug.range_max)})`
-                            : ''}
-                    </Text>
-                )}
-
-                {/* Bottom Bar */}
+                {/* Sticky bottom action bar (thumb zone, Fitts) */}
                 <View style={styles.bottomBar}>
-                    {priceEditable ? (
-                        <TextInput
-                            style={styles.priceInput}
-                            value={form.price}
-                            onChangeText={(text) => updateForm('price', text)}
-                            placeholder={
-                                form.listingType === 'exchange' ? 'Prix (optionnel)' : 'Prix en FCFA'
-                            }
-                            keyboardType="numeric"
-                            placeholderTextColor="#999"
-                        />
-                    ) : (
-                        <View style={styles.gratuitBadge}>
-                            <Ionicons name="gift-outline" size={18} color={theme.colors.success} />
-                            <Text style={styles.gratuitText}>Gratuit</Text>
-                        </View>
+                    {step > 0 && (
+                        <Button label="Retour" variant="secondary" onPress={goBack} style={styles.backBtn} />
                     )}
-
-                    {/* Prix conseillé — comparables-grounded price suggestion */}
-                    {priceEditable && (
-                        <TouchableOpacity
-                            style={[styles.priceSugButton, (!canPriceSuggest || priceSugMut.isPending) && styles.aiButtonDisabled]}
-                            onPress={() => priceSugMut.mutate()}
-                            disabled={!canPriceSuggest || priceSugMut.isPending}
-                        >
-                            {priceSugMut.isPending ? (
-                                <ActivityIndicator size="small" color={theme.colors.primary} />
-                            ) : (
-                                <Ionicons name="pricetag-outline" size={20} color={theme.colors.primary} />
-                            )}
-                        </TouchableOpacity>
-                    )}
-
-                    <TouchableOpacity
-                        style={[styles.publishButton, saving && styles.publishButtonDisabled]}
-                        onPress={() => submit('published')}
-                        disabled={saving}
-                    >
-                        {saving ? (
-                            <ActivityIndicator color="#fff" />
+                    <View style={styles.flex}>
+                        {isLast ? (
+                            <Button
+                                label={isEdit ? 'Mettre à jour' : 'Publier l’annonce'}
+                                icon={isEdit ? 'checkmark' : 'rocket-outline'}
+                                onPress={() => submit('published')}
+                                loading={saving}
+                                fullWidth
+                                size="lg"
+                            />
                         ) : (
-                            <Text style={styles.publishButtonText}>
-                                {isEdit ? 'Mettre à jour' : 'Publier'}
-                            </Text>
+                            <Button
+                                label="Suivant"
+                                iconRight="arrow-forward"
+                                onPress={goNext}
+                                disabled={!!nextDisabledReason || aiDraftMut.isPending}
+                                disabledReason={
+                                    aiDraftMut.isPending ? 'L’IA prépare votre annonce…' : nextDisabledReason
+                                }
+                                fullWidth
+                                size="lg"
+                            />
                         )}
-                    </TouchableOpacity>
+                    </View>
                 </View>
-                {errors.price && <Text style={styles.errorText}>{errors.price}</Text>}
             </KeyboardAvoidingView>
 
-            <OptionModal
-                visible={showCategoryModal}
-                title="Sélectionner une catégorie"
+            <SellOptionSheet
+                visible={sheet === 'category'}
+                title="Catégorie"
                 options={CATEGORIES}
                 selectedValue={form.category}
-                onClose={() => setShowCategoryModal(false)}
-                onSelect={(value) => updateForm('category', value)}
+                onClose={() => setSheet(null)}
+                onSelect={(v) => updateForm('category', v)}
             />
-
-            <OptionModal
-                visible={showConditionModal}
-                title="État de l'article"
+            <SellOptionSheet
+                visible={sheet === 'condition'}
+                title="État de l’article"
                 options={CONDITIONS}
                 selectedValue={form.condition}
-                onClose={() => setShowConditionModal(false)}
-                onSelect={(value) => updateForm('condition', value)}
+                onClose={() => setSheet(null)}
+                onSelect={(v) => updateForm('condition', v)}
             />
-
-            <OptionModal
-                visible={showAgeModal}
+            <SellOptionSheet
+                visible={sheet === 'age'}
                 title="Ancienneté"
                 options={AGE_BUCKETS}
                 selectedValue={form.ageBucket}
-                onClose={() => setShowAgeModal(false)}
-                onSelect={(value) => updateForm('ageBucket', value)}
+                onClose={() => setSheet(null)}
+                onSelect={(v) => updateForm('ageBucket', v)}
             />
-
-            <OptionModal
-                visible={showQuartierModal}
+            <SellOptionSheet
+                visible={sheet === 'quartier'}
                 title="Quartier de remise"
                 options={quartierOptions}
                 selectedValue={form.pickupQuartier}
                 emptyText={user?.city ? 'Aucun quartier pour votre ville.' : 'Ville non définie.'}
-                onClose={() => setShowQuartierModal(false)}
-                onSelect={(value) => updateForm('pickupQuartier', value)}
+                onClose={() => setSheet(null)}
+                onSelect={(v) => updateForm('pickupQuartier', v)}
             />
+            <Sheet visible={sheet === 'photo'} onClose={() => setSheet(null)} title="Ajouter une photo">
+                <View style={styles.photoSheet}>
+                    <Button label="Prendre une photo" icon="camera-outline" onPress={() => pickImage(true)} fullWidth />
+                    <Button
+                        label="Choisir dans la galerie"
+                        icon="images-outline"
+                        variant="secondary"
+                        onPress={() => pickImage(false)}
+                        fullWidth
+                    />
+                </View>
+            </Sheet>
 
-            <FullscreenCarousel
-                visible={showFullscreenCarousel}
-                images={form.images}
-                currentIndex={currentImageIndex}
-                onClose={() => setShowFullscreenCarousel(false)}
+            <SellCelebration
+                visible={!!published}
+                title={published?.title ?? ''}
+                onShare={handleShare}
+                onView={() => {
+                    const id = published?.id;
+                    setPublished(null);
+                    if (id) router.replace({ pathname: '/item-details', params: { id: String(id) } });
+                    else router.replace('/(tabs)/home');
+                }}
+                onHome={() => {
+                    setPublished(null);
+                    router.replace('/(tabs)/home');
+                }}
             />
         </SafeAreaView>
     );
 }
 
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: theme.colors.white,
-    },
-    centered: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: theme.spacing.xl,
-        backgroundColor: theme.colors.white,
-    },
-    stateText: {
-        fontSize: 15,
-        color: '#333',
-        marginTop: theme.spacing.md,
-        textAlign: 'center',
-    },
-    stateButton: {
-        marginTop: theme.spacing.lg,
-        backgroundColor: theme.colors.primary,
-        paddingHorizontal: theme.spacing.xl,
-        paddingVertical: theme.spacing.md,
-        borderRadius: 24,
-    },
-    stateButtonText: {
-        color: theme.colors.white,
-        fontWeight: '700',
-        fontSize: 15,
-    },
-    headerTitle: {
-        flex: 1,
-        textAlign: 'center',
-        fontSize: 16,
-        fontWeight: '700',
-        color: '#333',
-        marginHorizontal: theme.spacing.sm,
-    },
-    modalEmptyText: {
-        fontSize: 14,
-        color: theme.colors.gray,
-        padding: theme.spacing.lg,
-        textAlign: 'center',
-    },
-    gratuitBadge: {
-        flex: 1,
+const makeStyles = createStyles((t: Theme) => ({
+    container: { flex: 1, backgroundColor: t.colors.canvas },
+    flex: { flex: 1 },
+    loading: { padding: t.spacing.md, gap: t.spacing.md },
+    scroll: { padding: t.spacing.md, paddingBottom: t.spacing.xxl },
+    sectionTitle: { gap: 4, marginBottom: t.spacing.md },
+    block: { marginBottom: t.spacing.md },
+    row: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs },
+    chunkTitle: { letterSpacing: 0.5, marginBottom: t.spacing.sm },
+    field: { marginBottom: t.spacing.sm },
+    fieldLabel: { marginBottom: 6 },
+    fieldGap: { marginTop: t.spacing.xs },
+    picker: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginRight: theme.spacing.md,
-    },
-    gratuitText: {
-        fontSize: 16,
-        fontWeight: '700',
-        color: theme.colors.success,
-        marginLeft: 6,
-    },
-    publishButtonDisabled: {
-        opacity: 0.6,
-    },
-    aiButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
+        minHeight: 48,
+        paddingHorizontal: 12,
+        borderWidth: 1,
+        borderRadius: t.radius.sm,
+        backgroundColor: t.colors.surface,
         gap: 8,
-        marginHorizontal: theme.spacing.md,
-        marginTop: theme.spacing.md,
-        paddingVertical: theme.spacing.md,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: theme.colors.primary,
-        backgroundColor: '#F3F0FB',
     },
-    aiButtonText: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: theme.colors.primary,
-    },
-    aiButtonDisabled: {
-        opacity: 0.5,
-    },
-    priceSugButton: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
+    errorText: { marginTop: 4 },
+    hint: { marginTop: t.spacing.sm },
+    photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.xs },
+    photoCell: { width: '31.5%', aspectRatio: 1, borderRadius: t.radius.md, overflow: 'hidden' },
+    photo: { width: '100%', height: '100%' },
+    coverBadge: { position: 'absolute', left: 6, bottom: 6 },
+    photoRemove: { position: 'absolute', top: 0, right: 0, width: 36, height: 36 },
+    addPhoto: {
         alignItems: 'center',
         justifyContent: 'center',
-        borderWidth: 1,
-        borderColor: theme.colors.primary,
-        backgroundColor: '#F3F0FB',
-        marginRight: theme.spacing.sm,
-    },
-    priceSugHint: {
-        paddingHorizontal: theme.spacing.md,
-        paddingBottom: 4,
-        fontSize: 13,
-        color: theme.colors.primary,
-        fontWeight: '600',
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.md,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f0f0f0',
-    },
-    headerButton: {
-        padding: theme.spacing.sm,
-    },
-    content: {
-        flex: 1,
-    },
-    scrollView: {
-        flex: 1,
-    },
-    scrollContent: {
-        paddingBottom: 100,
-    },
-    section: {
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.md,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f0f0f0',
-    },
-    sectionTitle: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#000',
-        marginBottom: 4,
-    },
-    sectionSubtitle: {
-        fontSize: 14,
-        color: '#666',
-        marginBottom: theme.spacing.md,
-    },
-    imageSection: {
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.md,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f0f0f0',
-    },
-    imageGrid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        marginTop: theme.spacing.sm,
-    },
-    imageContainer: {
-        position: 'relative',
-        marginRight: theme.spacing.sm,
-        marginBottom: theme.spacing.sm,
-    },
-    uploadedImage: {
-        width: 80,
-        height: 80,
-        borderRadius: 8,
-        backgroundColor: '#f0f0f0',
-    },
-    removeImageButton: {
-        position: 'absolute',
-        top: -8,
-        right: -8,
-        backgroundColor: '#fff',
-        borderRadius: 10,
-        width: 20,
-        height: 20,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    addImageButton: {
-        width: 80,
-        height: 80,
-        borderRadius: 8,
-        borderWidth: 2,
-        borderColor: '#e0e0e0',
+        gap: 2,
+        borderWidth: 1.5,
         borderStyle: 'dashed',
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: '#f9f9f9',
+        borderColor: t.colors.brandStrong,
+        backgroundColor: t.colors.brandTint,
     },
-    addImageText: {
-        fontSize: 12,
-        color: '#666',
-        marginTop: 4,
-    },
-    formField: {
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.sm,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f0f0f0',
-    },
-    fieldLabel: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#000',
-        marginBottom: theme.spacing.sm,
-    },
-    required: {
-        color: '#FF6B6B',
-    },
-    textInput: {
-        fontSize: 16,
-        color: '#000',
-        paddingVertical: theme.spacing.sm,
-        borderBottomWidth: 1,
-        borderBottomColor: '#e0e0e0',
-    },
-    multilineInput: {
-        minHeight: 80,
-        textAlignVertical: 'top',
-    },
-    pickerButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingVertical: theme.spacing.sm,
-        borderBottomWidth: 1,
-        borderBottomColor: '#e0e0e0',
-    },
-    pickerText: {
-        fontSize: 16,
-        color: '#000',
-    },
-    placeholderText: {
-        color: '#999',
-    },
-    errorText: {
-        fontSize: 14,
-        color: '#FF6B6B',
-        marginHorizontal: theme.spacing.md,
-        marginTop: -theme.spacing.sm,
-        marginBottom: theme.spacing.sm,
-    },
-    bottomActions: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        flexDirection: 'row',
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.md,
-        backgroundColor: theme.colors.white,
-        borderTopWidth: 1,
-        borderTopColor: '#f0f0f0',
-    },
-    draftButton: {
-        flex: 1,
-        paddingVertical: theme.spacing.md,
-        marginRight: theme.spacing.sm,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: theme.colors.primary,
-        alignItems: 'center',
-    },
-    draftButtonText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: theme.colors.primary,
-    },
-    publishButton: {
-        flex: 1,
-        paddingVertical: theme.spacing.md,
-        marginLeft: theme.spacing.sm,
-        borderRadius: 8,
-        backgroundColor: theme.colors.primary,
-        alignItems: 'center',
-    },
-    publishButtonText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: theme.colors.white,
-    },
-    modalOverlay: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        justifyContent: 'flex-end',
-    },
-    modalContent: {
-        backgroundColor: theme.colors.white,
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: 20,
-        maxHeight: '70%',
-    },
-    modalHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.md,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f0f0f0',
-    },
-    modalTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#000',
-    },
-    modalList: {
-        maxHeight: 300,
-    },
-    modalItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.md,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f0f0f0',
-    },
-    modalItemSelected: {
-        backgroundColor: '#f0f8ff',
-    },
-    modalItemText: {
-        fontSize: 16,
-        color: '#000',
-    },
-    modalItemTextSelected: {
-        color: theme.colors.primary,
-        fontWeight: '600',
-    },
-    // New styles for reference design
-    statusBar: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        flex: 1,
-        marginHorizontal: theme.spacing.md,
-    },
-    timeText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#000',
-    },
-    statusIcons: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-    },
-    saveButton: {
-        backgroundColor: '#f0f0f0',
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.sm,
-        borderRadius: 8,
-    },
-    saveButtonText: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#000',
-    },
-    listingTypeContainer: {
-        flexDirection: 'row',
-        marginHorizontal: theme.spacing.md,
-        marginVertical: theme.spacing.md,
-        backgroundColor: '#f0f0f0',
-        borderRadius: 8,
-        padding: 4,
-    },
-    listingTypeButton: {
-        flex: 1,
-        paddingVertical: theme.spacing.sm,
-        alignItems: 'center',
-        borderRadius: 6,
-    },
-    listingTypeButtonActive: {
-        backgroundColor: theme.colors.primary,
-    },
-    listingTypeText: {
-        fontSize: 16,
-        fontWeight: '500',
-        color: '#666',
-    },
-    listingTypeTextActive: {
-        color: '#fff',
-    },
-    titleInput: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#000',
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.md,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f0f0f0',
-    },
-    descriptionInput: {
-        fontSize: 16,
-        color: '#000',
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.md,
-        minHeight: 120,
-        textAlignVertical: 'top',
-        borderBottomWidth: 1,
-        borderBottomColor: '#f0f0f0',
-    },
+    addPhotoLarge: { width: '100%', aspectRatio: 4 / 3 },
+    aiNote: { flexDirection: 'row', gap: 8, alignItems: 'flex-start', marginTop: t.spacing.xs },
+    aiButton: { marginTop: t.spacing.sm, alignSelf: 'flex-start' },
+    previewWrap: { alignItems: 'center', marginBottom: t.spacing.lg },
     bottomBar: {
         flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.md,
-        backgroundColor: theme.colors.white,
-        borderTopWidth: 1,
-        borderTopColor: '#f0f0f0',
+        alignItems: 'flex-start',
+        gap: t.spacing.sm,
+        paddingHorizontal: t.spacing.md,
+        paddingTop: t.spacing.sm,
+        paddingBottom: t.spacing.sm,
+        borderTopWidth: StyleSheet.hairlineWidth,
+        borderTopColor: t.colors.line,
+        backgroundColor: t.colors.surface,
     },
-    priceInput: {
-        flex: 1,
-        fontSize: 16,
-        color: '#000',
-        paddingVertical: theme.spacing.sm,
-        marginRight: theme.spacing.md,
-    },
-    tagsSection: {
-        paddingHorizontal: theme.spacing.md,
-        paddingVertical: theme.spacing.md,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f0f0f0',
-    },
-    selectedTagsContainer: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        marginBottom: theme.spacing.sm,
-    },
-    selectedTag: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#f0f8ff',
-        paddingHorizontal: theme.spacing.sm,
-        paddingVertical: theme.spacing.sm,
-        borderRadius: 16,
-        marginRight: theme.spacing.sm,
-        marginBottom: theme.spacing.sm,
-    },
-    selectedTagText: {
-        fontSize: 14,
-        color: theme.colors.primary,
-        marginRight: theme.spacing.sm,
-    },
-    addTagContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    tagInput: {
-        flex: 1,
-        fontSize: 16,
-        color: '#000',
-        paddingVertical: theme.spacing.sm,
-        borderBottomWidth: 1,
-        borderBottomColor: '#e0e0e0',
-        marginRight: theme.spacing.sm,
-    },
-    addTagButton: {
-        padding: theme.spacing.sm,
-    },
-    suggestionsContainer: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        marginTop: theme.spacing.sm,
-    },
-    suggestionTag: {
-        backgroundColor: '#f9f9f9',
-        paddingHorizontal: theme.spacing.sm,
-        paddingVertical: theme.spacing.sm,
-        borderRadius: 16,
-        marginRight: theme.spacing.sm,
-        marginBottom: theme.spacing.sm,
-    },
-    suggestionTagText: {
-        fontSize: 14,
-        color: '#666',
-    },
-    // Fullscreen carousel styles
-    fullscreenContainer: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: '#000',
-        zIndex: 1000,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    closeButton: {
-        position: 'absolute',
-        top: 50,
-        right: 20,
-        zIndex: 1001,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        borderRadius: 20,
-        width: 40,
-        height: 40,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    fullscreenScrollView: {
-        flex: 1,
-    },
-    fullscreenImageContainer: {
-        width: Dimensions.get('window').width,
-        height: Dimensions.get('window').height,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    fullscreenImage: {
-        width: Dimensions.get('window').width,
-        height: Dimensions.get('window').height,
-        resizeMode: 'contain',
-    },
-    fullscreenPagination: {
-        position: 'absolute',
-        bottom: 50,
-        left: 0,
-        right: 0,
-        flexDirection: 'row',
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    fullscreenPaginationDot: {
-        width: 10,
-        height: 10,
-        borderRadius: 5,
-        backgroundColor: 'rgba(255, 255, 255, 0.5)',
-        marginHorizontal: 4,
-    },
-    fullscreenPaginationDotActive: {
-        backgroundColor: 'white',
-    },
-});
+    backBtn: { minWidth: 100 },
+    photoSheet: { gap: t.spacing.sm, paddingBottom: t.spacing.sm },
+}));

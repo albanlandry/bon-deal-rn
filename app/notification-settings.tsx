@@ -1,175 +1,108 @@
-// app/notification-settings.tsx - Notification Settings Screen
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+// app/notification-settings.tsx — Notifications
+// TODO(backend): no endpoint for notification preferences yet (MB-NOT-04);
+// settings are stored locally only (AsyncStorage) and do not yet filter the
+// pushes the server sends.
+// Defaults (default effect, §1.5 / §2.3): messages and offers ON, marketing OFF.
+import React from 'react';
+import { ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { showToast } from '../components/atoms/Toast';
-import { theme } from '../utils/theme';
+import { useTheme } from '@/theme';
+import { ScreenHeader } from '@/components/ui';
+import SettingsLocalToggles, { LocalToggleGroup } from '@/components/organisms/SettingsLocalToggles';
 
-interface NotificationSetting {
-  id: string;
-  title: string;
-  description: string;
-  enabled: boolean;
-}
+export const NOTIFICATION_SETTINGS_KEY = 'bondeal.settings.notifications.v1';
 
-const notificationSettings: NotificationSetting[] = [
+const GROUPS: LocalToggleGroup[] = [
   {
-    id: 'push',
-    title: 'Notifications push',
-    description: 'Recevoir des notifications sur votre appareil',
-    enabled: true,
+    title: 'Général',
+    items: [
+      {
+        id: 'push',
+        title: 'Notifications push',
+        description: 'Recevoir des notifications sur cet appareil',
+        icon: 'notifications-outline',
+        defaultValue: true,
+      },
+    ],
   },
   {
-    id: 'messages',
-    title: 'Nouveaux messages',
-    description: 'Notifications quand vous recevez un message',
-    enabled: true,
+    title: 'Échanges',
+    items: [
+      {
+        id: 'messages',
+        title: 'Nouveaux messages',
+        description: 'Quand un acheteur ou un vendeur vous écrit',
+        icon: 'chatbubble-outline',
+        defaultValue: true,
+        dependsOn: 'push',
+      },
+      {
+        id: 'offers',
+        title: 'Offres et négociations',
+        description: 'Offres reçues, contre-offres, offres acceptées',
+        icon: 'pricetag-outline',
+        defaultValue: true,
+        dependsOn: 'push',
+      },
+      {
+        id: 'sales',
+        title: 'Ventes et transactions',
+        description: 'Quand une vente est confirmée ou annulée',
+        icon: 'checkmark-done-outline',
+        defaultValue: true,
+        dependsOn: 'push',
+      },
+    ],
   },
   {
-    id: 'likes',
-    title: 'Likes sur vos annonces',
-    description: 'Notifications quand quelqu\'un aime vos produits',
-    enabled: true,
+    title: 'Mes annonces',
+    items: [
+      {
+        id: 'likes',
+        title: 'Favoris sur mes annonces',
+        description: 'Quand quelqu’un ajoute votre annonce à ses favoris',
+        icon: 'heart-outline',
+        defaultValue: true,
+        dependsOn: 'push',
+      },
+      {
+        id: 'views',
+        title: 'Vues sur mes annonces',
+        description: 'Résumé des consultations de vos annonces',
+        icon: 'eye-outline',
+        defaultValue: false,
+        dependsOn: 'push',
+      },
+    ],
   },
   {
-    id: 'views',
-    title: 'Vues sur vos annonces',
-    description: 'Notifications quand quelqu\'un consulte vos produits',
-    enabled: false,
-  },
-  {
-    id: 'offers',
-    title: 'Nouvelles offres',
-    description: 'Notifications pour les offres sur vos produits',
-    enabled: true,
-  },
-  {
-    id: 'sales',
-    title: 'Ventes confirmées',
-    description: 'Notifications quand une vente est confirmée',
-    enabled: true,
+    title: 'BonDeal',
+    items: [
+      {
+        id: 'marketing',
+        title: 'Actualités et bons plans',
+        description: 'Nouveautés et conseils de BonDeal. Désactivé par défaut.',
+        icon: 'megaphone-outline',
+        defaultValue: false,
+        dependsOn: 'push',
+      },
+    ],
   },
 ];
 
 export default function NotificationSettingsScreen() {
-  const router = useRouter();
-  const [settings, setSettings] = useState(notificationSettings);
-
-  const toggleSetting = (id: string) => {
-    setSettings(
-      settings.map(setting =>
-        setting.id === id ? { ...setting, enabled: !setting.enabled } : setting
-      )
-    );
-  };
-
-  const handleSave = () => {
-    // TODO: Save settings to API
-    showToast.success('Paramètres sauvegardés', 'Vos préférences de notification ont été mises à jour.');
-    router.back();
-  };
-
+  const t = useTheme();
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="chevron-back" size={24} color="#000" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Notifications</Text>
-        <View style={{ width: 24 }} />
-      </View>
-
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <View style={styles.content}>
-          {settings.map((setting) => (
-            <View key={setting.id} style={styles.settingItem}>
-              <View style={styles.settingContent}>
-                <Text style={styles.settingTitle}>{setting.title}</Text>
-                <Text style={styles.settingDescription}>{setting.description}</Text>
-              </View>
-              <Switch
-                value={setting.enabled}
-                onValueChange={() => toggleSetting(setting.id)}
-                trackColor={{ false: '#e0e0e0', true: theme.colors.primary + '80' }}
-                thumbColor={setting.enabled ? theme.colors.primary : '#f4f3f4'}
-              />
-            </View>
-          ))}
-        </View>
-
-        {/* Save Button */}
-        <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-          <Text style={styles.saveButtonText}>Enregistrer</Text>
-        </TouchableOpacity>
+    <SafeAreaView style={[styles.container, { backgroundColor: t.colors.canvas }]}>
+      <ScreenHeader title="Notifications" />
+      <ScrollView contentContainerStyle={styles.content}>
+        <SettingsLocalToggles storageKey={NOTIFICATION_SETTINGS_KEY} groups={GROUPS} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.white,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#333',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
-    padding: theme.spacing.lg,
-  },
-  settingItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  settingContent: {
-    flex: 1,
-    marginRight: theme.spacing.md,
-  },
-  settingTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-  },
-  settingDescription: {
-    fontSize: 14,
-    color: theme.colors.gray,
-    lineHeight: 20,
-  },
-  saveButton: {
-    backgroundColor: theme.colors.primary,
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginHorizontal: theme.spacing.lg,
-    marginTop: theme.spacing.lg,
-    marginBottom: 40,
-  },
-  saveButtonText: {
-    color: theme.colors.white,
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  container: { flex: 1 },
+  content: { padding: 16, paddingBottom: 32 },
 });
-

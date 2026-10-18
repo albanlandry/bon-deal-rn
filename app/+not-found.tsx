@@ -1,40 +1,21 @@
-import { Link, Stack } from 'expo-router';
-import { StyleSheet } from 'react-native';
-
-import { Text, View } from '@/components/Themed';
+import { useRouter } from 'expo-router';
+import React from 'react';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import EmptyState from '@/components/molecules/EmptyState';
+import { useTheme } from '@/theme';
 
 export default function NotFoundScreen() {
+  const router = useRouter();
+  const t = useTheme();
   return (
-    <>
-      <Stack.Screen options={{ title: 'Oops!' }} />
-      <View style={styles.container}>
-        <Text style={styles.title}>This screen doesn't exist.</Text>
-
-        <Link href="/" style={styles.link}>
-          <Text style={styles.linkText}>Go to home screen!</Text>
-        </Link>
-      </View>
-    </>
+    <SafeAreaView style={{ flex: 1, backgroundColor: t.colors.canvas }}>
+      <EmptyState
+        icon="compass-outline"
+        title="Page introuvable"
+        message="Ce lien ne mène nulle part. Revenons aux annonces."
+        actionLabel="Retour à l’accueil"
+        onAction={() => router.replace('/(tabs)/home')}
+      />
+    </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  link: {
-    marginTop: 15,
-    paddingVertical: 15,
-  },
-  linkText: {
-    fontSize: 14,
-    color: '#2e78b7',
-  },
-});

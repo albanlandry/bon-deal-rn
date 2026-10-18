@@ -1,13 +1,11 @@
-// components/molecules/OTPInput.tsx - Reusable OTP/PIN input widget
-import React, { useRef, useState } from 'react';
-import {
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
-} from 'react-native';
-import { theme } from '../../utils/theme';
+// components/molecules/OTPInput.tsx — OTP/PIN input rendered as chunked boxes
+// (3 + 3 for a 6-digit code, Miller chunking). A single hidden TextInput
+// drives the boxes, so paste and SMS autofill (Android sms-otp / iOS
+// oneTimeCode) fill every box at once.
+import React, { forwardRef, useImperativeHandle, useRef, useState } from 'react';
+import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import AppText from '@/components/atoms/AppText';
+import { useTheme } from '@/theme';
 
 interface OTPInputProps {
   /** Number of digits in the OTP (minimum 1) */
@@ -18,165 +16,120 @@ interface OTPInputProps {
   onComplete?: (otp: string) => void;
   /** Callback on every change */
   onChange?: (otp: string) => void;
+  /** Error state: boxes turn red. */
+  error?: boolean;
+  autoFocus?: boolean;
 }
 
-export default function OTPInput({
-  length = 6,
-  maskChar,
-  onComplete,
-  onChange,
-}: OTPInputProps) {
-  const [otp, setOtp] = useState<string[]>(Array(length).fill(''));
-  const [focusedIndex, setFocusedIndex] = useState<number>(0);
-  const inputRefs = useRef<(TextInput | null)[]>([]);
+export interface OTPInputHandle {
+  clear: () => void;
+  focus: () => void;
+}
 
-  const handleChange = (text: string, index: number) => {
-    // Only allow numbers
-    const numericText = text.replace(/[^0-9]/g, '');
-    
-    if (numericText.length === 0) {
-      // Handle backspace
-      const newOtp = [...otp];
-      newOtp[index] = '';
-      setOtp(newOtp);
-      onChange?.(newOtp.join(''));
-      
-      // Move to previous input
-      if (index > 0) {
-        inputRefs.current[index - 1]?.focus();
-      }
-      return;
-    }
+/** Group sizes: 6 → [3,3], 4 → [2,2], else one group. */
+function groups(length: number): number[] {
+  if (length >= 4 && length % 2 === 0) return [length / 2, length / 2];
+  return [length];
+}
 
-    // Handle paste or single digit
-    if (numericText.length > 1) {
-      // Handle paste of multiple digits
-      const digits = numericText.split('').slice(0, length);
-      const newOtp = [...otp];
-      
-      digits.forEach((digit, i) => {
-        if (index + i < length) {
-          newOtp[index + i] = digit;
-        }
-      });
-      
-      setOtp(newOtp);
-      onChange?.(newOtp.join(''));
-      
-      // Move to next empty field or last field
-      const nextIndex = Math.min(index + digits.length, length - 1);
-      inputRefs.current[nextIndex]?.focus();
-      
-      // Check if complete
-      if (newOtp.every((digit) => digit !== '')) {
-        onComplete?.(newOtp.join(''));
-      }
-      return;
-    }
+const OTPInput = forwardRef<OTPInputHandle, OTPInputProps>(function OTPInput(
+  { length = 6, maskChar, onComplete, onChange, error = false, autoFocus = true },
+  ref,
+) {
+  const t = useTheme();
+  const n = Math.max(1, length);
+  const [value, setValue] = useState('');
+  const [focused, setFocused] = useState(false);
+  const inputRef = useRef<TextInput>(null);
 
-    // Single digit input
-    const newOtp = [...otp];
-    newOtp[index] = numericText;
-    setOtp(newOtp);
-    onChange?.(newOtp.join(''));
+  useImperativeHandle(ref, () => ({
+    clear: () => {
+      setValue('');
+      onChange?.('');
+      inputRef.current?.focus();
+    },
+    focus: () => inputRef.current?.focus(),
+  }));
 
-    // Auto-focus next input
-    if (index < length - 1) {
-      inputRefs.current[index + 1]?.focus();
-    }
-
-    // Check if complete
-    if (newOtp.every((digit) => digit !== '')) {
-      onComplete?.(newOtp.join(''));
-    }
+  const handleChange = (text: string) => {
+    const digits = text.replace(/[^0-9]/g, '').slice(0, n);
+    setValue(digits);
+    onChange?.(digits);
+    if (digits.length === n) onComplete?.(digits);
   };
 
-  const handleKeyPress = (e: any, index: number) => {
-    if (e.nativeEvent.key === 'Backspace' && otp[index] === '' && index > 0) {
-      // If current input is empty and backspace is pressed, go to previous
-      inputRefs.current[index - 1]?.focus();
-    }
-  };
-
-  const handleFocus = (index: number) => {
-    setFocusedIndex(index);
-  };
-
-  const handlePress = (index: number) => {
-    inputRefs.current[index]?.focus();
-  };
+  const active = Math.min(value.length, n - 1);
+  let offset = 0;
 
   return (
-    <View style={styles.container}>
-      {Array(length)
-        .fill(0)
-        .map((_, index) => (
-          <TouchableOpacity
-            key={index}
-            activeOpacity={0.7}
-            onPress={() => handlePress(index)}>
-            <View
-              style={[
-                styles.inputBox,
-                focusedIndex === index && styles.inputBoxFocused,
-              ]}>
-              <TextInput
-                ref={(ref) => {
-                  inputRefs.current[index] = ref;
-                }}
-                style={styles.input}
-                maxLength={1}
-                keyboardType="number-pad"
-                value={maskChar && otp[index] ? maskChar : otp[index]}
-                onChangeText={(text) => handleChange(text, index)}
-                onKeyPress={(e) => handleKeyPress(e, index)}
-                onFocus={() => handleFocus(index)}
-                selectTextOnFocus
-                caretHidden={false}
-              />
-              <Text style={styles.inputText}>
-                {maskChar && otp[index] ? maskChar : otp[index]}
-              </Text>
+    <Pressable
+      onPress={() => inputRef.current?.focus()}
+      accessibilityRole="none"
+      accessibilityLabel={`Code de vérification à ${n} chiffres, ${value.length} saisis`}
+      style={styles.container}>
+      {groups(n).map((size, gi) => {
+        const start = offset;
+        offset += size;
+        return (
+          <React.Fragment key={gi}>
+            {gi > 0 && <View style={[styles.dash, { backgroundColor: t.colors.line }]} />}
+            <View style={styles.group}>
+              {Array.from({ length: size }).map((_, k) => {
+                const i = start + k;
+                const ch = value[i];
+                const isActive = focused && i === active && value.length < n + 1;
+                const borderColor = error
+                  ? t.colors.danger
+                  : isActive
+                    ? t.colors.brandStrong
+                    : ch
+                      ? t.colors.inkMuted
+                      : t.colors.line;
+                return (
+                  <View
+                    key={i}
+                    style={[
+                      styles.box,
+                      {
+                        borderColor,
+                        borderWidth: isActive || error ? 2 : 1,
+                        borderRadius: t.radius.sm,
+                        backgroundColor: t.colors.surface,
+                      },
+                    ]}>
+                    <AppText variant="h2">{ch ? maskChar ?? ch : ''}</AppText>
+                  </View>
+                );
+              })}
             </View>
-          </TouchableOpacity>
-        ))}
-    </View>
+          </React.Fragment>
+        );
+      })}
+      <TextInput
+        ref={inputRef}
+        value={value}
+        onChangeText={handleChange}
+        maxLength={n}
+        keyboardType="number-pad"
+        textContentType="oneTimeCode"
+        autoComplete="sms-otp"
+        autoFocus={autoFocus}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        caretHidden
+        accessibilityLabel="Code de vérification"
+        style={styles.hidden}
+      />
+    </Pressable>
   );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 12,
-  },
-  inputBox: {
-    width: 56,
-    height: 64,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#E0E0E0',
-    backgroundColor: theme.colors.white,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  inputBoxFocused: {
-    borderColor: theme.colors.primary,
-    backgroundColor: '#F0F8FF',
-  },
-  input: {
-    position: 'absolute',
-    width: '100%',
-    height: '100%',
-    opacity: 0,
-    fontSize: 24,
-    textAlign: 'center',
-  },
-  inputText: {
-    fontSize: 32,
-    fontWeight: '600',
-    color: '#000',
-  },
 });
 
+export default OTPInput;
+
+const styles = StyleSheet.create({
+  container: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
+  group: { flexDirection: 'row', gap: 8 },
+  box: { width: 46, height: 56, alignItems: 'center', justifyContent: 'center' },
+  dash: { width: 10, height: 2, borderRadius: 1 },
+  hidden: { position: 'absolute', width: 1, height: 1, opacity: 0 },
+});

@@ -1,126 +1,97 @@
-// app/setup-profile.tsx - Profile setup screen after phone verification
+// app/setup-profile.tsx — Profile setup after phone verification
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import AppImage from '@/components/atoms/AppImage';
+import AppText from '@/components/atoms/AppText';
+import Button from '@/components/atoms/Button';
+import ProgressRing from '@/components/atoms/ProgressRing';
+import TextField from '@/components/atoms/TextField';
+import { showToast } from '@/components/atoms/Toast';
+import AuthScaffold from '@/components/organisms/AuthScaffold';
 import { apiFetch } from '@/lib/api';
-import { showToast } from '../components/atoms/Toast';
-import { theme } from '../utils/theme';
+import { uploadAvatar } from '@/lib/api/me';
+import { useTheme } from '@/theme';
+
+const TOTAL_STEPS = 5;
+
+function nicknameError(v: string): string | null {
+  const s = v.trim();
+  if (!s) return 'Le pseudonyme est requis';
+  if (s.length < 2) return 'Au moins 2 caractères';
+  if (s.length > 30) return '30 caractères maximum';
+  return null;
+}
 
 export default function SetupProfileScreen() {
+  const t = useTheme();
   const router = useRouter();
   const { phone } = useLocalSearchParams<{ phone?: string }>();
-  
+
   const [nickname, setNickname] = useState('');
+  const [touched, setTouched] = useState(false);
   const [profileImage, setProfileImage] = useState<string | null>(null);
-  const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
-  const validateForm = (): boolean => {
-    const newErrors: Record<string, string> = {};
+  // Endowed progress: account created + phone verified are real, completed
+  // steps by the time the user lands here (OTP succeeded). Nickname and photo
+  // count live; the password is the 5th step on the next screen.
+  const nicknameOk = nicknameError(nickname) === null;
+  const done = 2 + (nicknameOk ? 1 : 0) + (profileImage ? 1 : 0);
+  const error = touched ? nicknameError(nickname) : null;
 
-    if (!nickname.trim()) {
-      newErrors.nickname = 'Le pseudonyme est requis';
-    } else if (nickname.trim().length < 2) {
-      newErrors.nickname = 'Le pseudonyme doit contenir au moins 2 caractères';
-    } else if (nickname.trim().length > 30) {
-      newErrors.nickname = 'Le pseudonyme ne peut pas dépasser 30 caractères';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handlePickImage = async () => {
+  const pick = async (source: 'camera' | 'library') => {
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
+      const perm =
+        source === 'camera'
+          ? await ImagePicker.requestCameraPermissionsAsync()
+          : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (perm.status !== 'granted') {
         Alert.alert(
           'Permission requise',
-          'Nous avons besoin de votre permission pour accéder à vos photos.'
+          source === 'camera'
+            ? 'Autorisez l’appareil photo pour prendre votre photo.'
+            : 'Autorisez l’accès à vos photos pour en choisir une.',
         );
         return;
       }
-
-      Alert.alert(
-        'Ajouter une photo de profil',
-        'Choisissez une option',
-        [
-          { text: 'Annuler', style: 'cancel' },
-          {
-            text: 'Prendre une photo',
-            onPress: async () => {
-              const result = await ImagePicker.launchCameraAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                allowsEditing: true,
-                aspect: [1, 1],
-                quality: 0.8,
-              });
-              if (!result.canceled && result.assets[0]) {
-                setProfileImage(result.assets[0].uri);
-              }
-            },
-          },
-          {
-            text: 'Choisir depuis la galerie',
-            onPress: async () => {
-              const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                allowsEditing: true,
-                aspect: [1, 1],
-                quality: 0.8,
-              });
-              if (!result.canceled && result.assets[0]) {
-                setProfileImage(result.assets[0].uri);
-              }
-            },
-          },
-        ]
-      );
-    } catch (error) {
-      showToast.error('Erreur', 'Impossible d\'accéder aux photos.');
+      const opts: ImagePicker.ImagePickerOptions = {
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      };
+      const result =
+        source === 'camera'
+          ? await ImagePicker.launchCameraAsync(opts)
+          : await ImagePicker.launchImageLibraryAsync(opts);
+      if (!result.canceled && result.assets[0]) setProfileImage(result.assets[0].uri);
+    } catch {
+      showToast.error('Erreur', 'Impossible d’accéder aux photos.');
     }
   };
 
-  const handleRemoveImage = () => {
-    Alert.alert(
-      'Supprimer la photo',
-      'Êtes-vous sûr de vouloir supprimer cette photo ?',
-      [
-        { text: 'Annuler', style: 'cancel' },
-        {
-          text: 'Supprimer',
-          style: 'destructive',
-          onPress: () => setProfileImage(null),
-        },
-      ]
-    );
+  const handlePickImage = () => {
+    Alert.alert('Photo de profil', 'Choisissez une option', [
+      { text: 'Annuler', style: 'cancel' },
+      { text: 'Prendre une photo', onPress: () => pick('camera') },
+      { text: 'Choisir dans la galerie', onPress: () => pick('library') },
+      ...(profileImage
+        ? [{ text: 'Retirer la photo', style: 'destructive' as const, onPress: () => setProfileImage(null) }]
+        : []),
+    ]);
   };
 
   const handleContinue = async () => {
-    if (!validateForm()) {
-      showToast.error('Erreur de validation', 'Veuillez corriger les erreurs dans le formulaire.');
-      return;
-    }
+    setTouched(true);
+    if (!nicknameOk) return;
 
-    // Persist the chosen nickname as the backend username. The Firebase→JWT
-    // exchange may still be in flight; a 401 here is transparently retried by
-    // the API client. A failure (e.g. nickname taken) is surfaced but does not
-    // block onboarding — the backend keeps the auto-generated username.
+    // Persist the nickname as the backend username. The Firebase→JWT exchange
+    // may still be in flight; a 401 is transparently retried by the API
+    // client. A failure (e.g. nickname taken) is surfaced but does not block
+    // onboarding — the backend keeps the auto-generated username.
     setSaving(true);
     try {
       await apiFetch('/auth/me', {
@@ -130,9 +101,16 @@ export default function SetupProfileScreen() {
     } catch (e: any) {
       console.warn('[setup-profile] profile save failed:', e);
       showToast.error('Profil non enregistré', e?.message || 'Réessayez plus tard.');
-    } finally {
-      setSaving(false);
     }
+    if (profileImage) {
+      try {
+        await uploadAvatar(profileImage);
+      } catch (e: any) {
+        console.warn('[setup-profile] avatar upload failed:', e);
+        showToast.error('Photo non enregistrée', 'Vous pourrez l’ajouter depuis votre profil.');
+      }
+    }
+    setSaving(false);
 
     router.push({
       pathname: '/set-password',
@@ -145,228 +123,99 @@ export default function SetupProfileScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}>
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}>
-          {/* Title */}
-          <Text style={styles.title}>Configurez votre profil</Text>
-          <Text style={styles.subtitle}>
-            Ajoutez une photo et un pseudonyme pour personnaliser votre compte
-          </Text>
-
-          {/* Profile Image Section */}
-          <View style={styles.avatarSection}>
-            <TouchableOpacity onPress={handlePickImage} style={styles.avatarContainer}>
-              {profileImage ? (
-                <Image source={{ uri: profileImage }} style={styles.avatar} />
-              ) : (
-                <View style={styles.avatarPlaceholder}>
-                  <Ionicons name="camera" size={40} color="#999" />
-                </View>
-              )}
-              <View style={styles.avatarEditBadge}>
-                <Ionicons 
-                  name={profileImage ? "pencil" : "camera"} 
-                  size={20} 
-                  color="#fff" 
-                />
-              </View>
-            </TouchableOpacity>
-            {profileImage ? (
-              <TouchableOpacity onPress={handleRemoveImage}>
-                <Text style={styles.removePhotoText}>Supprimer la photo</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity onPress={handlePickImage}>
-                <Text style={styles.addPhotoText}>Ajouter une photo</Text>
-              </TouchableOpacity>
-            )}
-            <Text style={styles.photoHelperText}>
-              (Optionnel mais recommandé)
-            </Text>
-          </View>
-
-          {/* Nickname Input */}
-          <View style={styles.formSection}>
-            <View style={styles.formField}>
-              <Text style={styles.label}>Pseudonyme *</Text>
-              <TextInput
-                style={[styles.input, errors.nickname && styles.inputError]}
-                value={nickname}
-                onChangeText={(text) => {
-                  setNickname(text);
-                  if (errors.nickname) setErrors({ ...errors, nickname: '' });
-                }}
-                placeholder="Votre pseudonyme"
-                placeholderTextColor="#999"
-                maxLength={30}
-                autoCapitalize="words"
-              />
-              {errors.nickname && (
-                <Text style={styles.errorText}>{errors.nickname}</Text>
-              )}
-              <Text style={styles.helperText}>
-                {nickname.length}/30 caractères
-              </Text>
+    <AuthScaffold
+      title="Votre profil"
+      subtitle="Un pseudo et une photo inspirent confiance aux acheteurs et vendeurs."
+      hero={
+        <View style={styles.hero}>
+          <ProgressRing
+            progress={done / TOTAL_STEPS}
+            size={64}
+            label={`${done} étapes sur ${TOTAL_STEPS} faites`}>
+            <AppText variant="labelStrong">
+              {done}/{TOTAL_STEPS}
+            </AppText>
+          </ProgressRing>
+          <View style={styles.heroText}>
+            <AppText variant="labelStrong">
+              {done} étapes sur {TOTAL_STEPS} faites
+            </AppText>
+            <View style={styles.doneRow}>
+              <Ionicons name="checkmark-circle" size={14} color={t.colors.trust} />
+              <AppText variant="caption" color="inkMuted">
+                Numéro vérifié
+              </AppText>
             </View>
           </View>
+        </View>
+      }>
+      <View style={styles.avatarSection}>
+        <Pressable
+          onPress={handlePickImage}
+          accessibilityRole="button"
+          accessibilityLabel={profileImage ? 'Changer la photo de profil' : 'Ajouter une photo de profil'}
+          style={styles.avatarWrap}>
+          {profileImage ? (
+            <AppImage uri={profileImage} style={styles.avatar} />
+          ) : (
+            <View style={[styles.avatar, styles.avatarEmpty, { backgroundColor: t.colors.brandTint }]}>
+              <Ionicons name="camera-outline" size={36} color={t.colors.brandStrong} />
+            </View>
+          )}
+          <View style={[styles.editBadge, { backgroundColor: t.colors.brand, borderColor: t.colors.canvas }]}>
+            <Ionicons name={profileImage ? 'pencil' : 'add'} size={18} color={t.colors.onBrand} />
+          </View>
+        </Pressable>
+        <AppText variant="caption" color="inkMuted">
+          Photo facultative, mais recommandée
+        </AppText>
+      </View>
 
-          {/* Continue Button */}
-          <TouchableOpacity
-            style={[
-              styles.continueButton,
-              (!nickname.trim() || nickname.trim().length < 2 || saving) &&
-                styles.continueButtonDisabled,
-            ]}
-            onPress={handleContinue}
-            disabled={!nickname.trim() || nickname.trim().length < 2 || saving}>
-            {saving ? (
-              <ActivityIndicator color={theme.colors.white} />
-            ) : (
-              <Text style={styles.continueButtonText}>Continuer</Text>
-            )}
-          </TouchableOpacity>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+      <TextField
+        label="Pseudonyme"
+        value={nickname}
+        onChangeText={setNickname}
+        onBlur={() => setTouched(true)}
+        placeholder="Ex. Awa241"
+        maxLength={30}
+        showCount
+        autoCapitalize="words"
+        error={error}
+        helper="Visible par les autres membres."
+      />
+
+      <Button
+        label="Continuer"
+        onPress={handleContinue}
+        loading={saving}
+        disabled={!nicknameOk}
+        disabledReason={!nicknameOk ? 'Choisissez un pseudonyme (2 caractères min.)' : undefined}
+        fullWidth
+        size="lg"
+        style={styles.cta}
+      />
+    </AuthScaffold>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.white,
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingTop: 40,
-    paddingBottom: 40,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#000',
-    marginBottom: 12,
-    lineHeight: 40,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 40,
-    lineHeight: 22,
-  },
-  avatarSection: {
-    alignItems: 'center',
-    marginBottom: 40,
-  },
-  avatarContainer: {
-    position: 'relative',
-    marginBottom: 16,
-  },
-  avatar: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 3,
-    borderColor: theme.colors.primary,
-  },
-  avatarPlaceholder: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: '#F8F9FA',
-    borderWidth: 3,
-    borderColor: theme.colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarEditBadge: {
+  hero: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 },
+  heroText: { gap: 2 },
+  doneRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  avatarSection: { alignItems: 'center', gap: 8, marginBottom: 20 },
+  avatarWrap: { width: 112, height: 112 },
+  avatar: { width: 112, height: 112, borderRadius: 56 },
+  avatarEmpty: { alignItems: 'center', justifyContent: 'center' },
+  editBadge: {
     position: 'absolute',
-    bottom: 0,
     right: 0,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: theme.colors.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
+    bottom: 0,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     borderWidth: 3,
-    borderColor: theme.colors.white,
-  },
-  addPhotoText: {
-    fontSize: 16,
-    color: theme.colors.primary,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  removePhotoText: {
-    fontSize: 16,
-    color: '#FF6B6B',
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  photoHelperText: {
-    fontSize: 13,
-    color: '#999',
-  },
-  formSection: {
-    marginBottom: 32,
-  },
-  formField: {
-    marginBottom: 24,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 12,
-  },
-  input: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    fontSize: 16,
-    color: '#333',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  inputError: {
-    borderColor: '#FF6B6B',
-  },
-  errorText: {
-    fontSize: 12,
-    color: '#FF6B6B',
-    marginTop: 8,
-  },
-  helperText: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 8,
-  },
-  continueButton: {
-    backgroundColor: theme.colors.primary,
-    borderRadius: 12,
-    paddingVertical: 16,
     alignItems: 'center',
-    marginTop: 'auto',
+    justifyContent: 'center',
   },
-  continueButtonDisabled: {
-    backgroundColor: '#B0B0B0',
-    opacity: 0.6,
-  },
-  continueButtonText: {
-    color: theme.colors.white,
-    fontSize: 18,
-    fontWeight: '600',
-  },
+  cta: { marginTop: 8 },
 });
-

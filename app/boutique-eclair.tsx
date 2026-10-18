@@ -1,27 +1,36 @@
-// app/boutique-eclair.tsx - Boutique Éclair ⚡ (bulk draft from scene photos)
+// app/boutique-eclair.tsx — Boutique Éclair ⚡ (bulk drafts from 1–3 scene photos).
+//
+// Tesler: the AI absorbs the work of listing many items at once; the
+// analysis shows its steps (labor illusion) and the results are editable
+// suggestions the seller ticks and confirms (IKEA effect). Output is drafts
+// only — nothing is published without the seller.
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import {
-  ActivityIndicator,
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { showToast } from '../components/atoms/Toast';
-import { theme } from '../utils/theme';
+import {
+  AppImage,
+  AppText,
+  Button,
+  Card,
+  Chip,
+  IconButton,
+  ScreenHeader,
+  TextField,
+  showToast,
+} from '@/components/ui';
+import SellLaborSteps from '@/components/molecules/SellLaborSteps';
+import SellOptionSheet from '@/components/molecules/SellOptionSheet';
 import { ApiError } from '@/lib/api';
 import { uploadImages, bulkDraft } from '@/lib/api/ai';
 import { createPost } from '@/lib/api/posts';
 import { CATEGORIES, categoryLabel } from '@/constants/catalog';
 import { formatAmount } from '@/lib/format';
+import { haptics } from '@/lib/haptics';
+import { createStyles, Theme, useStyles, useTheme } from '@/theme';
 
 interface DraftItem {
   key: string;
@@ -31,8 +40,17 @@ interface DraftItem {
   price: string;
   category: string;
   condition: string | null;
+  rangeMin: number | null;
+  rangeMax: number | null;
   comparableCount: number | null;
 }
+
+const ANALYSIS_STEPS = [
+  'Envoi des photos…',
+  'Repérage des articles…',
+  'Estimation des prix…',
+  'Rédaction des brouillons…',
+];
 
 function aiErrMessage(e: unknown): string {
   if (e instanceof ApiError) {
@@ -54,6 +72,8 @@ function parsePrice(raw: string): number | null {
 
 export default function BoutiqueEclairScreen() {
   const router = useRouter();
+  const t = useTheme();
+  const styles = useStyles(makeStyles);
   const qc = useQueryClient();
   const [photos, setPhotos] = useState<string[]>([]);
   const [items, setItems] = useState<DraftItem[]>([]);
@@ -69,6 +89,7 @@ export default function BoutiqueEclairScreen() {
         showToast.info('Boutique Éclair', 'Aucun article détecté sur les photos.');
         return;
       }
+      haptics.success();
       setItems(
         drafts.map((d, i) => ({
           key: `d${i}`,
@@ -78,6 +99,8 @@ export default function BoutiqueEclairScreen() {
           price: d.price_suggestion?.suggested != null ? String(d.price_suggestion.suggested) : '',
           category: d.categories[0] ?? 'other',
           condition: d.condition,
+          rangeMin: d.price_suggestion?.range_min ?? null,
+          rangeMax: d.price_suggestion?.range_max ?? null,
           comparableCount: d.price_suggestion?.comparable_count ?? null,
         })),
       );
@@ -106,7 +129,11 @@ export default function BoutiqueEclairScreen() {
     },
     onSuccess: (n) => {
       qc.invalidateQueries({ queryKey: ['posts'] });
-      showToast.success('Boutique Éclair', `${n} brouillon${n > 1 ? 's' : ''} créé${n > 1 ? 's' : ''}.`);
+      haptics.success();
+      showToast.success(
+        'Boutique Éclair',
+        `${n} brouillon${n > 1 ? 's' : ''} créé${n > 1 ? 's' : ''}. Complétez-les dans « Mes annonces ».`,
+      );
       router.back();
     },
     onError: (e) => showToast.error('Échec', aiErrMessage(e)),
@@ -140,257 +167,225 @@ export default function BoutiqueEclairScreen() {
 
   const includedCount = items.filter((i) => i.include && i.title.trim()).length;
   const reviewing = items.length > 0;
+  const catTarget = items.find((i) => i.key === catModalFor);
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="chevron-back" size={24} color="#000" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Boutique Éclair ⚡</Text>
-        <View style={{ width: 24 }} />
-      </View>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+      <ScreenHeader title="Boutique Éclair" subtitle="Plusieurs annonces en une fois" />
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        <Text style={styles.intro}>
-          Prenez 1 à 3 photos de votre stock. L’IA détecte les articles et prépare des brouillons
-          d’annonces que vous validez.
-        </Text>
+        {!reviewing && (
+          <Card tone="brand" style={styles.block}>
+            <View style={styles.row}>
+              <Ionicons name="flash" size={22} color={t.colors.brandStrong} />
+              <AppText variant="bodyStrong" style={styles.flex}>
+                Videz vos placards en 1 minute
+              </AppText>
+            </View>
+            <AppText variant="small" color="inkMuted" style={styles.gapTop}>
+              Prenez 1 à 3 photos de plusieurs articles. L’IA les repère et prépare des brouillons
+              que vous vérifiez avant de publier.
+            </AppText>
+          </Card>
+        )}
 
         {/* Photo strip */}
         <View style={styles.photoRow}>
           {photos.map((uri, i) => (
-            <Image key={i} source={{ uri }} style={styles.photo} />
+            <View key={`${uri}-${i}`} style={styles.photoCell}>
+              <AppImage uri={uri} style={styles.photo} accessibilityLabel={`Photo ${i + 1}`} />
+              {!analyzeMut.isPending && !reviewing && (
+                <IconButton
+                  icon="close"
+                  label="Retirer la photo"
+                  variant="overlay"
+                  size={16}
+                  onPress={() => setPhotos((p) => p.filter((_, j) => j !== i))}
+                  style={styles.photoRemove}
+                />
+              )}
+            </View>
           ))}
-          {photos.length < 3 && (
-            <TouchableOpacity style={styles.addPhoto} onPress={pickPhotos}>
-              <Ionicons name="camera" size={26} color="#666" />
-              <Text style={styles.addPhotoText}>{photos.length}/3</Text>
-            </TouchableOpacity>
+          {photos.length < 3 && !reviewing && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Choisir des photos"
+              onPress={pickPhotos}
+              disabled={analyzeMut.isPending}
+              style={({ pressed }) => [styles.photoCell, styles.addPhoto, pressed && { opacity: 0.8 }]}>
+              <Ionicons name="images-outline" size={26} color={t.colors.brandStrong} />
+              <AppText variant="caption" color="brandStrong">
+                {photos.length}/3
+              </AppText>
+            </Pressable>
           )}
         </View>
 
-        {/* Analyze button */}
+        <SellLaborSteps
+          steps={ANALYSIS_STEPS}
+          running={analyzeMut.isPending}
+          done={false}
+          stepMs={1500}
+        />
+
         {photos.length > 0 && !reviewing && (
-          <TouchableOpacity
-            style={[styles.primaryButton, analyzeMut.isPending && styles.buttonDisabled]}
+          <Button
+            label="Analyser les photos"
+            icon="sparkles-outline"
             onPress={() => analyzeMut.mutate()}
-            disabled={analyzeMut.isPending}
-          >
-            {analyzeMut.isPending ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.primaryButtonText}>Analyser les photos</Text>
-            )}
-          </TouchableOpacity>
+            loading={analyzeMut.isPending}
+            fullWidth
+            size="lg"
+            style={styles.gapTop}
+          />
         )}
 
         {/* Draft review cards */}
         {reviewing && (
           <>
-            <Text style={styles.sectionTitle}>Articles détectés ({items.length})</Text>
-            {items.map((it) => (
-              <View key={it.key} style={[styles.card, !it.include && styles.cardExcluded]}>
-                <View style={styles.cardHeader}>
-                  <TouchableOpacity
-                    style={styles.includeToggle}
-                    onPress={() => patchItem(it.key, { include: !it.include })}
-                  >
+            <View style={styles.reviewHeader}>
+              <AppText variant="h3" accessibilityRole="header">
+                {items.length} article{items.length > 1 ? 's' : ''} détecté{items.length > 1 ? 's' : ''}
+              </AppText>
+              <AppText variant="small" color="inkMuted">
+                Suggestions de l’IA : décochez ce que vous ne vendez pas, ajustez le reste.
+              </AppText>
+            </View>
+            {items.map((it) => {
+              const price = parsePrice(it.price);
+              return (
+                <Card key={it.key} style={[styles.block, !it.include && styles.excluded]}>
+                  <Pressable
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: it.include }}
+                    accessibilityLabel={`Inclure ${it.title || 'cet article'}`}
+                    onPress={() => {
+                      haptics.selection();
+                      patchItem(it.key, { include: !it.include });
+                    }}
+                    style={styles.includeRow}>
                     <Ionicons
                       name={it.include ? 'checkbox' : 'square-outline'}
-                      size={22}
-                      color={it.include ? theme.colors.primary : '#999'}
+                      size={24}
+                      color={it.include ? t.colors.brandStrong : t.colors.inkSubtle}
                     />
-                    <Text style={styles.includeText}>{it.include ? 'Inclure' : 'Ignoré'}</Text>
-                  </TouchableOpacity>
-                </View>
+                    <AppText variant="labelStrong" color={it.include ? 'ink' : 'inkMuted'}>
+                      {it.include ? 'Inclus' : 'Ignoré'}
+                    </AppText>
+                  </Pressable>
 
-                <TextInput
-                  style={styles.titleInput}
-                  value={it.title}
-                  onChangeText={(t) => patchItem(it.key, { title: t })}
-                  placeholder="Titre de l’article"
-                  placeholderTextColor="#999"
-                />
-
-                <View style={styles.cardRow}>
-                  <TouchableOpacity
-                    style={styles.categoryChip}
-                    onPress={() => setCatModalFor(it.key)}
-                  >
-                    <Text style={styles.categoryChipText}>{categoryLabel(it.category)}</Text>
-                    <Ionicons name="chevron-down" size={14} color="#666" />
-                  </TouchableOpacity>
-                  <TextInput
-                    style={styles.priceInput}
-                    value={it.price}
-                    onChangeText={(t) => patchItem(it.key, { price: t })}
-                    placeholder="Prix FCFA"
-                    keyboardType="numeric"
-                    placeholderTextColor="#999"
-                  />
-                </View>
-
-                {it.price ? (
-                  <Text style={styles.cardHint}>
-                    💡 {formatAmount(parsePrice(it.price) ?? 0)}
-                    {it.comparableCount != null
-                      ? ` · ${it.comparableCount} similaire${it.comparableCount > 1 ? 's' : ''}`
-                      : ''}
-                  </Text>
-                ) : null}
-              </View>
-            ))}
-
-            <TouchableOpacity
-              style={[
-                styles.primaryButton,
-                (createMut.isPending || includedCount === 0) && styles.buttonDisabled,
-              ]}
-              onPress={() => createMut.mutate()}
-              disabled={createMut.isPending || includedCount === 0}
-            >
-              {createMut.isPending ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.primaryButtonText}>
-                  Créer les brouillons ({includedCount})
-                </Text>
-              )}
-            </TouchableOpacity>
+                  {it.include && (
+                    <>
+                      <TextField
+                        label="Titre"
+                        value={it.title}
+                        onChangeText={(v) => patchItem(it.key, { title: v })}
+                        placeholder="Titre de l’article"
+                        error={!it.title.trim() ? 'Ajoutez un titre' : null}
+                      />
+                      <View style={styles.cardRow}>
+                        <Chip
+                          kind="action"
+                          label={categoryLabel(it.category)}
+                          trailingIcon="chevron-down"
+                          onPress={() => setCatModalFor(it.key)}
+                        />
+                      </View>
+                      {it.rangeMin != null && it.rangeMax != null && (
+                        <AppText variant="caption" color="inkMuted" style={styles.gapTop}>
+                          Prix conseillé : {formatAmount(it.rangeMin)} – {formatAmount(it.rangeMax)}
+                          {it.comparableCount
+                            ? ` · ${it.comparableCount} annonce${it.comparableCount > 1 ? 's' : ''} similaire${it.comparableCount > 1 ? 's' : ''}`
+                            : ''}
+                        </AppText>
+                      )}
+                      <TextField
+                        label="Prix"
+                        value={it.price}
+                        onChangeText={(v) => patchItem(it.key, { price: v.replace(/[^\d]/g, '') })}
+                        placeholder="0"
+                        keyboardType="numeric"
+                        helper={price != null ? formatAmount(price) : 'Vous pourrez le fixer plus tard.'}
+                        right={
+                          <AppText variant="labelStrong" color="inkMuted">
+                            FCFA
+                          </AppText>
+                        }
+                        containerStyle={styles.gapTop}
+                      />
+                    </>
+                  )}
+                </Card>
+              );
+            })}
+            <Button
+              label="Choisir d’autres photos"
+              variant="ghost"
+              icon="refresh"
+              onPress={() => {
+                setItems([]);
+                setPhotos([]);
+              }}
+            />
           </>
         )}
       </ScrollView>
 
-      {/* Category picker modal */}
-      {catModalFor && (
-        <View style={styles.modalOverlay}>
-          <TouchableOpacity style={styles.modalBackdrop} onPress={() => setCatModalFor(null)} />
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Catégorie</Text>
-            <ScrollView style={styles.modalList}>
-              {CATEGORIES.map((c) => (
-                <TouchableOpacity
-                  key={c.value}
-                  style={styles.modalItem}
-                  onPress={() => {
-                    patchItem(catModalFor, { category: c.value });
-                    setCatModalFor(null);
-                  }}
-                >
-                  <Text style={styles.modalItemText}>{c.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
+      {reviewing && (
+        <View style={styles.bottomBar}>
+          <Button
+            label={`Créer ${includedCount} brouillon${includedCount > 1 ? 's' : ''}`}
+            onPress={() => createMut.mutate()}
+            loading={createMut.isPending}
+            disabled={includedCount === 0}
+            disabledReason="Sélectionnez au moins un article avec un titre."
+            fullWidth
+            size="lg"
+          />
         </View>
       )}
+
+      <SellOptionSheet
+        visible={!!catModalFor}
+        title="Catégorie"
+        options={CATEGORIES}
+        selectedValue={catTarget?.category ?? ''}
+        onClose={() => setCatModalFor(null)}
+        onSelect={(v) => catModalFor && patchItem(catModalFor, { category: v })}
+      />
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.white },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: '#333' },
-  scroll: { padding: theme.spacing.lg, paddingBottom: 60 },
-  intro: { fontSize: 14, color: theme.colors.gray, marginBottom: theme.spacing.lg, lineHeight: 20 },
-  photoRow: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm, marginBottom: theme.spacing.lg },
-  photo: { width: 90, height: 90, borderRadius: 10, backgroundColor: '#f0f0f0' },
+const makeStyles = createStyles((t: Theme) => ({
+  container: { flex: 1, backgroundColor: t.colors.canvas },
+  scroll: { padding: t.spacing.md, paddingBottom: t.spacing.xxl },
+  block: { marginBottom: t.spacing.md },
+  row: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs },
+  flex: { flex: 1 },
+  gapTop: { marginTop: t.spacing.xs },
+  photoRow: { flexDirection: 'row', gap: t.spacing.xs, marginBottom: t.spacing.md },
+  photoCell: { width: 104, height: 104, borderRadius: t.radius.md, overflow: 'hidden' },
+  photo: { width: '100%', height: '100%' },
+  photoRemove: { position: 'absolute', top: 0, right: 0, width: 36, height: 36 },
   addPhoto: {
-    width: 90,
-    height: 90,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: '#e0e0e0',
-    borderStyle: 'dashed',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#f9f9f9',
-  },
-  addPhotoText: { fontSize: 12, color: '#666', marginTop: 4 },
-  primaryButton: {
-    backgroundColor: theme.colors.primary,
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: theme.spacing.md,
-  },
-  primaryButtonText: { color: theme.colors.white, fontSize: 16, fontWeight: '700' },
-  buttonDisabled: { opacity: 0.5 },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#333',
-    marginTop: theme.spacing.md,
-    marginBottom: theme.spacing.sm,
-  },
-  card: {
-    borderWidth: 1,
-    borderColor: '#eee',
-    borderRadius: 12,
-    padding: theme.spacing.md,
-    marginBottom: theme.spacing.md,
-    backgroundColor: theme.colors.white,
-  },
-  cardExcluded: { opacity: 0.55 },
-  cardHeader: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 4 },
-  includeToggle: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  includeText: { fontSize: 13, color: '#666', fontWeight: '500' },
-  titleInput: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    paddingVertical: 6,
-    marginBottom: theme.spacing.sm,
-  },
-  cardRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
-  categoryChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: 4,
-    backgroundColor: '#F8F9FA',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: t.colors.brandStrong,
+    backgroundColor: t.colors.brandTint,
   },
-  categoryChipText: { fontSize: 14, color: '#333', fontWeight: '500' },
-  priceInput: {
-    flex: 1,
-    fontSize: 15,
-    color: '#333',
-    backgroundColor: '#F8F9FA',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
+  reviewHeader: { gap: 4, marginBottom: t.spacing.md },
+  excluded: { opacity: 0.6 },
+  includeRow: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs, minHeight: 44, marginBottom: 4 },
+  cardRow: { flexDirection: 'row', marginTop: t.spacing.xs },
+  bottomBar: {
+    paddingHorizontal: t.spacing.md,
+    paddingVertical: t.spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: t.colors.line,
+    backgroundColor: t.colors.surface,
   },
-  cardHint: { fontSize: 13, color: theme.colors.primary, fontWeight: '600', marginTop: 8 },
-  modalOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'flex-end' },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
-  modalContent: {
-    backgroundColor: theme.colors.white,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '60%',
-    padding: theme.spacing.lg,
-  },
-  modalTitle: { fontSize: 18, fontWeight: '700', color: '#333', marginBottom: theme.spacing.md },
-  modalList: { maxHeight: 320 },
-  modalItem: { paddingVertical: theme.spacing.md, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  modalItemText: { fontSize: 16, color: '#333' },
-});
+}));
