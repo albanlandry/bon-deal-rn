@@ -11,6 +11,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { QueryClientProvider } from '@tanstack/react-query';
 
 import AnimatedSplashScreen from '@/components/AnimatedSplashScreen';
+import AppGate from '@/components/organisms/AppGate';
 import Toast, { toastConfig } from '@/components/atoms/Toast';
 import { PhoneAuthProvider } from '@/contexts/PhoneAuthContext';
 import { AuthProvider } from '@/contexts/AuthContext';
@@ -115,6 +116,8 @@ function RootLayoutNav() {
                 options={{ animation: t.reduceMotion ? 'none' : 'fade', animationDuration: 200 }}
               />
             </Stack>
+            {/* Maintenance / update-required pages and the soft update banner. */}
+            <AppGate />
             <Toast config={toastConfig} />
           </ThemeProvider>
         </RealtimeProvider>

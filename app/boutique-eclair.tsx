@@ -7,7 +7,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -31,6 +31,7 @@ import { CATEGORIES, categoryLabel } from '@/constants/catalog';
 import { formatAmount } from '@/lib/format';
 import { haptics } from '@/lib/haptics';
 import { createStyles, Theme, useStyles, useTheme } from '@/theme';
+import { track } from '@/lib/analytics';
 
 interface DraftItem {
   key: string;
@@ -71,6 +72,10 @@ function parsePrice(raw: string): number | null {
 }
 
 export default function BoutiqueEclairScreen() {
+  // Analytics (opt-in): the sell flow was opened (multi-item AI mode).
+  useEffect(() => {
+    track('start_listing', { source: 'boutique_eclair' });
+  }, []);
   const router = useRouter();
   const t = useTheme();
   const styles = useStyles(makeStyles);

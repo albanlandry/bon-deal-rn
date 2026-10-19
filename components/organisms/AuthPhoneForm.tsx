@@ -1,6 +1,6 @@
 /**
  * Phone-number form shared by login and signup: country picker (defaults to
- * Gabon, +241), national number, inline validation, and the Firebase
+ * the default country from /app-config, enabled countries only), national number, inline validation, and the Firebase
  * `signInWithPhoneNumber` call. The caller decides where to go next.
  *
  * Local test login (config.devLogin): no SMS is sent; only the configured
@@ -9,7 +9,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
-import React, { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import CountryPicker, {
   Country,
@@ -22,6 +23,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppText from '@/components/atoms/AppText';
 import Button from '@/components/atoms/Button';
 import TextField from '@/components/atoms/TextField';
+import { appConfigQuery } from '@/lib/api/appConfig';
+import { countriesQuery } from '@/lib/api/geo';
 import { haptics } from '@/lib/haptics';
 import { useTheme } from '@/theme';
 import { config } from '@/utils/config';
@@ -61,6 +64,24 @@ export default function AuthPhoneForm({ submitLabel, onCodeSent }: AuthPhoneForm
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Default to the platform's default country (/app-config), and offer only
+  // the enabled countries (/geo/countries). Until they load (or if they fail)
+  // the picker keeps Gabon and the full list.
+  const appConfig = useQuery(appConfigQuery());
+  const countries = useQuery(countriesQuery());
+  const enabledCodes = useMemo(
+    () => (countries.data ?? []).map((c) => c.iso2 as CountryCode),
+    [countries.data],
+  );
+  const userPicked = useRef(false);
+  const defaultCountry = appConfig.data?.default_country;
+  useEffect(() => {
+    if (userPicked.current || !defaultCountry?.iso2) return;
+    setCountryCode(defaultCountry.iso2 as CountryCode);
+    const code = defaultCountry.phone_code?.replace(/\D/g, '');
+    if (code) setCallingCode(code);
+  }, [defaultCountry?.iso2, defaultCountry?.phone_code]);
+
   useEffect(() => {
     (async () => {
       try {
@@ -73,6 +94,7 @@ export default function AuthPhoneForm({ submitLabel, onCodeSent }: AuthPhoneForm
   }, [countryCode]);
 
   const onSelectCountry = (country: Country) => {
+    userPicked.current = true;
     setCountryCode(country.cca2);
     if (country.callingCode?.length) setCallingCode(country.callingCode[0]);
     setError(null);
@@ -135,7 +157,8 @@ export default function AuthPhoneForm({ submitLabel, onCodeSent }: AuthPhoneForm
           ]}
           accessibilityLabel={`Pays, indicatif +${callingCode}`}>
           <CountryPicker
-            withFilter
+            withFilter={enabledCodes.length !== 1}
+            countryCodes={enabledCodes.length ? enabledCodes : undefined}
             withFlag
             withCallingCode
             countryCode={countryCode}

@@ -15,6 +15,7 @@ import TextField from '../atoms/TextField';
 import { showToast } from '../atoms/Toast';
 import ListRow from '../molecules/ListRow';
 import Sheet from './Sheet';
+import { track } from '@/lib/analytics';
 
 export interface SaveSearchSheetProps {
   visible: boolean;
@@ -42,6 +43,7 @@ export default function SaveSearchSheet({ visible, onClose, filters, defaultName
     mutationFn: () => createSavedSearch({ name, filters, alertsEnabled: alerts }),
     onSuccess: () => {
       haptics.success();
+      track('save_search', { count: Object.keys(filters ?? {}).length, state: alerts ? 'alerts_on' : 'alerts_off' });
       qc.invalidateQueries({ queryKey: ['saved-searches'] });
       onClose();
       showToast.success(

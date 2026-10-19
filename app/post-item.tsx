@@ -45,7 +45,7 @@ import {
 import SellLaborSteps from '@/components/molecules/SellLaborSteps';
 import SellOptionSheet from '@/components/molecules/SellOptionSheet';
 import SellCelebration from '@/components/organisms/SellCelebration';
-import { ApiError } from '@/lib/api';
+import { ApiError, apiErrorMessage } from '@/lib/api';
 import {
     attachPostImages,
     createPost,
@@ -56,7 +56,7 @@ import {
 } from '@/lib/api/posts';
 import { appConfigQuery } from '@/lib/api/account';
 import { uploadPhoto, UploadError } from '@/lib/api/uploads';
-import { quartiersQuery } from '@/lib/api/quartiers';
+import { useCityQuartiers } from '@/lib/api/geo';
 import { uploadImages, aiDraft, priceSuggestion } from '@/lib/api/ai';
 import {
     CATEGORIES,
@@ -72,6 +72,7 @@ import { clearSellDraft, loadSellDraft, saveSellDraft } from '@/lib/sellDraft';
 import { useAuth } from '@/contexts/AuthContext';
 import { createStyles, Theme, useStyles, useTheme } from '@/theme';
 import type { BdAiDraft, BdPost, BdPostImage, BdPriceSuggestion } from '@/constants/types';
+import { track } from '@/lib/analytics';
 
 type ListingType = 'sell' | 'share' | 'exchange';
 
@@ -121,12 +122,14 @@ interface UploadState {
 function uploadErrMessage(e: unknown): string {
     if (e instanceof UploadError) return e.message;
     if (e instanceof ApiError) {
-        if (e.status === 400 && /at most/i.test(e.message)) return 'Nombre maximal de photos atteint.';
-        if (e.status === 413) return 'Photo trop lourde.';
-        if (e.status === 429) return 'Trop d’envois, réessayez plus tard.';
+        // Branch on the error code / status only; the detail is shown as is.
+        if (e.code === 'photo_limit') return apiErrorMessage(e, 'Nombre maximal de photos atteint.');
+        if (e.code === 'upload_too_large' || e.status === 413) return apiErrorMessage(e, 'Photo trop lourde.');
+        if (e.code === 'unsupported_image' || e.status === 415) return apiErrorMessage(e, 'Format d’image non pris en charge.');
+        if (e.code === 'rate_limited' || e.status === 429) return 'Trop d’envois, réessayez plus tard.';
         if (e.status === 503) return 'Envoi de photos indisponible pour le moment.';
         if (e.status === 401) return 'Session expirée. Reconnectez-vous.';
-        return e.message;
+        return apiErrorMessage(e, 'Échec de l’envoi. Réessayez.');
     }
     return 'Échec de l’envoi. Vérifiez votre connexion.';
 }
@@ -141,11 +144,12 @@ const AI_STEPS = [
 function errMessage(e: unknown): string {
     if (e instanceof ApiError) {
         if (e.status === 401) return 'Session expirée. Reconnectez-vous.';
-        if (e.status === 413) return 'Image trop lourde.';
+        if (e.code === 'photo_limit') return apiErrorMessage(e, 'Nombre maximal de photos atteint.');
+        if (e.code === 'upload_too_large' || e.status === 413) return apiErrorMessage(e, 'Image trop lourde.');
+        if (e.code === 'rate_limited' || e.status === 429) return apiErrorMessage(e, 'Trop de tentatives, réessayez plus tard.');
         if (e.status >= 500) return 'Erreur serveur. Réessayez.';
-        return e.message;
     }
-    return 'Une erreur est survenue. Réessayez.';
+    return apiErrorMessage(e, 'Une erreur est survenue. Réessayez.');
 }
 
 /** ApiError → French message for the AI-assist actions. */
@@ -245,6 +249,12 @@ export default function PostItemScreen() {
     const queryClient = useQueryClient();
     const MAX_PHOTOS = useQuery(appConfigQuery()).data?.max_images ?? DEFAULT_MAX_PHOTOS;
 
+    // Analytics (opt-in): the sell flow was opened for a new listing.
+    useEffect(() => {
+        if (!isEdit) track('start_listing', { source: 'post_item' });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
     const [step, setStep] = useState(0);
     const [form, setForm] = useState<ListingForm>(EMPTY_FORM);
     const [existingImages, setExistingImages] = useState<BdPostImage[]>([]);
@@ -273,8 +283,8 @@ export default function PostItemScreen() {
         refetchInterval: (q) =>
             q.state.data?.images?.some((im) => im.status === 'processing') ? 2000 : false,
     });
-    const quartiersData = useQuery(quartiersQuery(user?.city));
-    const quartierOptions = (quartiersData.data?.quartiers ?? []).map((q) => ({
+    const quartiersData = useCityQuartiers(user?.city);
+    const quartierOptions = quartiersData.quartiers.map((q) => ({
         value: q.name,
         label: q.name,
     }));
@@ -684,6 +694,7 @@ export default function PostItemScreen() {
                 haptics.light();
                 assetMeta.current[asset.uri] = { mimeType: asset.mimeType, size: asset.fileSize };
                 setForm((prev) => ({ ...prev, images: [...prev.images, asset.uri] }));
+                track('photo_added', { source: fromCamera ? 'camera' : 'library', count: photoCount + 1, state: isEdit ? 'edit' : 'new' });
                 if (errors.images) setErrors((prev) => ({ ...prev, images: '' }));
             }
         } catch {
@@ -1405,7 +1416,14 @@ export default function PostItemScreen() {
                 title="Quartier de remise"
                 options={quartierOptions}
                 selectedValue={form.pickupQuartier}
-                emptyText={user?.city ? 'Aucun quartier pour votre ville.' : 'Ville non définie.'}
+                emptyText={
+                    !user?.city
+                        ? 'Ville non définie.'
+                        : quartiersData.isLoading
+                          ? 'Chargement des quartiers…'
+                          : 'Aucun quartier pour votre ville.'
+                }
+                searchPlaceholder="Rechercher un quartier"
                 onClose={() => setSheet(null)}
                 onSelect={(v) => updateForm('pickupQuartier', v)}
             />

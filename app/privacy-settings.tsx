@@ -4,7 +4,7 @@
 // data (10-minute export link opened in the browser).
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Linking, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/theme';
@@ -23,6 +23,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { ApiError } from '@/lib/api';
 import { createExportUrl } from '@/lib/api/account';
+import { analytics } from '@/lib/analytics';
 import { blocksQuery } from '@/lib/api/safety';
 import { formatDayLabel } from '@/lib/format';
 import { useBlockActions } from '@/lib/useBlock';
@@ -34,6 +35,25 @@ export default function PrivacySettingsScreen() {
   const { prefs, isLoading, isError, refetch, setPrivacy } = usePreferences();
   const blocks = useQuery(blocksQuery());
   const { confirmUnblock, busy } = useBlockActions();
+
+  // Usage statistics: opt-in, off by default (doc 06 §2). The choice is saved
+  // on the account (privacy.analytics) so it follows the user across devices;
+  // the device copy lets the analytics client decide without a network call.
+  const [statsOn, setStatsOn] = useState<boolean | null>(null);
+  useEffect(() => {
+    analytics.load().then(() => setStatsOn((cur) => cur ?? analytics.isEnabled()));
+  }, []);
+  const serverConsent = prefs?.privacy.analytics;
+  useEffect(() => {
+    if (serverConsent === undefined) return;
+    setStatsOn(serverConsent);
+    if (serverConsent !== analytics.isEnabled()) analytics.setEnabled(serverConsent);
+  }, [serverConsent]);
+  const toggleStats = (v: boolean) => {
+    setStatsOn(v);
+    analytics.setEnabled(v);
+    setPrivacy('analytics', v);
+  };
 
   const exportMut = useMutation({
     mutationFn: createExportUrl,
@@ -130,6 +150,20 @@ export default function PrivacySettingsScreen() {
               </View>
             ))
           )}
+        </ListGroup>
+
+        <ListGroup title="Statistiques">
+          <ListRow
+            icon="stats-chart-outline"
+            title="Partager des statistiques d’utilisation"
+            subtitle={
+              statsOn
+                ? 'Merci ! Des mesures anonymes (écrans vus, recherches sans leur texte) nous aident à améliorer BonDeal.'
+                : 'Désactivé. Si vous l’activez : mesures anonymes, jamais le texte de vos recherches ni vos messages.'
+            }
+            toggle={{ value: !!statsOn, onChange: toggleStats, disabled: statsOn === null }}
+            last
+          />
         </ListGroup>
 
         <ListGroup title="Mes données">

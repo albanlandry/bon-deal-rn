@@ -1,18 +1,11 @@
-import { Ionicons } from '@expo/vector-icons';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import React, { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
-import { useTheme } from '@/theme';
+import { useQueryClient } from '@tanstack/react-query';
+import React from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { quartiersQuery } from '@/lib/api/quartiers';
 import { updateMe } from '@/lib/api/me';
-import { haptics } from '@/lib/haptics';
-import AppText from '../atoms/AppText';
-import Skeleton from '../atoms/Skeleton';
-import TextField from '../atoms/TextField';
+import { locationSaveErrorMessage } from '@/lib/locationErrors';
+import { sameName } from '@/lib/textSearch';
 import { showToast } from '../atoms/Toast';
-import { ErrorState } from '../molecules/EmptyState';
-import Sheet from './Sheet';
+import LocationPickerSheet, { LocationChoice } from './LocationPickerSheet';
 
 export interface QuartierPickerSheetProps {
   visible: boolean;
@@ -20,104 +13,44 @@ export interface QuartierPickerSheetProps {
 }
 
 /**
- * Home quartier picker (MB-DSC-03): GET /quartiers?city=… then
- * PATCH /auth/me { quartier }. Most-used quartiers first (backend order).
+ * Home location picker (MB-DSC-03): the user's city and quartier from /geo,
+ * saved with PATCH /auth/me { city, quartier }. Opens on the quartier list of
+ * the current city; "Changer de ville" goes back to the cities.
  */
 export default function QuartierPickerSheet({ visible, onClose }: QuartierPickerSheetProps) {
-  const t = useTheme();
   const { user, refreshUser } = useAuth();
-  const [filter, setFilter] = useState('');
-  const q = useQuery({ ...quartiersQuery(user?.city), enabled: visible && !!user?.city });
+  const qc = useQueryClient();
 
-  const save = useMutation({
-    mutationFn: (quartier: string) => updateMe({ quartier }),
-    onSuccess: async (_d, quartier) => {
-      haptics.success();
-      await refreshUser();
-      showToast.success('Quartier mis à jour', quartier);
+  const save = async ({ city, quartier }: LocationChoice) => {
+    const cityChanged = !sameName(city, user?.city);
+    if (!cityChanged && (quartier ?? null) === (user?.quartier ?? null)) {
       onClose();
-    },
-    onError: (e: any) => showToast.error('Échec', e?.message || 'Veuillez réessayer.'),
-  });
-
-  const list = useMemo(() => {
-    const all = q.data?.quartiers ?? [];
-    const f = filter.trim().toLowerCase();
-    return f ? all.filter((x) => x.name.toLowerCase().includes(f)) : all;
-  }, [q.data, filter]);
+      return;
+    }
+    try {
+      await updateMe(cityChanged ? { city, quartier } : { quartier });
+    } catch (e) {
+      showToast.error('Échec', locationSaveErrorMessage(e));
+      throw e;
+    }
+    await refreshUser();
+    // The feed is scoped server-side to the user's city.
+    if (cityChanged) qc.invalidateQueries({ queryKey: ['posts'] });
+    showToast.success(
+      cityChanged ? 'Ville mise à jour' : 'Quartier mis à jour',
+      quartier ? `${quartier}, ${city}` : city,
+    );
+    onClose();
+  };
 
   return (
-    <Sheet visible={visible} onClose={onClose} title={user?.city ? `Quartier à ${user.city}` : 'Quartier'}>
-      {!user?.city ? (
-        <AppText variant="small" color="inkMuted">
-          Renseignez d’abord votre ville dans votre profil.
-        </AppText>
-      ) : (
-        <>
-          <TextField
-            placeholder="Rechercher un quartier"
-            value={filter}
-            onChangeText={setFilter}
-            left={<Ionicons name="search" size={18} color={t.colors.inkSubtle} />}
-            autoCorrect={false}
-          />
-          {q.isLoading ? (
-            <View style={{ gap: 12 }}>
-              {[0, 1, 2, 3, 4].map((i) => (
-                <Skeleton key={i} height={44} />
-              ))}
-            </View>
-          ) : q.isError ? (
-            <ErrorState onRetry={() => q.refetch()} />
-          ) : list.length === 0 ? (
-            <AppText variant="small" color="inkMuted" style={{ paddingVertical: 16 }}>
-              Aucun quartier trouvé.
-            </AppText>
-          ) : (
-            list.map((x) => {
-              const selected = x.name === user?.quartier;
-              return (
-                <Pressable
-                  key={x.id}
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked: selected, busy: save.isPending }}
-                  disabled={save.isPending}
-                  onPress={() => (selected ? onClose() : save.mutate(x.name))}
-                  style={({ pressed }) => [
-                    styles.row,
-                    { borderBottomColor: t.colors.line },
-                    pressed && { backgroundColor: t.colors.surfaceAlt },
-                  ]}>
-                  <Ionicons
-                    name={selected ? 'radio-button-on' : 'radio-button-off'}
-                    size={20}
-                    color={selected ? t.colors.brandStrong : t.colors.inkSubtle}
-                  />
-                  <AppText variant="body" style={styles.flex}>
-                    {x.name}
-                  </AppText>
-                  {save.isPending && save.variables === x.name && (
-                    <AppText variant="caption" color="inkMuted">
-                      Enregistrement…
-                    </AppText>
-                  )}
-                </Pressable>
-              );
-            })
-          )}
-        </>
-      )}
-    </Sheet>
+    <LocationPickerSheet
+      visible={visible}
+      onClose={onClose}
+      city={user?.city}
+      quartier={user?.quartier}
+      initialStep={user?.city ? 'quartier' : 'city'}
+      onConfirm={save}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    minHeight: 52,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  flex: { flex: 1 },
-});

@@ -85,7 +85,7 @@ export default function HomeScreen() {
     [toggleLike],
   );
 
-  const location = user?.quartier || user?.city || 'Choisir mon quartier';
+  const location = user?.quartier || user?.city || (user ? 'Choisir ma ville' : 'Choisir mon quartier');
 
   // Chip row: Tout + 6 top categories (+ the current one if picked from "Plus") + Plus.
   const chips = useMemo(() => {
@@ -212,7 +212,7 @@ export default function HomeScreen() {
       <View style={s.header}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Quartier : ${location}. Changer de quartier`}
+          accessibilityLabel={`Lieu : ${location}${user?.quartier && user?.city ? `, ${user.city}` : ''}. Changer de ville ou de quartier`}
           onPress={() => setShowQuartier(true)}
           style={({ pressed }) => [s.locationChip, pressed && { opacity: 0.8 }]}>
           <Ionicons name="location" size={18} color={t.colors.brandStrong} />

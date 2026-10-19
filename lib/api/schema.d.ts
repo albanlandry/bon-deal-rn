@@ -44,6 +44,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/account-deletion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Deletion Page
+         * @description Public page (French): how to delete an account, and a request form.
+         */
+        get: operations["deletion_page_v1_account_deletion_get"];
+        put?: never;
+        /** Submit Deletion Request */
+        post: operations["submit_deletion_request_v1_account_deletion_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/activity": {
         parameters: {
             query?: never;
@@ -78,6 +99,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/analytics/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Event Series
+         * @description Daily counts (all events, or one name) plus the most frequent event names.
+         */
+        get: operations["event_series_v1_admin_analytics_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/analytics/funnel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Funnel
+         * @description view_item → contact_seller → make_offer → sale_completed: distinct users per
+         *     step over the period, and the conversion from the previous step.
+         */
+        get: operations["funnel_v1_admin_analytics_funnel_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/audit": {
         parameters: {
             query?: never;
@@ -89,6 +151,27 @@ export interface paths {
         get: operations["list_audit_v1_admin_audit_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/auth/forgot-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Forgot Password
+         * @description Always 202 (no account enumeration). An active account with an e-mail
+         *     gets a single-use link to ${ADMIN_PUBLIC_URL}/reset-password?token=…
+         */
+        post: operations["forgot_password_v1_admin_auth_forgot_password_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -183,6 +266,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/auth/reset-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset Password
+         * @description Set a new password with a link from forgot-password (single use, 30 min).
+         */
+        post: operations["reset_password_v1_admin_auth_reset_password_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/ban_user/{user_id}": {
         parameters: {
             query?: never;
@@ -246,6 +349,311 @@ export interface paths {
         post?: never;
         /** Delete Post */
         delete: operations["delete_post_v1_admin_delete_post__post_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/deletion-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Deletion Requests */
+        get: operations["list_deletion_requests_v1_admin_deletion_requests_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/deletion-requests/{request_id}/process": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Process Deletion Request
+         * @description delete: anonymise the account exactly like DELETE /auth/me; reject: close it.
+         */
+        post: operations["process_deletion_request_v1_admin_deletion_requests__request_id__process_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/geo/cities/{city_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Admin Delete City */
+        delete: operations["admin_delete_city_v1_admin_geo_cities__city_id__delete"];
+        options?: never;
+        head?: never;
+        /** Admin Update City */
+        patch: operations["admin_update_city_v1_admin_geo_cities__city_id__patch"];
+        trace?: never;
+    };
+    "/v1/admin/geo/cities/{city_id}/osm-quartiers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Admin Osm Quartiers
+         * @description Neighbourhood/suburb/quarter places around the city centre (Overpass),
+         *     flagged when the city already has them. A preview for the bulk import.
+         */
+        get: operations["admin_osm_quartiers_v1_admin_geo_cities__city_id__osm_quartiers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/geo/cities/{city_id}/quartiers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin List City Quartiers */
+        get: operations["admin_list_city_quartiers_v1_admin_geo_cities__city_id__quartiers_get"];
+        put?: never;
+        /** Admin Create City Quartier */
+        post: operations["admin_create_city_quartier_v1_admin_geo_cities__city_id__quartiers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/geo/cities/{city_id}/quartiers/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Admin Bulk City Quartiers
+         * @description Add many quartiers at once (e.g. an OSM preview); duplicates are skipped.
+         */
+        post: operations["admin_bulk_city_quartiers_v1_admin_geo_cities__city_id__quartiers_bulk_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/geo/countries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin List Countries */
+        get: operations["admin_list_countries_v1_admin_geo_countries_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/geo/countries/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Admin Import Countries
+         * @description Upsert every country from REST Countries. Enabled/default flags, and the
+         *     French name or phone code staff already set, are kept.
+         */
+        post: operations["admin_import_countries_v1_admin_geo_countries_import_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/geo/countries/{iso2}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Admin Update Country */
+        patch: operations["admin_update_country_v1_admin_geo_countries__iso2__patch"];
+        trace?: never;
+    };
+    "/v1/admin/geo/countries/{iso2}/cities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Admin List Cities */
+        get: operations["admin_list_cities_v1_admin_geo_countries__iso2__cities_get"];
+        put?: never;
+        /** Admin Create City */
+        post: operations["admin_create_city_v1_admin_geo_countries__iso2__cities_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/geo/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Admin Geo Search
+         * @description Geocode a place name with Nominatim (cached, ≤ 1 request/s).
+         */
+        get: operations["admin_geo_search_v1_admin_geo_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/moderation/photos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Photo Queue
+         * @description Recent finished photos, newest first. Delete one with
+         *     DELETE /admin/posts/{post_id}/images/{image_id}.
+         */
+        get: operations["photo_queue_v1_admin_moderation_photos_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/moderation/photos/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Review Photos
+         * @description Mark photos as seen (idempotent: already reviewed ones keep their first review).
+         */
+        post: operations["review_photos_v1_admin_moderation_photos_review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/moderation/posts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Moderation Queue
+         * @description Listings by moderation status. Pending: oldest first (first come, first served).
+         */
+        get: operations["moderation_queue_v1_admin_moderation_posts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/moderation/posts/{post_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve Post */
+        post: operations["approve_post_v1_admin_moderation_posts__post_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/moderation/posts/{post_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject Post
+         * @description Hide the listing for good and tell the owner why (staff_warning notification).
+         */
+        post: operations["reject_post_v1_admin_moderation_posts__post_id__reject_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -386,6 +794,27 @@ export interface paths {
         head?: never;
         /** Admin Update Quartier */
         patch: operations["admin_update_quartier_v1_admin_quartiers__quartier_id__patch"];
+        trace?: never;
+    };
+    "/v1/admin/quartiers/{quartier_id}/merge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Admin Merge Quartier
+         * @description Fold a duplicate into another quartier of the same city: users and
+         *     posts move to the target name, then the source is deleted.
+         */
+        post: operations["admin_merge_quartier_v1_admin_quartiers__quartier_id__merge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/admin/reports": {
@@ -765,7 +1194,8 @@ export interface paths {
         };
         /**
          * Get App Config
-         * @description Limits the app needs to know up front (public).
+         * @description Limits, maintenance/version state and the default country the app needs
+         *     to know up front (public; never blocked by maintenance mode).
          */
         get: operations["get_app_config_v1_app_config_get"];
         put?: never;
@@ -858,12 +1288,7 @@ export interface paths {
         post?: never;
         /**
          * Delete Account
-         * @description Delete the caller's account now.
-         *
-         *     The row is anonymised rather than removed, so the other party keeps their
-         *     conversation and transaction history (shown as a deleted member). Listings
-         *     are unpublished and emptied, photos are deleted, and the phone number is
-         *     freed so it can sign up again.
+         * @description Delete the caller's account now (see anonymize_user).
          */
         delete: operations["delete_account_v1_auth_me_delete"];
         options?: never;
@@ -1057,6 +1482,83 @@ export interface paths {
         put?: never;
         /** Mark Read */
         post: operations["mark_read_v1_conversations__conv_id__read_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Events */
+        post: operations["ingest_events_v1_events_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/geo/cities/{city_id}/quartiers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Public Quartiers
+         * @description Approved quartiers of an enabled city, A–Z.
+         */
+        get: operations["public_quartiers_v1_geo_cities__city_id__quartiers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/geo/countries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Public Countries
+         * @description Enabled countries, default first.
+         */
+        get: operations["public_countries_v1_geo_countries_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/geo/countries/{iso2}/cities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Public Cities
+         * @description Enabled cities of an enabled country.
+         */
+        get: operations["public_cities_v1_geo_countries__iso2__cities_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1993,6 +2495,526 @@ export interface components {
              */
             documents: ("terms" | "privacy")[];
         };
+        /** AdminActivityEventOut */
+        AdminActivityEventOut: {
+            /** Action */
+            action: string;
+            /** Avatar */
+            avatar: string | null;
+            /** Detail */
+            detail: string;
+            /** Fallback */
+            fallback: string;
+            /** Target Id */
+            target_id: number;
+            /** Timestamp */
+            timestamp: string | null;
+            /** Type */
+            type: string;
+            /** User */
+            user: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AdminActivityOut */
+        AdminActivityOut: {
+            /** Activities */
+            activities: components["schemas"]["AdminActivityEventOut"][];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AdminAnalyticsOut */
+        AdminAnalyticsOut: {
+            /** Posts Over Time */
+            posts_over_time: components["schemas"]["AdminMonthCountOut"][];
+            /** Success */
+            success: boolean;
+            /** Top Categories */
+            top_categories: components["schemas"]["AdminCategoryCountOut"][];
+            /** User Retention */
+            user_retention: components["schemas"]["AdminRetentionWeekOut"][];
+            /** Users By City */
+            users_by_city: components["schemas"]["AdminCityUsersOut"][];
+        } & {
+            [key: string]: unknown;
+        };
+        /** AdminCategoryCountOut */
+        AdminCategoryCountOut: {
+            /** Category */
+            category: string | null;
+            /** Count */
+            count: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AdminCityUsersOut */
+        AdminCityUsersOut: {
+            /** City */
+            city: string;
+            /** Users */
+            users: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AdminMonthCountOut */
+        AdminMonthCountOut: {
+            /** Count */
+            count: number;
+            /** Month */
+            month: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AdminPostFullOut */
+        AdminPostFullOut: {
+            /** Age Bucket */
+            age_bucket: string | null;
+            /** Allow Negotiation */
+            allow_negotiation: boolean | null;
+            /** Categories */
+            categories: string[];
+            /** City */
+            city: string | null;
+            /** Condition */
+            condition: string | null;
+            /** Created At */
+            created_at: string | null;
+            /** Description */
+            description: string | null;
+            /** Exchange Items */
+            exchange_items: string | null;
+            /** Id */
+            id: number;
+            /** Images */
+            images: components["schemas"]["AdminPostImageOut"][];
+            /** Is Free */
+            is_free: boolean | null;
+            /** Likes Count */
+            likes_count: number;
+            /** Owner Id */
+            owner_id: number | null;
+            /** Owner Username */
+            owner_username: string | null;
+            /** Pickup Location Note */
+            pickup_location_note: string | null;
+            /** Pickup Quartier */
+            pickup_quartier: string | null;
+            /** Price */
+            price: number | null;
+            /** Shares Count */
+            shares_count: number;
+            /** State */
+            state: string | null;
+            /** Title */
+            title: string | null;
+            /** Updated At */
+            updated_at: string | null;
+            /** Views Count */
+            views_count: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AdminPostImageDeletedOut */
+        AdminPostImageDeletedOut: {
+            /** Image Id */
+            image_id: number;
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AdminPostImageOut */
+        AdminPostImageOut: {
+            /** Id */
+            id: number;
+            /** Status */
+            status: string;
+            /** Url */
+            url: string;
+            /** Variants */
+            variants: {
+                [key: string]: unknown;
+            } | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AdminPostSummaryOut */
+        AdminPostSummaryOut: {
+            /** Age Bucket */
+            age_bucket: string | null;
+            /** Categories */
+            categories: string[];
+            /** City */
+            city: string | null;
+            /** Condition */
+            condition: string | null;
+            /** Created At */
+            created_at: string | null;
+            /** Id */
+            id: number;
+            /** Images */
+            images: components["schemas"]["AdminPostImageOut"][];
+            /** Is Free */
+            is_free: boolean | null;
+            /** Likes Count */
+            likes_count: number;
+            /** Pickup Location Note */
+            pickup_location_note: string | null;
+            /** Pickup Quartier */
+            pickup_quartier: string | null;
+            /** Price */
+            price: number | null;
+            /** Shares Count */
+            shares_count: number;
+            /** State */
+            state: string | null;
+            /** Title */
+            title: string | null;
+            /** Views Count */
+            views_count: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AdminPostUpdatedOut */
+        AdminPostUpdatedOut: {
+            /** Message */
+            message: string;
+            post: components["schemas"]["AdminPostFullOut"];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AdminQuartierListOut */
+        AdminQuartierListOut: {
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Quartiers */
+            quartiers: components["schemas"]["QuartierOut"][];
+            /** Success */
+            success: boolean;
+            /** Total */
+            total: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AdminReportListOut */
+        AdminReportListOut: {
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Reports */
+            reports: components["schemas"]["AdminReportOut"][];
+            /** Success */
+            success: boolean;
+            /** Total Reports */
+            total_reports: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AdminReportOut */
+        AdminReportOut: {
+            /** Context */
+            context: {
+                [key: string]: unknown;
+            } | null;
+            /** Created At */
+            created_at: string | null;
+            /** Description */
+            description: string | null;
+            /** Id */
+            id: string;
+            /** Priority */
+            priority: string | null;
+            /** Reported Item Id */
+            reported_item_id: number | null;
+            /** Reported Item Type */
+            reported_item_type: string;
+            /** Reporter Username */
+            reporter_username: string | null;
+            /** Resolution Note */
+            resolution_note: string | null;
+            /** Resolved At */
+            resolved_at: string | null;
+            /** Status */
+            status: string | null;
+            /** Target User Id */
+            target_user_id: number | null;
+            /** Title */
+            title: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AdminReportUpdatedOut */
+        AdminReportUpdatedOut: {
+            /** Message */
+            message: string;
+            report: components["schemas"]["AdminReportOut"];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AdminRetentionWeekOut */
+        AdminRetentionWeekOut: {
+            /** Rate */
+            rate: number;
+            /** Week */
+            week: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AdminSettingsOut */
+        AdminSettingsOut: {
+            /** Android Store Url */
+            android_store_url: string | null;
+            /** Auto Moderate */
+            auto_moderate: boolean | null;
+            /** Default City */
+            default_city: string | null;
+            /** Ios Store Url */
+            ios_store_url: string | null;
+            /** Latest App Version */
+            latest_app_version: string;
+            /** Listing Expiry Days */
+            listing_expiry_days: number;
+            /** Maintenance Message */
+            maintenance_message: string | null;
+            /** Maintenance Mode */
+            maintenance_mode: boolean | null;
+            /** Max Images */
+            max_images: number | null;
+            /** Min App Version */
+            min_app_version: string;
+            /** Moderation Keywords */
+            moderation_keywords: unknown[];
+            /** Platform Name */
+            platform_name: string | null;
+            /** Privacy Version */
+            privacy_version: string;
+            /** Support Email */
+            support_email: string | null;
+            /** Terms Version */
+            terms_version: string;
+            /** Updated At */
+            updated_at: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AdminSettingsResultOut */
+        AdminSettingsResultOut: {
+            settings: components["schemas"]["AdminSettingsOut"];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AdminSettingsUpdatedOut */
+        AdminSettingsUpdatedOut: {
+            /** Message */
+            message: string;
+            settings: components["schemas"]["AdminSettingsOut"];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AdminStatsOut */
+        AdminStatsOut: {
+            /** Active Listings */
+            active_listings: number;
+            /** Active Listings Delta Pct */
+            active_listings_delta_pct: number | null;
+            /** Active Negotiations */
+            active_negotiations: number;
+            /** Active Negotiations Delta Pct */
+            active_negotiations_delta_pct: number | null;
+            /** Flagged Items */
+            flagged_items: number;
+            /** Flagged Items Delta Pct */
+            flagged_items_delta_pct: number | null;
+            /** Posts Today */
+            posts_today: number;
+            /** Posts Today Delta Pct */
+            posts_today_delta_pct: number | null;
+            /** Success */
+            success: boolean;
+            /** Total Users */
+            total_users: number;
+            /** Total Users Delta Pct */
+            total_users_delta_pct: number | null;
+            /** Transactions Today */
+            transactions_today: number;
+            /** Transactions Today Delta Pct */
+            transactions_today_delta_pct: number | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AdminUserDetailOut */
+        AdminUserDetailOut: {
+            /** Avatar Url */
+            avatar_url: string | null;
+            /** Ban Reason */
+            ban_reason: string | null;
+            /** Banned At */
+            banned_at: string | null;
+            /** City */
+            city: string | null;
+            /** Created At */
+            created_at: string | null;
+            /** Date Of Birth */
+            date_of_birth: string | null;
+            /** Deleted At */
+            deleted_at: string | null;
+            /** Email */
+            email: string | null;
+            /** First Name */
+            first_name: string | null;
+            /** Gender */
+            gender: string | null;
+            /** Id */
+            id: number;
+            /** Is Banned */
+            is_banned: boolean | null;
+            /** Is Verified */
+            is_verified: boolean | null;
+            /** Last Name */
+            last_name: string | null;
+            /** Phone Number */
+            phone_number: string | null;
+            /** Post Count */
+            post_count: number;
+            /** Posts */
+            posts: components["schemas"]["AdminPostSummaryOut"][];
+            /** Quartier */
+            quartier: string | null;
+            /** Role */
+            role: string | null;
+            /** Username */
+            username: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AdminUserDetailResponseOut */
+        AdminUserDetailResponseOut: {
+            /** Message */
+            message: string;
+            /** Success */
+            success: boolean;
+            user: components["schemas"]["AdminUserDetailOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** AdminUserListOut */
+        AdminUserListOut: {
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Success */
+            success: boolean;
+            /** Total Users */
+            total_users: number;
+            /** Users */
+            users: components["schemas"]["AdminUserOut"][];
+        } & {
+            [key: string]: unknown;
+        };
+        /** AdminUserMessageOut */
+        AdminUserMessageOut: {
+            /** Message */
+            message: string;
+            /** Success */
+            success: boolean;
+            user: components["schemas"]["AdminUserOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** AdminUserOut */
+        AdminUserOut: {
+            /** Avatar Url */
+            avatar_url: string | null;
+            /** Ban Reason */
+            ban_reason: string | null;
+            /** Banned At */
+            banned_at: string | null;
+            /** City */
+            city: string | null;
+            /** Created At */
+            created_at: string | null;
+            /** Date Of Birth */
+            date_of_birth: string | null;
+            /** Deleted At */
+            deleted_at: string | null;
+            /** Email */
+            email: string | null;
+            /** First Name */
+            first_name: string | null;
+            /** Gender */
+            gender: string | null;
+            /** Id */
+            id: number;
+            /** Is Banned */
+            is_banned: boolean | null;
+            /** Is Verified */
+            is_verified: boolean | null;
+            /** Last Name */
+            last_name: string | null;
+            /** Phone Number */
+            phone_number: string | null;
+            /** Post Count */
+            post_count: number;
+            /** Quartier */
+            quartier: string | null;
+            /** Role */
+            role: string | null;
+            /** Username */
+            username: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AdminUserResultOut */
+        AdminUserResultOut: {
+            /** Success */
+            success: boolean;
+            user: components["schemas"]["AdminUserOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * AiComparablesOut
+         * @description _similar_items_pricing() result (also reused by the negotiation coach).
+         */
+        AiComparablesOut: {
+            /** Comparable Count */
+            comparable_count: number;
+            /** Range Max */
+            range_max: number;
+            /** Range Min */
+            range_min: number;
+            /** Suggested */
+            suggested: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AiDraftOut */
+        AiDraftOut: {
+            /** Categories */
+            categories: string[];
+            /** Confidence */
+            confidence: number;
+            /** Description */
+            description: string;
+            /** Title */
+            title: string;
+        } & {
+            [key: string]: unknown;
+        };
         /** AiDraftRequest */
         AiDraftRequest: {
             /** Hint Title */
@@ -2000,15 +3022,162 @@ export interface components {
             /** Image Urls */
             image_urls: string[];
         };
+        /** AiDraftResultOut */
+        AiDraftResultOut: {
+            draft: components["schemas"]["AiDraftOut"];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AnalyticsEventSeriesOut */
+        AnalyticsEventSeriesOut: {
+            /** Days */
+            days: number;
+            /** Name */
+            name: string | null;
+            /** Series */
+            series: components["schemas"]["AnalyticsSeriesPointOut"][];
+            /** Success */
+            success: boolean;
+            /** Top Events */
+            top_events: components["schemas"]["AnalyticsTopEventOut"][];
+            /** Total */
+            total: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AnalyticsFunnelOut */
+        AnalyticsFunnelOut: {
+            /** Days */
+            days: number;
+            /** Since */
+            since: string;
+            /** Steps */
+            steps: components["schemas"]["AnalyticsFunnelStepOut"][];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AnalyticsFunnelStepOut */
+        AnalyticsFunnelStepOut: {
+            /** Conversion */
+            conversion: number | null;
+            /** Name */
+            name: string;
+            /** Users */
+            users: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AnalyticsIngestOut */
+        AnalyticsIngestOut: {
+            /** Accepted */
+            accepted: number;
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AnalyticsSeriesPointOut */
+        AnalyticsSeriesPointOut: {
+            /** Count */
+            count: number;
+            /** Date */
+            date: string;
+            /** Users */
+            users: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AnalyticsTopEventOut */
+        AnalyticsTopEventOut: {
+            /** Count */
+            count: number;
+            /** Name */
+            name: string;
+        } & {
+            [key: string]: unknown;
+        };
         /** AttachImages */
         AttachImages: {
             /** Keys */
             keys: string[];
         };
+        /** AuditEntryOut */
+        AuditEntryOut: {
+            /** Action */
+            action: string;
+            /** Created At */
+            created_at: string | null;
+            /** Details */
+            details: unknown;
+            /** Id */
+            id: number;
+            /** Staff Id */
+            staff_id: number | null;
+            /** Staff Username */
+            staff_username: string | null;
+            /** Target Id */
+            target_id: string | null;
+            /** Target Type */
+            target_type: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AuditListOut */
+        AuditListOut: {
+            /** Entries */
+            entries: components["schemas"]["AuditEntryOut"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Success */
+            success: boolean;
+            /** Total */
+            total: number;
+        } & {
+            [key: string]: unknown;
+        };
         /** BanRequest */
         BanRequest: {
             /** Reason */
             reason: string;
+        };
+        /** BlockListOut */
+        BlockListOut: {
+            /** Blocks */
+            blocks: components["schemas"]["BlockedUserOut"][];
+            /** Success */
+            success: boolean;
+            /** Total */
+            total: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** BlockStatusOut */
+        BlockStatusOut: {
+            /** Blocked */
+            blocked: boolean;
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** BlockedUserOut */
+        BlockedUserOut: {
+            /** Avatar Url */
+            avatar_url: string | null;
+            /** Blocked At */
+            blocked_at: string | null;
+            /** User Id */
+            user_id: number;
+            /** Username */
+            username: string | null;
+        } & {
+            [key: string]: unknown;
         };
         /** Body_admin_upload_user_avatar_v1_admin_users__user_id__avatar_post */
         Body_admin_upload_user_avatar_v1_admin_users__user_id__avatar_post: {
@@ -2105,6 +3274,24 @@ export interface components {
             /** Username */
             username: string;
         };
+        /** Body_submit_deletion_request_v1_account_deletion_post */
+        Body_submit_deletion_request_v1_account_deletion_post: {
+            /**
+             * Contact
+             * @default
+             */
+            contact: string;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /**
+             * Website
+             * @default
+             */
+            website: string;
+        };
         /** Body_upload_images_v1_upload_post */
         Body_upload_images_v1_upload_post: {
             /** Files */
@@ -2115,10 +3302,44 @@ export interface components {
             /** File */
             file: string;
         };
+        /** BulkDraftItemOut */
+        BulkDraftItemOut: {
+            /** Categories */
+            categories: string[];
+            /** Condition */
+            condition: string | null;
+            /** Confidence */
+            confidence: number;
+            /** Description */
+            description: string;
+            price_suggestion: components["schemas"]["AiComparablesOut"] | null;
+            /** Title */
+            title: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** BulkDraftOut */
+        BulkDraftOut: {
+            /** Drafts */
+            drafts: components["schemas"]["BulkDraftItemOut"][];
+            /** Generated At */
+            generated_at: string;
+            /** Images Used */
+            images_used: number;
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
         /** BulkDraftRequest */
         BulkDraftRequest: {
             /** Image Urls */
             image_urls: string[];
+        };
+        /** BulkQuartiers */
+        BulkQuartiers: {
+            /** Items */
+            items: components["schemas"]["QuartierIn"][];
         };
         /** ChangePassword */
         ChangePassword: {
@@ -2126,6 +3347,267 @@ export interface components {
             current_password: string;
             /** New Password */
             new_password: string;
+        };
+        /** ChatMessageOut */
+        ChatMessageOut: {
+            /** Body */
+            body: string | null;
+            /** Conversation Id */
+            conversation_id: number;
+            /** Created At */
+            created_at: string | null;
+            /** Id */
+            id: number;
+            /** Kind */
+            kind: string;
+            /** Payload */
+            payload: unknown;
+            /** Read At */
+            read_at: string | null;
+            /** Sender Id */
+            sender_id: number | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ChatMessageResultOut */
+        ChatMessageResultOut: {
+            message: components["schemas"]["ChatMessageOut"];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** CityIn */
+        CityIn: {
+            /** Is Enabled */
+            is_enabled?: boolean | null;
+            /** Lat */
+            lat?: number | null;
+            /** Lng */
+            lng?: number | null;
+            /** Name */
+            name: string;
+            /** Sort Order */
+            sort_order?: number | null;
+        };
+        /** CityPatch */
+        CityPatch: {
+            /** Is Enabled */
+            is_enabled?: boolean | null;
+            /** Lat */
+            lat?: number | null;
+            /** Lng */
+            lng?: number | null;
+            /** Name */
+            name?: string | null;
+            /** Sort Order */
+            sort_order?: number | null;
+        };
+        /** ConversationAdminDetailOut */
+        ConversationAdminDetailOut: {
+            buyer: components["schemas"]["ConversationUserBriefOut"] | null;
+            /** Created At */
+            created_at: string | null;
+            /** Id */
+            id: number;
+            /** Last Message At */
+            last_message_at: string | null;
+            latest_negotiation: components["schemas"]["ConversationAdminNegotiationOut"] | null;
+            /** Message Count */
+            message_count: number;
+            /** Messages */
+            messages: components["schemas"]["ChatMessageOut"][];
+            post: components["schemas"]["ConversationAdminPostOut"] | null;
+            seller: components["schemas"]["ConversationUserBriefOut"] | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ConversationAdminListOut */
+        ConversationAdminListOut: {
+            /** Conversations */
+            conversations: components["schemas"]["ConversationAdminOut"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Success */
+            success: boolean;
+            /** Total */
+            total: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ConversationAdminNegotiationOut */
+        ConversationAdminNegotiationOut: {
+            /** Id */
+            id: number;
+            /** Status */
+            status: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ConversationAdminOut */
+        ConversationAdminOut: {
+            buyer: components["schemas"]["ConversationUserBriefOut"] | null;
+            /** Created At */
+            created_at: string | null;
+            /** Id */
+            id: number;
+            /** Last Message At */
+            last_message_at: string | null;
+            latest_negotiation: components["schemas"]["ConversationAdminNegotiationOut"] | null;
+            /** Message Count */
+            message_count: number;
+            post: components["schemas"]["ConversationAdminPostOut"] | null;
+            seller: components["schemas"]["ConversationUserBriefOut"] | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ConversationAdminPostOut */
+        ConversationAdminPostOut: {
+            /** Id */
+            id: number;
+            /** Title */
+            title: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ConversationAdminResultOut */
+        ConversationAdminResultOut: {
+            conversation: components["schemas"]["ConversationAdminDetailOut"];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ConversationCounterpartyOut */
+        ConversationCounterpartyOut: {
+            /** Id */
+            id: number;
+            /** Username */
+            username: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ConversationListOut */
+        ConversationListOut: {
+            /** Conversations */
+            conversations: components["schemas"]["ConversationOut"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Success */
+            success: boolean;
+            /** Total */
+            total: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ConversationMarkReadOut */
+        ConversationMarkReadOut: {
+            /** Marked Read */
+            marked_read: number;
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ConversationMessagesOut */
+        ConversationMessagesOut: {
+            /** Conversation Id */
+            conversation_id: number;
+            /** Has More */
+            has_more: boolean;
+            /** Messages */
+            messages: components["schemas"]["ChatMessageOut"][];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ConversationNegotiationSummaryOut */
+        ConversationNegotiationSummaryOut: {
+            /** Accepted Amount */
+            accepted_amount: number | null;
+            /** Closed Reason */
+            closed_reason: string | null;
+            /** Current Offer Amount */
+            current_offer_amount: number;
+            /** Id */
+            id: number;
+            /** Last Offer By Id */
+            last_offer_by_id: number | null;
+            /** Status */
+            status: string;
+            /** Transaction Id */
+            transaction_id: number | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ConversationOut */
+        ConversationOut: {
+            /** Buyer Id */
+            buyer_id: number;
+            counterparty: components["schemas"]["ConversationCounterpartyOut"];
+            /** Created At */
+            created_at: string | null;
+            /** Id */
+            id: number;
+            /** Last Message At */
+            last_message_at: string | null;
+            latest_negotiation: components["schemas"]["ConversationNegotiationSummaryOut"] | null;
+            post: components["schemas"]["ConversationPostOut"];
+            /** Role */
+            role: string;
+            /** Seller Id */
+            seller_id: number;
+            /** Unread Count */
+            unread_count: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ConversationPostOut */
+        ConversationPostOut: {
+            /** City */
+            city: string | null;
+            /** Id */
+            id: number;
+            /** Is Free */
+            is_free: boolean | null;
+            /** Price */
+            price: number | null;
+            /** State */
+            state: string | null;
+            /** Thumbnail Url */
+            thumbnail_url: string | null;
+            /** Title */
+            title: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ConversationResultOut */
+        ConversationResultOut: {
+            conversation: components["schemas"]["ConversationOut"];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ConversationUserBriefOut */
+        ConversationUserBriefOut: {
+            /** Avatar Url */
+            avatar_url: string | null;
+            /** Avg Rating */
+            avg_rating: number | null;
+            /** Id */
+            id: number;
+            /** Review Count */
+            review_count: number;
+            /** Username */
+            username: string | null;
+        } & {
+            [key: string]: unknown;
         };
         /** CounterOffer */
         CounterOffer: {
@@ -2221,6 +3703,86 @@ export interface components {
             /** Confirm */
             confirm: string;
         };
+        /** DeletionRequestListOut */
+        DeletionRequestListOut: {
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Requests */
+            requests: components["schemas"]["DeletionRequestOut"][];
+            /** Success */
+            success: boolean;
+            /** Total */
+            total: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** DeletionRequestOut */
+        DeletionRequestOut: {
+            /** Contact */
+            contact: string;
+            /** Contact Type */
+            contact_type: string;
+            /** Created At */
+            created_at: string | null;
+            /** Id */
+            id: number;
+            /** Note */
+            note: string | null;
+            /** Processed At */
+            processed_at: string | null;
+            /** Processed By Staff Id */
+            processed_by_staff_id: number | null;
+            /** Reason */
+            reason: string | null;
+            /** Status */
+            status: string;
+            user: components["schemas"]["DeletionRequestUserOut"] | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** DeletionRequestProcessOut */
+        DeletionRequestProcessOut: {
+            request: components["schemas"]["DeletionRequestOut"];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** DeletionRequestUserOut */
+        DeletionRequestUserOut: {
+            /** Deleted At */
+            deleted_at: string | null;
+            /** Id */
+            id: number;
+            /** Username */
+            username: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** EventBatch */
+        EventBatch: {
+            /** App Version */
+            app_version?: string | null;
+            /** Events */
+            events: components["schemas"]["EventIn"][];
+            /** Platform */
+            platform?: string | null;
+        };
+        /** EventIn */
+        EventIn: {
+            /** Anonymous Id */
+            anonymous_id?: string | null;
+            /** Name */
+            name: string;
+            /** Props */
+            props?: {
+                [key: string]: unknown;
+            } | null;
+            /** Ts */
+            ts?: string | null;
+        };
         /** FirebaseExchange */
         FirebaseExchange: {
             /** Firebase Id Token */
@@ -2228,10 +3790,986 @@ export interface components {
             /** Username */
             username?: string | null;
         };
+        /** ForgotPassword */
+        ForgotPassword: {
+            /** Identifier */
+            identifier: string;
+        };
+        /** GeoBulkQuartiersOut */
+        GeoBulkQuartiersOut: {
+            /** Created */
+            created: number;
+            /** Quartiers */
+            quartiers: components["schemas"]["GeoQuartierAdminOut"][];
+            /** Skipped */
+            skipped: number;
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** GeoCityAdminListOut */
+        GeoCityAdminListOut: {
+            /** Cities */
+            cities: components["schemas"]["GeoCityAdminOut"][];
+            /** Success */
+            success: boolean;
+            /** Total */
+            total: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** GeoCityAdminOut */
+        GeoCityAdminOut: {
+            /** Country Iso2 */
+            country_iso2: string | null;
+            /** Id */
+            id: number;
+            /** Is Enabled */
+            is_enabled: boolean;
+            /** Lat */
+            lat: number | null;
+            /** Lng */
+            lng: number | null;
+            /** Name */
+            name: string;
+            /** Sort Order */
+            sort_order: number;
+            stats: components["schemas"]["GeoCityStatsOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** GeoCityDeletedOut */
+        GeoCityDeletedOut: {
+            /** City Id */
+            city_id: number;
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** GeoCityQuartierListOut */
+        GeoCityQuartierListOut: {
+            city: components["schemas"]["GeoCityAdminOut"];
+            /** Quartiers */
+            quartiers: components["schemas"]["GeoQuartierAdminOut"][];
+            /** Success */
+            success: boolean;
+            /** Total */
+            total: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** GeoCityResultOut */
+        GeoCityResultOut: {
+            city: components["schemas"]["GeoCityAdminOut"];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** GeoCityStatsOut */
+        GeoCityStatsOut: {
+            /** Listings */
+            listings: number;
+            /** Quartiers */
+            quartiers: number;
+            /** Users */
+            users: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** GeoCountryAdminListOut */
+        GeoCountryAdminListOut: {
+            /** Countries */
+            countries: components["schemas"]["GeoCountryAdminOut"][];
+            /** Success */
+            success: boolean;
+            /** Total */
+            total: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** GeoCountryAdminOut */
+        GeoCountryAdminOut: {
+            /** Currency Code */
+            currency_code: string | null;
+            /** Currency Name */
+            currency_name: string | null;
+            /** Flag */
+            flag: string | null;
+            /** Id */
+            id: number;
+            /** Is Default */
+            is_default: boolean;
+            /** Is Enabled */
+            is_enabled: boolean;
+            /** Iso2 */
+            iso2: string;
+            /** Iso3 */
+            iso3: string | null;
+            /** Lat */
+            lat: number | null;
+            /** Lng */
+            lng: number | null;
+            /** Name */
+            name: string;
+            /** Name Fr */
+            name_fr: string | null;
+            /** Phone Code */
+            phone_code: string | null;
+            /** Region */
+            region: string | null;
+            /** Stats */
+            stats: {
+                [key: string]: unknown;
+            };
+            /** Updated At */
+            updated_at: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** GeoCountryListOut */
+        GeoCountryListOut: {
+            /** Countries */
+            countries: components["schemas"]["GeoCountryOut"][];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** GeoCountryOut */
+        GeoCountryOut: {
+            /** Currency Code */
+            currency_code: string | null;
+            /** Flag */
+            flag: string | null;
+            /** Is Default */
+            is_default: boolean;
+            /** Iso2 */
+            iso2: string;
+            /** Name */
+            name: string;
+            /** Phone Code */
+            phone_code: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** GeoCountryResultOut */
+        GeoCountryResultOut: {
+            country: components["schemas"]["GeoCountryAdminOut"];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** GeoImportOut */
+        GeoImportOut: {
+            /** Created */
+            created: number;
+            /** Success */
+            success: boolean;
+            /** Updated */
+            updated: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** GeoMergeMovedOut */
+        GeoMergeMovedOut: {
+            /** Listings */
+            listings: number;
+            /** Users */
+            users: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** GeoMergeQuartierOut */
+        GeoMergeQuartierOut: {
+            /** Deleted Id */
+            deleted_id: number;
+            moved: components["schemas"]["GeoMergeMovedOut"];
+            quartier: components["schemas"]["GeoQuartierAdminOut"];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** GeoOsmQuartierListOut */
+        GeoOsmQuartierListOut: {
+            /** Attribution */
+            attribution: string;
+            /** City Id */
+            city_id: number;
+            /** Quartiers */
+            quartiers: components["schemas"]["GeoOsmQuartierOut"][];
+            /** Success */
+            success: boolean;
+            /** Total */
+            total: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** GeoOsmQuartierOut */
+        GeoOsmQuartierOut: {
+            /** Existing Id */
+            existing_id: number | null;
+            /** Exists */
+            exists: boolean;
+            /** Lat */
+            lat: number;
+            /** Lng */
+            lng: number;
+            /** Name */
+            name: string;
+            /** Osm Id */
+            osm_id: string;
+            /** Place */
+            place: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** GeoPublicCityListOut */
+        GeoPublicCityListOut: {
+            /** Cities */
+            cities: components["schemas"]["GeoPublicCityOut"][];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** GeoPublicCityOut */
+        GeoPublicCityOut: {
+            /** Id */
+            id: number;
+            /** Lat */
+            lat: number | null;
+            /** Lng */
+            lng: number | null;
+            /** Name */
+            name: string;
+            /** Quartier Count */
+            quartier_count: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** GeoPublicQuartierListOut */
+        GeoPublicQuartierListOut: {
+            /** Quartiers */
+            quartiers: components["schemas"]["GeoPublicQuartierOut"][];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** GeoPublicQuartierOut */
+        GeoPublicQuartierOut: {
+            /** Id */
+            id: number;
+            /** Lat */
+            lat: number | null;
+            /** Lng */
+            lng: number | null;
+            /** Name */
+            name: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** GeoQuartierAdminOut */
+        GeoQuartierAdminOut: {
+            /** City */
+            city: string;
+            /** City Id */
+            city_id: number | null;
+            /** Id */
+            id: number;
+            /** Is Approved */
+            is_approved: boolean;
+            /** Is User Added */
+            is_user_added: boolean;
+            /** Lat */
+            lat: number | null;
+            /** Lng */
+            lng: number | null;
+            /** Name */
+            name: string;
+            /** Source */
+            source: string | null;
+            /** Stats */
+            stats: {
+                [key: string]: unknown;
+            };
+            /** Usage Count */
+            usage_count: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** GeoQuartierResultOut */
+        GeoQuartierResultOut: {
+            quartier: components["schemas"]["GeoQuartierAdminOut"];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** GeoSearchOut */
+        GeoSearchOut: {
+            /** Results */
+            results: components["schemas"]["GeoSearchResultOut"][];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** GeoSearchResultOut */
+        GeoSearchResultOut: {
+            /** Display Name */
+            display_name: string;
+            /** Lat */
+            lat: number;
+            /** Lng */
+            lng: number;
+            /** Type */
+            type: string;
+        } & {
+            [key: string]: unknown;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** IdentityAppConfigOut */
+        IdentityAppConfigOut: {
+            /** Android Store Url */
+            android_store_url: string | null;
+            default_country: components["schemas"]["IdentityDefaultCountryOut"] | null;
+            /** Ios Store Url */
+            ios_store_url: string | null;
+            /** Latest App Version */
+            latest_app_version: string;
+            /** Listing Expiry Days */
+            listing_expiry_days: number;
+            /** Maintenance Message */
+            maintenance_message: string | null;
+            /** Maintenance Mode */
+            maintenance_mode: boolean;
+            /** Max Images */
+            max_images: number;
+            /** Min App Version */
+            min_app_version: string;
+            /** Success */
+            success: boolean;
+            /** Support Email */
+            support_email: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** IdentityConsentsOut */
+        IdentityConsentsOut: {
+            /** Consent Required */
+            consent_required: string[];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** IdentityDefaultCountryOut */
+        IdentityDefaultCountryOut: {
+            /** Currency Code */
+            currency_code: string | null;
+            /** Iso2 */
+            iso2: string;
+            /** Phone Code */
+            phone_code: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** IdentityExportLinkOut */
+        IdentityExportLinkOut: {
+            /** Expires In */
+            expires_in: number;
+            /** Path */
+            path: string;
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** IdentityLegalOut */
+        IdentityLegalOut: {
+            /** Privacy Version */
+            privacy_version: string;
+            /** Success */
+            success: boolean;
+            /** Terms Version */
+            terms_version: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** IdentityMeOut */
+        IdentityMeOut: {
+            /** Avatar Url */
+            avatar_url: string | null;
+            /** Avg Rating */
+            avg_rating: number | null;
+            /** City */
+            city: string | null;
+            /** Created At */
+            created_at: string | null;
+            /** Date Of Birth */
+            date_of_birth: string | null;
+            /** Email */
+            email: string | null;
+            /** First Name */
+            first_name: string | null;
+            /** Gender */
+            gender: string | null;
+            /** Id */
+            id: number;
+            /** Last Name */
+            last_name: string | null;
+            /** Phone Number */
+            phone_number: string | null;
+            /** Quartier */
+            quartier: string | null;
+            /** Review Count */
+            review_count: number;
+            /** Role */
+            role: string | null;
+            /** Username */
+            username: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** IdentityMeWithConsentOut */
+        IdentityMeWithConsentOut: {
+            /** Avatar Url */
+            avatar_url: string | null;
+            /** Avg Rating */
+            avg_rating: number | null;
+            /** City */
+            city: string | null;
+            /** Consent Required */
+            consent_required: string[];
+            /** Created At */
+            created_at: string | null;
+            /** Date Of Birth */
+            date_of_birth: string | null;
+            /** Email */
+            email: string | null;
+            /** First Name */
+            first_name: string | null;
+            /** Gender */
+            gender: string | null;
+            /** Id */
+            id: number;
+            /** Last Name */
+            last_name: string | null;
+            /** Notification Prefs */
+            notification_prefs: {
+                [key: string]: unknown;
+            };
+            /** Phone Number */
+            phone_number: string | null;
+            /** Privacy Prefs */
+            privacy_prefs: {
+                [key: string]: unknown;
+            };
+            /** Quartier */
+            quartier: string | null;
+            /** Review Count */
+            review_count: number;
+            /** Role */
+            role: string | null;
+            /** Username */
+            username: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** IdentityPreferencesOut */
+        IdentityPreferencesOut: {
+            /** Notifications */
+            notifications: {
+                [key: string]: unknown;
+            };
+            /** Privacy */
+            privacy: {
+                [key: string]: unknown;
+            };
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** IdentityPublicProfileOut */
+        IdentityPublicProfileOut: {
+            /** Success */
+            success: boolean;
+            user: components["schemas"]["IdentityPublicUserOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** IdentityPublicUserOut */
+        IdentityPublicUserOut: {
+            /** Active Listings */
+            active_listings: number;
+            /** Avatar Url */
+            avatar_url: string | null;
+            /** Avg Rating */
+            avg_rating: number | null;
+            /** Blocked By Me */
+            blocked_by_me: boolean;
+            /** City */
+            city: string | null;
+            /** Display Name */
+            display_name: string;
+            /** Id */
+            id: number;
+            /** Member Since */
+            member_since: string | null;
+            /** Phone Verified */
+            phone_verified: boolean;
+            /** Quartier */
+            quartier: string | null;
+            /** Response Time Minutes */
+            response_time_minutes: number | null;
+            /** Review Count */
+            review_count: number;
+            /** Sales Count */
+            sales_count: number;
+            /** Username */
+            username: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** MergeQuartier */
+        MergeQuartier: {
+            /** Into Id */
+            into_id: number;
+        };
+        /** MessageOut */
+        MessageOut: {
+            /** Message */
+            message: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ModerationOwnerOut */
+        ModerationOwnerOut: {
+            /** Id */
+            id: number;
+            /** Username */
+            username: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ModerationPhotoListOut */
+        ModerationPhotoListOut: {
+            /** Photos */
+            photos: components["schemas"]["ModerationPhotoOut"][];
+            /** Success */
+            success: boolean;
+            /** Total */
+            total: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ModerationPhotoOut */
+        ModerationPhotoOut: {
+            /** Created At */
+            created_at: string | null;
+            /** Image Id */
+            image_id: number;
+            owner: components["schemas"]["ModerationOwnerOut"] | null;
+            /** Post Id */
+            post_id: number | null;
+            /** Post Title */
+            post_title: string | null;
+            /** Reviewed At */
+            reviewed_at: string | null;
+            /** Url */
+            url: string;
+            /** Variants */
+            variants: {
+                [key: string]: unknown;
+            } | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ModerationPostEnvelopeOut */
+        ModerationPostEnvelopeOut: {
+            post: components["schemas"]["ModerationPostOut"];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ModerationPostOut */
+        ModerationPostOut: {
+            /** Active Offer Count */
+            active_offer_count: number;
+            /** Age Bucket */
+            age_bucket: string | null;
+            /** Allow Negotiation */
+            allow_negotiation: boolean | null;
+            /** Categories */
+            categories: string[];
+            /** City */
+            city: string | null;
+            /** Condition */
+            condition: string | null;
+            /** Created At */
+            created_at: string | null;
+            /** Description */
+            description: string | null;
+            /** Exchange Items */
+            exchange_items: string | null;
+            /** Expires At */
+            expires_at: string | null;
+            /** Id */
+            id: number;
+            /** Images */
+            images: components["schemas"]["PostImageOut"][];
+            /** Is Free */
+            is_free: boolean | null;
+            /** Lat */
+            lat: number | null;
+            /** Liked By Me */
+            liked_by_me: boolean;
+            /** Likes Count */
+            likes_count: number;
+            /** Lng */
+            lng: number | null;
+            /** Moderated At */
+            moderated_at: string | null;
+            /** Moderated By Staff Id */
+            moderated_by_staff_id: number | null;
+            /** Moderation Reason Labels */
+            moderation_reason_labels: string[];
+            /** Moderation Reasons */
+            moderation_reasons: string[];
+            /** Moderation Status */
+            moderation_status: string;
+            /** Offer Count */
+            offer_count: number;
+            owner: components["schemas"]["ModerationOwnerOut"] | null;
+            /** Owner Id */
+            owner_id: number | null;
+            /** Owner Username */
+            owner_username: string | null;
+            /** Pickup Location Note */
+            pickup_location_note: string | null;
+            /** Pickup Quartier */
+            pickup_quartier: string | null;
+            /** Price */
+            price: number | null;
+            /** Shares Count */
+            shares_count: number;
+            /** State */
+            state: string | null;
+            /** Title */
+            title: string | null;
+            /** Updated At */
+            updated_at: string | null;
+            /** Views Count */
+            views_count: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ModerationQueueOut */
+        ModerationQueueOut: {
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Posts */
+            posts: components["schemas"]["ModerationPostOut"][];
+            /** Success */
+            success: boolean;
+            /** Total */
+            total: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ModerationReviewOut */
+        ModerationReviewOut: {
+            /** Reviewed */
+            reviewed: number;
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** NegotiationCancelOut */
+        NegotiationCancelOut: {
+            /** Negotiation Id */
+            negotiation_id: number;
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** NegotiationCoachOut */
+        NegotiationCoachOut: {
+            /** Action */
+            action: string;
+            /** As Of Amount */
+            as_of_amount: number;
+            /** As Of Last Offer By Id */
+            as_of_last_offer_by_id: number | null;
+            /** Confidence */
+            confidence: number;
+            counterparty: components["schemas"]["NegotiationUserBriefOut"] | null;
+            /** Generated At */
+            generated_at: string;
+            market: components["schemas"]["AiComparablesOut"] | null;
+            /** Negotiation Id */
+            negotiation_id: number;
+            /** Rationale Fr */
+            rationale_fr: string;
+            /** Role */
+            role: string;
+            /** Source */
+            source: string;
+            /** Stale */
+            stale: boolean;
+            /** Suggested Amount */
+            suggested_amount: number | null;
+            /** Warning */
+            warning: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** NegotiationCoachResultOut */
+        NegotiationCoachResultOut: {
+            coach: components["schemas"]["NegotiationCoachOut"];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** NegotiationDetailOut */
+        NegotiationDetailOut: {
+            /** Accepted Amount */
+            accepted_amount: number | null;
+            /** Accepted At */
+            accepted_at: string | null;
+            buyer: components["schemas"]["NegotiationUserBriefOut"] | null;
+            /** Buyer Id */
+            buyer_id: number;
+            /** Closed At */
+            closed_at: string | null;
+            /** Closed Reason */
+            closed_reason: string | null;
+            /** Conversation Id */
+            conversation_id: number | null;
+            /** Created At */
+            created_at: string | null;
+            /** Current Offer Amount */
+            current_offer_amount: number;
+            /** Id */
+            id: number;
+            last_offer_by: components["schemas"]["NegotiationUserBriefOut"] | null;
+            /** Last Offer By Id */
+            last_offer_by_id: number | null;
+            /** Offers */
+            offers: components["schemas"]["NegotiationOfferOut"][];
+            /** Post Id */
+            post_id: number;
+            /** Post Title */
+            post_title: string | null;
+            seller: components["schemas"]["NegotiationUserBriefOut"] | null;
+            /** Seller Id */
+            seller_id: number;
+            /** Status */
+            status: string;
+            /** Transaction Id */
+            transaction_id: number | null;
+            /** Updated At */
+            updated_at: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** NegotiationDetailResultOut */
+        NegotiationDetailResultOut: {
+            negotiation: components["schemas"]["NegotiationDetailOut"];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** NegotiationListOut */
+        NegotiationListOut: {
+            /** Limit */
+            limit: number;
+            /** Negotiations */
+            negotiations: components["schemas"]["NegotiationOut"][];
+            /** Offset */
+            offset: number;
+            /** Success */
+            success: boolean;
+            /** Total */
+            total: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** NegotiationMeetupOut */
+        NegotiationMeetupOut: {
+            /** Alternative Fr */
+            alternative_fr: string | null;
+            /** City */
+            city: string | null;
+            /** Generated At */
+            generated_at: string;
+            /** Negotiation Id */
+            negotiation_id: number;
+            /** Pickup Quartier */
+            pickup_quartier: string | null;
+            /** Place Fr */
+            place_fr: string;
+            /** Questions Fr */
+            questions_fr: string[];
+            /** Safety Fr */
+            safety_fr: string;
+            /** Time Window Fr */
+            time_window_fr: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** NegotiationMeetupResultOut */
+        NegotiationMeetupResultOut: {
+            meetup: components["schemas"]["NegotiationMeetupOut"];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** NegotiationOfferOut */
+        NegotiationOfferOut: {
+            /** Amount */
+            amount: number;
+            /** Created At */
+            created_at: string | null;
+            /** Id */
+            id: number;
+            /** Message */
+            message: string | null;
+            proposed_by: components["schemas"]["NegotiationUserBriefOut"] | null;
+            /** Proposed By Id */
+            proposed_by_id: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** NegotiationOut */
+        NegotiationOut: {
+            /** Accepted Amount */
+            accepted_amount: number | null;
+            /** Accepted At */
+            accepted_at: string | null;
+            buyer: components["schemas"]["NegotiationUserBriefOut"] | null;
+            /** Buyer Id */
+            buyer_id: number;
+            /** Closed At */
+            closed_at: string | null;
+            /** Closed Reason */
+            closed_reason: string | null;
+            /** Conversation Id */
+            conversation_id: number | null;
+            /** Created At */
+            created_at: string | null;
+            /** Current Offer Amount */
+            current_offer_amount: number;
+            /** Id */
+            id: number;
+            last_offer_by: components["schemas"]["NegotiationUserBriefOut"] | null;
+            /** Last Offer By Id */
+            last_offer_by_id: number | null;
+            /** Post Id */
+            post_id: number;
+            /** Post Title */
+            post_title: string | null;
+            seller: components["schemas"]["NegotiationUserBriefOut"] | null;
+            /** Seller Id */
+            seller_id: number;
+            /** Status */
+            status: string;
+            /** Transaction Id */
+            transaction_id: number | null;
+            /** Updated At */
+            updated_at: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** NegotiationResultOut */
+        NegotiationResultOut: {
+            negotiation: components["schemas"]["NegotiationOut"];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** NegotiationUserBriefOut */
+        NegotiationUserBriefOut: {
+            /** Avatar Url */
+            avatar_url: string | null;
+            /** Avg Rating */
+            avg_rating: number | null;
+            /** Id */
+            id: number;
+            /** Review Count */
+            review_count: number;
+            /** Username */
+            username: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** NotificationDetailOut */
+        NotificationDetailOut: {
+            notification: components["schemas"]["NotificationOut"];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** NotificationListOut */
+        NotificationListOut: {
+            /** Limit */
+            limit: number;
+            /** Notifications */
+            notifications: components["schemas"]["NotificationOut"][];
+            /** Offset */
+            offset: number;
+            /** Success */
+            success: boolean;
+            /** Total */
+            total: number;
+            /** Unread Count */
+            unread_count: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** NotificationOut */
+        NotificationOut: {
+            /** Body */
+            body: string;
+            /** Conversation Id */
+            conversation_id: number | null;
+            /** Created At */
+            created_at: string | null;
+            /** Id */
+            id: number;
+            /** Negotiation Id */
+            negotiation_id: number | null;
+            /** Payload */
+            payload: unknown;
+            /** Read At */
+            read_at: string | null;
+            /** Title */
+            title: string;
+            /** Type */
+            type: string;
+        } & {
+            [key: string]: unknown;
         };
         /** NotificationPrefs */
         NotificationPrefs: {
@@ -2245,6 +4783,24 @@ export interface components {
             offers?: boolean | null;
             /** Saved Searches */
             saved_searches?: boolean | null;
+        };
+        /** NotificationReadAllOut */
+        NotificationReadAllOut: {
+            /** Marked Read */
+            marked_read: number;
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** NotificationUnreadCountOut */
+        NotificationUnreadCountOut: {
+            /** Success */
+            success: boolean;
+            /** Unread Count */
+            unread_count: number;
+        } & {
+            [key: string]: unknown;
         };
         /** OpenDispute */
         OpenDispute: {
@@ -2294,6 +4850,166 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** PostCreateOut */
+        PostCreateOut: {
+            /** Possible Duplicate Of */
+            possible_duplicate_of: number | null;
+            post: components["schemas"]["PostOut"];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** PostDetailOut */
+        PostDetailOut: {
+            /** Message */
+            message: string;
+            post: components["schemas"]["PostOut"];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** PostEnvelopeOut */
+        PostEnvelopeOut: {
+            post: components["schemas"]["PostOut"];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** PostImageOut */
+        PostImageOut: {
+            /** Id */
+            id: number;
+            /** Status */
+            status: string;
+            /** Url */
+            url: string;
+            /** Variants */
+            variants: {
+                [key: string]: unknown;
+            } | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** PostImageStatusOut */
+        PostImageStatusOut: {
+            /** Id */
+            id: number;
+            /** Status */
+            status: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** PostImagesAddOut */
+        PostImagesAddOut: {
+            /** Images */
+            images: components["schemas"]["PostImageStatusOut"][];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** PostLikeOut */
+        PostLikeOut: {
+            /** Like Count */
+            like_count: number;
+            /** Message */
+            message: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** PostListOut */
+        PostListOut: {
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Posts */
+            posts: components["schemas"]["PostOut"][];
+            /** Success */
+            success: boolean;
+            /** Total Posts */
+            total_posts: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
+         * PostOut
+         * @description serialize_post. List rows near a point also carry distance_km.
+         */
+        PostOut: {
+            /** Active Offer Count */
+            active_offer_count: number;
+            /** Age Bucket */
+            age_bucket: string | null;
+            /** Allow Negotiation */
+            allow_negotiation: boolean | null;
+            /** Categories */
+            categories: string[];
+            /** City */
+            city: string | null;
+            /** Condition */
+            condition: string | null;
+            /** Created At */
+            created_at: string | null;
+            /** Description */
+            description: string | null;
+            /** Exchange Items */
+            exchange_items: string | null;
+            /** Expires At */
+            expires_at: string | null;
+            /** Id */
+            id: number;
+            /** Images */
+            images: components["schemas"]["PostImageOut"][];
+            /** Is Free */
+            is_free: boolean | null;
+            /** Lat */
+            lat: number | null;
+            /** Liked By Me */
+            liked_by_me: boolean;
+            /** Likes Count */
+            likes_count: number;
+            /** Lng */
+            lng: number | null;
+            /** Moderation Status */
+            moderation_status: string;
+            /** Offer Count */
+            offer_count: number;
+            /** Owner Id */
+            owner_id: number | null;
+            /** Owner Username */
+            owner_username: string | null;
+            /** Pickup Location Note */
+            pickup_location_note: string | null;
+            /** Pickup Quartier */
+            pickup_quartier: string | null;
+            /** Price */
+            price: number | null;
+            /** Shares Count */
+            shares_count: number;
+            /** State */
+            state: string | null;
+            /** Title */
+            title: string | null;
+            /** Updated At */
+            updated_at: string | null;
+            /** Views Count */
+            views_count: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** PostShareOut */
+        PostShareOut: {
+            /** Shares Count */
+            shares_count: number;
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
         /**
          * PostState
          * @enum {string}
@@ -2329,6 +5045,27 @@ export interface components {
             /** Title */
             title?: string | null;
         };
+        /** PresignOut */
+        PresignOut: {
+            /** Expires In */
+            expires_in: number;
+            /** Headers */
+            headers: {
+                [key: string]: unknown;
+            };
+            /** Key */
+            key: string;
+            /** Max Bytes */
+            max_bytes: number;
+            /** Method */
+            method: string;
+            /** Success */
+            success: boolean;
+            /** Upload Url */
+            upload_url: string;
+        } & {
+            [key: string]: unknown;
+        };
         /** PresignRequest */
         PresignRequest: {
             /**
@@ -2338,6 +5075,67 @@ export interface components {
             content_type: "image/jpeg" | "image/png" | "image/webp";
             /** Size */
             size: number;
+        };
+        /** PriceCheckOut */
+        PriceCheckOut: {
+            /** Condition Flags Fr */
+            condition_flags_fr: string[];
+            /** Confidence */
+            confidence: number;
+            /** Delta Pct */
+            delta_pct: number | null;
+            /** Generated At */
+            generated_at: string;
+            /** Images Checked */
+            images_checked: number;
+            /** Listed Price */
+            listed_price: number;
+            market: components["schemas"]["AiComparablesOut"] | null;
+            /** Market Verdict */
+            market_verdict: string | null;
+            /** Post Id */
+            post_id: number;
+            /** Rationale Fr */
+            rationale_fr: string;
+            /** Source */
+            source: string;
+            /** Verdict */
+            verdict: string;
+            /** Warning */
+            warning: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** PriceCheckResultOut */
+        PriceCheckResultOut: {
+            price_check: components["schemas"]["PriceCheckOut"];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** PriceSuggestionOut */
+        PriceSuggestionOut: {
+            /** Comparable Count */
+            comparable_count: number | null;
+            /** Currency */
+            currency: string;
+            /** Message */
+            message: string | null;
+            /** Range Max */
+            range_max: number | null;
+            /** Range Min */
+            range_min: number | null;
+            /** Reference Retail Xaf */
+            reference_retail_xaf: number | null;
+            /** Source */
+            source: string;
+            /** Success */
+            success: boolean;
+            /** Suggested */
+            suggested: number | null;
+        } & {
+            [key: string]: unknown;
         };
         /** PriceSuggestionRequest */
         PriceSuggestionRequest: {
@@ -2352,15 +5150,116 @@ export interface components {
         };
         /** PrivacyPrefs */
         PrivacyPrefs: {
+            /** Analytics */
+            analytics?: boolean | null;
             /** Show Last Name */
             show_last_name?: boolean | null;
             /** Show Quartier */
             show_quartier?: boolean | null;
         };
+        /** ProcessDeletion */
+        ProcessDeletion: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "delete" | "reject";
+            /** Note */
+            note?: string | null;
+            /** User Id */
+            user_id?: number | null;
+        };
+        /** QuartierDeleteOut */
+        QuartierDeleteOut: {
+            /** Quartier Id */
+            quartier_id: number;
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** QuartierEnvelopeOut */
+        QuartierEnvelopeOut: {
+            quartier: components["schemas"]["QuartierOut"];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** QuartierIn */
+        QuartierIn: {
+            /** Lat */
+            lat?: number | null;
+            /** Lng */
+            lng?: number | null;
+            /** Name */
+            name: string;
+        };
+        /** QuartierListOut */
+        QuartierListOut: {
+            /** City */
+            city: string;
+            /** Quartiers */
+            quartiers: components["schemas"]["QuartierOut"][];
+            /** Success */
+            success: boolean;
+            /** Total */
+            total: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** QuartierOut */
+        QuartierOut: {
+            /** City */
+            city: string;
+            /** Created At */
+            created_at: string | null;
+            /** Id */
+            id: number;
+            /** Is Approved */
+            is_approved: boolean;
+            /** Is User Added */
+            is_user_added: boolean;
+            /** Lat */
+            lat: number | null;
+            /** Lng */
+            lng: number | null;
+            /** Name */
+            name: string;
+            /** Updated At */
+            updated_at: string | null;
+            /** Usage Count */
+            usage_count: number;
+        } & {
+            [key: string]: unknown;
+        };
         /** RegisterPushToken */
         RegisterPushToken: {
             /** Platform */
             platform?: string | null;
+            /** Token */
+            token: string;
+        };
+        /** RejectPost */
+        RejectPost: {
+            /** Reason */
+            reason: string;
+        };
+        /** ReportCreateOut */
+        ReportCreateOut: {
+            /** Already Reported */
+            already_reported: boolean;
+            /** Report Id */
+            report_id: number;
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ResetPassword */
+        ResetPassword: {
+            /** New Password */
+            new_password: string;
             /** Token */
             token: string;
         };
@@ -2378,6 +5277,99 @@ export interface components {
         ResolveReportRequest: {
             /** Resolution Note */
             resolution_note?: string | null;
+        };
+        /** ReviewListOut */
+        ReviewListOut: {
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Reviews */
+            reviews: components["schemas"]["ReviewOut"][];
+            /** Success */
+            success: boolean;
+            /** Total */
+            total: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ReviewOut */
+        ReviewOut: {
+            /** Comment */
+            comment: string | null;
+            /** Created At */
+            created_at: string | null;
+            /** Direction */
+            direction: string;
+            /** Id */
+            id: number;
+            /** Is Visible */
+            is_visible: boolean;
+            /** Rating */
+            rating: number;
+            reviewee: components["schemas"]["TransactionUserBriefOut"] | null;
+            /** Reviewee Id */
+            reviewee_id: number;
+            reviewer: components["schemas"]["TransactionUserBriefOut"] | null;
+            /** Reviewer Id */
+            reviewer_id: number;
+            /** Transaction Id */
+            transaction_id: number;
+            /** Updated At */
+            updated_at: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** ReviewPhotos */
+        ReviewPhotos: {
+            /** Image Ids */
+            image_ids: number[];
+        };
+        /** ReviewResultOut */
+        ReviewResultOut: {
+            review: components["schemas"]["ReviewOut"];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** SavedSearchEnvelopeOut */
+        SavedSearchEnvelopeOut: {
+            saved_search: components["schemas"]["SavedSearchOut"];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** SavedSearchListOut */
+        SavedSearchListOut: {
+            /** Saved Searches */
+            saved_searches: components["schemas"]["SavedSearchOut"][];
+            /** Success */
+            success: boolean;
+            /** Total */
+            total: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** SavedSearchOut */
+        SavedSearchOut: {
+            /** Alerts Enabled */
+            alerts_enabled: boolean;
+            /** Created At */
+            created_at: string | null;
+            /** Filters */
+            filters: {
+                [key: string]: unknown;
+            };
+            /** Id */
+            id: number;
+            /** Last Checked At */
+            last_checked_at: string | null;
+            /** Name */
+            name: string;
+        } & {
+            [key: string]: unknown;
         };
         /**
          * SearchFilters
@@ -2403,15 +5395,79 @@ export interface components {
             /** Search */
             search?: string | null;
         };
+        /** SearchParseOut */
+        SearchParseOut: {
+            parsed: components["schemas"]["SearchParsedOut"];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
         /** SearchParseRequest */
         SearchParseRequest: {
             /** Utterance */
             utterance: string;
         };
+        /** SearchParsedOut */
+        SearchParsedOut: {
+            /** Search */
+            search: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** SearchSuggestOut */
+        SearchSuggestOut: {
+            /** Success */
+            success: boolean;
+            /** Suggestions */
+            suggestions: string[];
+        } & {
+            [key: string]: unknown;
+        };
         /** SetReviewVisibility */
         SetReviewVisibility: {
             /** Is Visible */
             is_visible: boolean;
+        };
+        /** StaffDetailOut */
+        StaffDetailOut: {
+            staff: components["schemas"]["StaffOut"];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** StaffListOut */
+        StaffListOut: {
+            /** Staff */
+            staff: components["schemas"]["StaffOut"][];
+            /** Success */
+            success: boolean;
+            /** Total */
+            total: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** StaffOut */
+        StaffOut: {
+            /** Created At */
+            created_at: string | null;
+            /** Display Name */
+            display_name: string | null;
+            /** Email */
+            email: string | null;
+            /** Id */
+            id: number;
+            /** Is Active */
+            is_active: boolean;
+            /** Last Login At */
+            last_login_at: string | null;
+            /** Role */
+            role: string;
+            /** Username */
+            username: string;
+        } & {
+            [key: string]: unknown;
         };
         /** StaffTokenResponse */
         StaffTokenResponse: {
@@ -2422,6 +5478,22 @@ export interface components {
             /** Token Type */
             token_type: string;
         };
+        /** SuccessMessageOut */
+        SuccessMessageOut: {
+            /** Message */
+            message: string;
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** SuccessOut */
+        SuccessOut: {
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
         /** TokenResponse */
         TokenResponse: {
             /** Access Token */
@@ -2430,6 +5502,158 @@ export interface components {
             expires_in: number;
             /** Token Type */
             token_type: string;
+        };
+        /** TransactionDeleteOut */
+        TransactionDeleteOut: {
+            /** Success */
+            success: boolean;
+            /** Transaction Id */
+            transaction_id: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** TransactionDetailOut */
+        TransactionDetailOut: {
+            /** Amount */
+            amount: number;
+            buyer: components["schemas"]["TransactionUserBriefOut"] | null;
+            /** Buyer Id */
+            buyer_id: number;
+            /** Cancellation Reason */
+            cancellation_reason: string | null;
+            /** Cancelled At */
+            cancelled_at: string | null;
+            /** Completed At */
+            completed_at: string | null;
+            /** Created At */
+            created_at: string | null;
+            /** Currency */
+            currency: string;
+            dispute_opened_by: components["schemas"]["TransactionUserBriefOut"] | null;
+            /** Dispute Opened By Id */
+            dispute_opened_by_id: number | null;
+            /** Dispute Reason */
+            dispute_reason: string | null;
+            /** Disputed At */
+            disputed_at: string | null;
+            /** Id */
+            id: number;
+            /** Meeting Location */
+            meeting_location: string | null;
+            /** Payment Method */
+            payment_method: string | null;
+            /** Post Id */
+            post_id: number;
+            /** Post Title */
+            post_title: string | null;
+            /** Reviews */
+            reviews: components["schemas"]["ReviewOut"][];
+            seller: components["schemas"]["TransactionUserBriefOut"] | null;
+            /** Seller Id */
+            seller_id: number;
+            /** Status */
+            status: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** TransactionDetailResultOut */
+        TransactionDetailResultOut: {
+            /** Success */
+            success: boolean;
+            transaction: components["schemas"]["TransactionDetailOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** TransactionListOut */
+        TransactionListOut: {
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Success */
+            success: boolean;
+            /** Total */
+            total: number;
+            /** Transactions */
+            transactions: components["schemas"]["TransactionOut"][];
+        } & {
+            [key: string]: unknown;
+        };
+        /** TransactionOut */
+        TransactionOut: {
+            /** Amount */
+            amount: number;
+            buyer: components["schemas"]["TransactionUserBriefOut"] | null;
+            /** Buyer Id */
+            buyer_id: number;
+            /** Cancellation Reason */
+            cancellation_reason: string | null;
+            /** Cancelled At */
+            cancelled_at: string | null;
+            /** Completed At */
+            completed_at: string | null;
+            /** Created At */
+            created_at: string | null;
+            /** Currency */
+            currency: string;
+            dispute_opened_by: components["schemas"]["TransactionUserBriefOut"] | null;
+            /** Dispute Opened By Id */
+            dispute_opened_by_id: number | null;
+            /** Dispute Reason */
+            dispute_reason: string | null;
+            /** Disputed At */
+            disputed_at: string | null;
+            /** Id */
+            id: number;
+            /** Meeting Location */
+            meeting_location: string | null;
+            /** Payment Method */
+            payment_method: string | null;
+            /** Post Id */
+            post_id: number;
+            /** Post Title */
+            post_title: string | null;
+            seller: components["schemas"]["TransactionUserBriefOut"] | null;
+            /** Seller Id */
+            seller_id: number;
+            /** Status */
+            status: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** TransactionResultOut */
+        TransactionResultOut: {
+            /** Success */
+            success: boolean;
+            transaction: components["schemas"]["TransactionOut"];
+        } & {
+            [key: string]: unknown;
+        };
+        /** TransactionUserBriefOut */
+        TransactionUserBriefOut: {
+            /** Avatar Url */
+            avatar_url: string | null;
+            /** Avg Rating */
+            avg_rating: number | null;
+            /** Id */
+            id: number;
+            /** Review Count */
+            review_count: number;
+            /** Username */
+            username: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** UpdateCountry */
+        UpdateCountry: {
+            /** Is Default */
+            is_default?: boolean | null;
+            /** Is Enabled */
+            is_enabled?: boolean | null;
+            /** Name Fr */
+            name_fr?: string | null;
+            /** Phone Code */
+            phone_code?: string | null;
         };
         /** UpdateMe */
         UpdateMe: {
@@ -2524,20 +5748,34 @@ export interface components {
         };
         /** UpdateSettingsRequest */
         UpdateSettingsRequest: {
+            /** Android Store Url */
+            android_store_url?: string | null;
             /** Auto Moderate */
             auto_moderate?: boolean | null;
             /** Default City */
             default_city?: string | null;
+            /** Ios Store Url */
+            ios_store_url?: string | null;
+            /** Latest App Version */
+            latest_app_version?: string | null;
             /** Listing Expiry Days */
             listing_expiry_days?: number | null;
+            /** Maintenance Message */
+            maintenance_message?: string | null;
             /** Maintenance Mode */
             maintenance_mode?: boolean | null;
             /** Max Images */
             max_images?: number | null;
+            /** Min App Version */
+            min_app_version?: string | null;
+            /** Moderation Keywords */
+            moderation_keywords?: string[] | null;
             /** Platform Name */
             platform_name?: string | null;
             /** Privacy Version */
             privacy_version?: string | null;
+            /** Support Email */
+            support_email?: string | null;
             /** Terms Version */
             terms_version?: string | null;
         };
@@ -2588,6 +5826,13 @@ export interface components {
             quartier?: string | null;
             /** Username */
             username?: string | null;
+        };
+        /** UploadedImagesOut */
+        UploadedImagesOut: {
+            /** Uploaded Images */
+            uploaded_images: string[];
+        } & {
+            [key: string]: unknown;
         };
         /** UserCreate */
         UserCreate: {
@@ -2667,6 +5912,59 @@ export interface operations {
             };
         };
     };
+    deletion_page_v1_account_deletion_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+        };
+    };
+    submit_deletion_request_v1_account_deletion_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/x-www-form-urlencoded": components["schemas"]["Body_submit_deletion_request_v1_account_deletion_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_activity_v1_admin_activity_get: {
         parameters: {
             query?: {
@@ -2684,7 +5982,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["AdminActivityOut"];
                 };
             };
             /** @description Validation Error */
@@ -2713,7 +6011,70 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["AdminAnalyticsOut"];
+                };
+            };
+        };
+    };
+    event_series_v1_admin_analytics_events_get: {
+        parameters: {
+            query?: {
+                name?: string | null;
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalyticsEventSeriesOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    funnel_v1_admin_analytics_funnel_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalyticsFunnelOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -2740,7 +6101,40 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["AuditListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    forgot_password_v1_admin_auth_forgot_password_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ForgotPassword"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessMessageOut"];
                 };
             };
             /** @description Validation Error */
@@ -2802,7 +6196,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["MessageOut"];
                 };
             };
         };
@@ -2822,7 +6216,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["StaffOut"];
                 };
             };
         };
@@ -2846,7 +6240,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["SuccessOut"];
                 };
             };
             /** @description Validation Error */
@@ -2880,6 +6274,39 @@ export interface operations {
             };
         };
     };
+    reset_password_v1_admin_auth_reset_password_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetPassword"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessMessageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     ban_user_v1_admin_ban_user__user_id__post: {
         parameters: {
             query?: never;
@@ -2897,7 +6324,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["SuccessMessageOut"];
                 };
             };
             /** @description Validation Error */
@@ -2930,7 +6357,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ConversationAdminListOut"];
                 };
             };
             /** @description Validation Error */
@@ -2961,7 +6388,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ConversationAdminResultOut"];
                 };
             };
             /** @description Validation Error */
@@ -2992,7 +6419,624 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["SuccessMessageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_deletion_requests_v1_admin_deletion_requests_get: {
+        parameters: {
+            query?: {
+                status?: ("pending" | "done" | "rejected") | null;
+                page?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletionRequestListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    process_deletion_request_v1_admin_deletion_requests__request_id__process_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProcessDeletion"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletionRequestProcessOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_delete_city_v1_admin_geo_cities__city_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                city_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeoCityDeletedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_update_city_v1_admin_geo_cities__city_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                city_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CityPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeoCityResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_osm_quartiers_v1_admin_geo_cities__city_id__osm_quartiers_get: {
+        parameters: {
+            query?: {
+                radius_km?: number;
+            };
+            header?: never;
+            path: {
+                city_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeoOsmQuartierListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_list_city_quartiers_v1_admin_geo_cities__city_id__quartiers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                city_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeoCityQuartierListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_create_city_quartier_v1_admin_geo_cities__city_id__quartiers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                city_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuartierIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeoQuartierResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_bulk_city_quartiers_v1_admin_geo_cities__city_id__quartiers_bulk_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                city_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkQuartiers"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeoBulkQuartiersOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_list_countries_v1_admin_geo_countries_get: {
+        parameters: {
+            query?: {
+                search?: string | null;
+                enabled?: boolean | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeoCountryAdminListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_import_countries_v1_admin_geo_countries_import_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeoImportOut"];
+                };
+            };
+        };
+    };
+    admin_update_country_v1_admin_geo_countries__iso2__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                iso2: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCountry"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeoCountryResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_list_cities_v1_admin_geo_countries__iso2__cities_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                iso2: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeoCityAdminListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_create_city_v1_admin_geo_countries__iso2__cities_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                iso2: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CityIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeoCityResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_geo_search_v1_admin_geo_search_get: {
+        parameters: {
+            query: {
+                q: string;
+                country?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeoSearchOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    photo_queue_v1_admin_moderation_photos_get: {
+        parameters: {
+            query?: {
+                reviewed?: boolean;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModerationPhotoListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_photos_v1_admin_moderation_photos_review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewPhotos"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModerationReviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    moderation_queue_v1_admin_moderation_posts_get: {
+        parameters: {
+            query?: {
+                status?: "pending" | "approved" | "rejected";
+                page?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModerationQueueOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_post_v1_admin_moderation_posts__post_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                post_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModerationPostEnvelopeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_post_v1_admin_moderation_posts__post_id__reject_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                post_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RejectPost"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModerationPostEnvelopeOut"];
                 };
             };
             /** @description Validation Error */
@@ -3026,7 +7070,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["NegotiationListOut"];
                 };
             };
             /** @description Validation Error */
@@ -3057,7 +7101,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["NegotiationCancelOut"];
                 };
             };
             /** @description Validation Error */
@@ -3098,7 +7142,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PostListOut"];
                 };
             };
             /** @description Validation Error */
@@ -3129,7 +7173,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PostEnvelopeOut"];
                 };
             };
             /** @description Validation Error */
@@ -3164,7 +7208,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["AdminPostUpdatedOut"];
                 };
             };
             /** @description Validation Error */
@@ -3196,7 +7240,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["AdminPostImageDeletedOut"];
                 };
             };
             /** @description Validation Error */
@@ -3233,7 +7277,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["AdminQuartierListOut"];
                 };
             };
             /** @description Validation Error */
@@ -3266,7 +7310,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["QuartierEnvelopeOut"];
                 };
             };
             /** @description Validation Error */
@@ -3297,7 +7341,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["QuartierDeleteOut"];
                 };
             };
             /** @description Validation Error */
@@ -3332,7 +7376,42 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["QuartierEnvelopeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_merge_quartier_v1_admin_quartiers__quartier_id__merge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                quartier_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MergeQuartier"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeoMergeQuartierOut"];
                 };
             };
             /** @description Validation Error */
@@ -3365,7 +7444,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["AdminReportListOut"];
                 };
             };
             /** @description Validation Error */
@@ -3400,7 +7479,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["AdminReportUpdatedOut"];
                 };
             };
             /** @description Validation Error */
@@ -3435,7 +7514,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["AdminReportUpdatedOut"];
                 };
             };
             /** @description Validation Error */
@@ -3468,7 +7547,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ReviewListOut"];
                 };
             };
             /** @description Validation Error */
@@ -3503,7 +7582,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ReviewResultOut"];
                 };
             };
             /** @description Validation Error */
@@ -3532,7 +7611,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["AdminSettingsResultOut"];
                 };
             };
         };
@@ -3556,7 +7635,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["AdminSettingsUpdatedOut"];
                 };
             };
             /** @description Validation Error */
@@ -3585,7 +7664,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["StaffListOut"];
                 };
             };
         };
@@ -3609,7 +7688,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["StaffDetailOut"];
                 };
             };
             /** @description Validation Error */
@@ -3644,7 +7723,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["StaffDetailOut"];
                 };
             };
             /** @description Validation Error */
@@ -3673,7 +7752,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["AdminStatsOut"];
                 };
             };
         };
@@ -3698,7 +7777,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["TransactionListOut"];
                 };
             };
             /** @description Validation Error */
@@ -3729,7 +7808,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["TransactionDetailResultOut"];
                 };
             };
             /** @description Validation Error */
@@ -3760,7 +7839,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["TransactionDeleteOut"];
                 };
             };
             /** @description Validation Error */
@@ -3795,7 +7874,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["TransactionResultOut"];
                 };
             };
             /** @description Validation Error */
@@ -3830,7 +7909,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["TransactionResultOut"];
                 };
             };
             /** @description Validation Error */
@@ -3868,7 +7947,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["AdminUserListOut"];
                 };
             };
             /** @description Validation Error */
@@ -3899,7 +7978,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["AdminUserDetailResponseOut"];
                 };
             };
             /** @description Validation Error */
@@ -3934,7 +8013,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["AdminUserMessageOut"];
                 };
             };
             /** @description Validation Error */
@@ -3969,7 +8048,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["AdminUserResultOut"];
                 };
             };
             /** @description Validation Error */
@@ -4004,7 +8083,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["AdminUserResultOut"];
                 };
             };
             /** @description Validation Error */
@@ -4038,7 +8117,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ReviewListOut"];
                 };
             };
             /** @description Validation Error */
@@ -4069,7 +8148,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["AdminUserResultOut"];
                 };
             };
             /** @description Validation Error */
@@ -4104,7 +8183,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["SuccessOut"];
                 };
             };
             /** @description Validation Error */
@@ -4133,7 +8212,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["IdentityAppConfigOut"];
                 };
             };
         };
@@ -4219,7 +8298,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["MessageOut"];
                 };
             };
         };
@@ -4239,7 +8318,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["IdentityMeWithConsentOut"];
                 };
             };
         };
@@ -4263,7 +8342,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["SuccessMessageOut"];
                 };
             };
             /** @description Validation Error */
@@ -4296,7 +8375,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["IdentityMeOut"];
                 };
             };
             /** @description Validation Error */
@@ -4329,7 +8408,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["IdentityMeOut"];
                 };
             };
             /** @description Validation Error */
@@ -4362,7 +8441,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["IdentityConsentsOut"];
                 };
             };
             /** @description Validation Error */
@@ -4391,7 +8470,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["IdentityExportLinkOut"];
                 };
             };
         };
@@ -4411,7 +8490,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["IdentityPreferencesOut"];
                 };
             };
         };
@@ -4435,7 +8514,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["IdentityPreferencesOut"];
                 };
             };
             /** @description Validation Error */
@@ -4488,7 +8567,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["MessageOut"];
                 };
             };
             /** @description Validation Error */
@@ -4520,7 +8599,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ConversationListOut"];
                 };
             };
             /** @description Validation Error */
@@ -4553,7 +8632,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ConversationResultOut"];
                 };
             };
             /** @description Validation Error */
@@ -4584,7 +8663,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ConversationResultOut"];
                 };
             };
             /** @description Validation Error */
@@ -4619,7 +8698,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ConversationMessagesOut"];
                 };
             };
             /** @description Validation Error */
@@ -4654,7 +8733,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ChatMessageResultOut"];
                 };
             };
             /** @description Validation Error */
@@ -4685,7 +8764,122 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ConversationMarkReadOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_events_v1_events_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EventBatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalyticsIngestOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    public_quartiers_v1_geo_cities__city_id__quartiers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                city_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeoPublicQuartierListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    public_countries_v1_geo_countries_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeoCountryListOut"];
+                };
+            };
+        };
+    };
+    public_cities_v1_geo_countries__iso2__cities_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                iso2: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeoPublicCityListOut"];
                 };
             };
             /** @description Validation Error */
@@ -4714,7 +8908,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["IdentityLegalOut"];
                 };
             };
         };
@@ -4740,7 +8934,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["NegotiationListOut"];
                 };
             };
             /** @description Validation Error */
@@ -4771,7 +8965,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["NegotiationDetailResultOut"];
                 };
             };
             /** @description Validation Error */
@@ -4802,7 +8996,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["NegotiationDetailResultOut"];
                 };
             };
             /** @description Validation Error */
@@ -4833,7 +9027,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["NegotiationCoachResultOut"];
                 };
             };
             /** @description Validation Error */
@@ -4864,7 +9058,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["NegotiationMeetupResultOut"];
                 };
             };
             /** @description Validation Error */
@@ -4899,7 +9093,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["NegotiationDetailResultOut"];
                 };
             };
             /** @description Validation Error */
@@ -4930,7 +9124,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["NegotiationResultOut"];
                 };
             };
             /** @description Validation Error */
@@ -4965,7 +9159,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["NotificationListOut"];
                 };
             };
             /** @description Validation Error */
@@ -4994,7 +9188,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["NotificationReadAllOut"];
                 };
             };
         };
@@ -5014,7 +9208,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["NotificationUnreadCountOut"];
                 };
             };
         };
@@ -5036,7 +9230,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["NotificationDetailOut"];
                 };
             };
             /** @description Validation Error */
@@ -5081,7 +9275,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PostListOut"] | components["schemas"]["PostOut"][];
                 };
             };
             /** @description Validation Error */
@@ -5114,7 +9308,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PostCreateOut"];
                 };
             };
             /** @description Validation Error */
@@ -5147,7 +9341,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["AiDraftResultOut"];
                 };
             };
             /** @description Validation Error */
@@ -5180,7 +9374,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["BulkDraftOut"];
                 };
             };
             /** @description Validation Error */
@@ -5212,7 +9406,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PostListOut"];
                 };
             };
             /** @description Validation Error */
@@ -5245,7 +9439,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PostListOut"];
                 };
             };
             /** @description Validation Error */
@@ -5278,7 +9472,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PriceSuggestionOut"];
                 };
             };
             /** @description Validation Error */
@@ -5309,7 +9503,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PostDetailOut"];
                 };
             };
             /** @description Validation Error */
@@ -5340,7 +9534,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["SuccessMessageOut"];
                 };
             };
             /** @description Validation Error */
@@ -5375,7 +9569,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PostEnvelopeOut"];
                 };
             };
             /** @description Validation Error */
@@ -5410,7 +9604,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PostImagesAddOut"];
                 };
             };
             /** @description Validation Error */
@@ -5442,7 +9636,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["SuccessMessageOut"];
                 };
             };
             /** @description Validation Error */
@@ -5473,7 +9667,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PostLikeOut"];
                 };
             };
             /** @description Validation Error */
@@ -5504,7 +9698,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PostLikeOut"];
                 };
             };
             /** @description Validation Error */
@@ -5539,7 +9733,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["NegotiationDetailResultOut"];
                 };
             };
             /** @description Validation Error */
@@ -5570,7 +9764,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PriceCheckResultOut"];
                 };
             };
             /** @description Validation Error */
@@ -5601,7 +9795,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PostEnvelopeOut"];
                 };
             };
             /** @description Validation Error */
@@ -5632,7 +9826,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PostShareOut"];
                 };
             };
             /** @description Validation Error */
@@ -5665,7 +9859,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["SuccessOut"];
                 };
             };
             /** @description Validation Error */
@@ -5696,7 +9890,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["SuccessOut"];
                 };
             };
             /** @description Validation Error */
@@ -5727,7 +9921,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["QuartierListOut"];
                 };
             };
             /** @description Validation Error */
@@ -5760,7 +9954,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["QuartierEnvelopeOut"];
                 };
             };
             /** @description Validation Error */
@@ -5793,7 +9987,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ReportCreateOut"];
                 };
             };
             /** @description Validation Error */
@@ -5828,7 +10022,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ReviewResultOut"];
                 };
             };
             /** @description Validation Error */
@@ -5857,7 +10051,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["SavedSearchListOut"];
                 };
             };
         };
@@ -5881,7 +10075,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["SavedSearchEnvelopeOut"];
                 };
             };
             /** @description Validation Error */
@@ -5912,7 +10106,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["SuccessOut"];
                 };
             };
             /** @description Validation Error */
@@ -5947,7 +10141,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["SavedSearchEnvelopeOut"];
                 };
             };
             /** @description Validation Error */
@@ -5980,7 +10174,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["SearchParseOut"];
                 };
             };
             /** @description Validation Error */
@@ -6011,7 +10205,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["SearchSuggestOut"];
                 };
             };
             /** @description Validation Error */
@@ -6044,7 +10238,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["TransactionListOut"];
                 };
             };
             /** @description Validation Error */
@@ -6077,7 +10271,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["TransactionResultOut"];
                 };
             };
             /** @description Validation Error */
@@ -6108,7 +10302,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["TransactionDetailResultOut"];
                 };
             };
             /** @description Validation Error */
@@ -6143,7 +10337,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["TransactionResultOut"];
                 };
             };
             /** @description Validation Error */
@@ -6178,7 +10372,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ReviewResultOut"];
                 };
             };
             /** @description Validation Error */
@@ -6213,7 +10407,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["TransactionResultOut"];
                 };
             };
             /** @description Validation Error */
@@ -6246,7 +10440,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["UploadedImagesOut"];
                 };
             };
             /** @description Validation Error */
@@ -6279,7 +10473,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PresignOut"];
                 };
             };
             /** @description Validation Error */
@@ -6308,7 +10502,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["BlockListOut"];
                 };
             };
         };
@@ -6330,7 +10524,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["BlockStatusOut"];
                 };
             };
             /** @description Validation Error */
@@ -6361,7 +10555,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["BlockStatusOut"];
                 };
             };
             /** @description Validation Error */
@@ -6392,7 +10586,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["IdentityPublicProfileOut"];
                 };
             };
             /** @description Validation Error */
@@ -6426,7 +10620,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ReviewListOut"];
                 };
             };
             /** @description Validation Error */

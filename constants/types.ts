@@ -337,6 +337,8 @@ export interface BdNotificationPrefs {
 export interface BdPrivacyPrefs {
   show_last_name: boolean;
   show_quartier: boolean;
+  /** Consent to usage statistics (opt-in, off by default). */
+  analytics?: boolean;
 }
 
 export interface BdPreferences {

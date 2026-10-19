@@ -1,6 +1,6 @@
 /** Reports and blocks (Phase 3 · trust & safety). */
 import { queryOptions } from '@tanstack/react-query';
-import { ApiError, apiFetch } from '@/lib/api';
+import { ApiError, apiErrorMessage, apiFetch } from '@/lib/api';
 import type { BdBlockedUser, BdReportReason, BdReportTarget } from '@/constants/types';
 
 export interface ReportInput {
@@ -29,14 +29,15 @@ export async function createReport(input: ReportInput): Promise<ReportResult> {
   return { alreadyReported: !!res.already_reported, reportId: res.report_id };
 }
 
-/** French message for a report failure (server details are English). */
+/** Message for a report failure: by code / status, the server's detail otherwise. */
 export function reportErrorMessage(e: unknown): string {
   if (e instanceof ApiError) {
-    if (e.status === 400) return 'Vous ne pouvez pas signaler votre propre contenu.';
+    // "Already reported" is a 201 with `already_reported: true` (see ReportSheet), not an error.
+    if (e.code === 'rate_limited' || e.status === 429) return 'Trop de signalements aujourd’hui. Réessayez demain.';
+    if (e.status === 400) return apiErrorMessage(e, 'Vous ne pouvez pas signaler votre propre contenu.');
     if (e.status === 404) return 'Ce contenu n’existe plus.';
-    if (e.status === 429) return 'Trop de signalements aujourd’hui. Réessayez demain.';
   }
-  return 'Signalement impossible. Réessayez.';
+  return apiErrorMessage(e, 'Signalement impossible. Réessayez.');
 }
 
 export async function blockUser(userId: number): Promise<void> {
@@ -59,13 +60,12 @@ export function blocksQuery() {
 }
 
 /**
- * A 403 from messaging / negotiation endpoints between blocked users carries
- * a French `detail`; other 403s are English. Returns the message to show.
+ * The message for a refusal between blocked users (`X-Error-Code:
+ * user_blocked`), or null for any other error.
  */
 export function blockedMessage(e: unknown): string | null {
-  if (e instanceof ApiError && e.status === 403) {
-    // e.g. "Vous ne pouvez pas contacter cet utilisateur." (blocks.BLOCKED_DETAIL)
-    return /^(not |only )/i.test(e.message) ? null : e.message;
+  if (e instanceof ApiError && e.code === 'user_blocked') {
+    return apiErrorMessage(e, 'Vous ne pouvez pas contacter cet utilisateur.');
   }
   return null;
 }
