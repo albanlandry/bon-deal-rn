@@ -21,7 +21,13 @@ export function postByIdQuery(id: number) {
   });
 }
 
-export type PostSort = 'date_new' | 'date_old' | 'price_low' | 'price_high';
+export type PostSort = 'date_new' | 'date_old' | 'price_low' | 'price_high' | 'distance';
+
+export interface NearParams {
+  lat: number;
+  lng: number;
+  radiusKm: number;
+}
 
 export interface FeedParams {
   search?: string;
@@ -29,15 +35,26 @@ export interface FeedParams {
   minPrice?: number;
   maxPrice?: number;
   condition?: string[];
+  /** Exact pickup quartier. */
+  quartier?: string;
+  /** "Près de moi": only listings within the radius; rows get distance_km. */
+  near?: NearParams;
   sort?: PostSort;
 }
 
 const SORT_PARAM: Record<PostSort, string | null> = {
-  date_new: null, // backend default (created_at desc)
+  // Backend default: created_at desc, or relevance when `search` is set.
+  date_new: null,
   date_old: JSON.stringify([{ id: 'created_at', desc: false }]),
   price_low: JSON.stringify([{ id: 'price', desc: false }]),
   price_high: JSON.stringify([{ id: 'price', desc: true }]),
+  distance: JSON.stringify([{ id: 'distance' }]),
 };
+
+/** Coordinates rounded to ~100 m so query keys stay stable as GPS jitters. */
+export function roundCoord(v: number): number {
+  return Math.round(v * 1000) / 1000;
+}
 
 function buildFeedQuery(params: FeedParams, page: number): string {
   const q = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) });
@@ -46,7 +63,15 @@ function buildFeedQuery(params: FeedParams, page: number): string {
   if (params.minPrice != null) q.set('min_price', String(params.minPrice));
   if (params.maxPrice != null) q.set('max_price', String(params.maxPrice));
   if (params.condition?.length) q.set('condition', params.condition.join(','));
-  const sort = params.sort ? SORT_PARAM[params.sort] : null;
+  if (params.quartier) q.set('quartier', params.quartier);
+  if (params.near) {
+    q.set('near_lat', String(params.near.lat));
+    q.set('near_lng', String(params.near.lng));
+    q.set('radius_km', String(params.near.radiusKm));
+  }
+  // Distance sort needs a position; fall back to the default order otherwise.
+  const sortKey = params.sort === 'distance' && !params.near ? undefined : params.sort;
+  const sort = sortKey ? SORT_PARAM[sortKey] : null;
   if (sort) q.set('sort', sort);
   return q.toString();
 }
@@ -85,9 +110,55 @@ export function likedPostsQuery() {
   });
 }
 
-export async function createPost(form: FormData): Promise<BdPost> {
-  const res = await apiFetch<PostResponse>('/posts', { method: 'POST', body: form });
-  return res.post;
+export interface CreatePostResult {
+  post: BdPost;
+  /** Same owner posted the same title in the last 30 days (warning only). */
+  possibleDuplicateOf: number | null;
+}
+
+/** POST /posts (multipart). Photos go as `image_keys` (direct uploads). */
+export async function createPost(form: FormData): Promise<CreatePostResult> {
+  const res = await apiFetch<PostResponse & { possible_duplicate_of?: number | null }>('/posts', {
+    method: 'POST',
+    body: form,
+  });
+  return { post: res.post, possibleDuplicateOf: res.possible_duplicate_of ?? null };
+}
+
+/** Attach already-uploaded photos (keys from /uploads/presign) to an own post. */
+export async function attachPostImages(
+  postId: number,
+  keys: string[],
+): Promise<{ id: number; status: string }[]> {
+  const res = await apiFetch<{ success: boolean; images: { id: number; status: string }[] }>(
+    `/posts/${postId}/images`,
+    { method: 'POST', body: { keys } },
+  );
+  return res.images;
+}
+
+/** Put a published or expired listing back online for a full period. */
+export async function renewPost(id: number): Promise<BdPost | null> {
+  const res = await apiFetch<{ success: boolean; post?: BdPost }>(`/posts/${id}/renew`, {
+    method: 'POST',
+  });
+  return res.post ?? null;
+}
+
+/** Title suggestions in the user's city (GET /search/suggest, q: 2–60 chars). */
+export function searchSuggestQuery(q: string) {
+  const term = q.trim().slice(0, 60);
+  return queryOptions({
+    queryKey: ['search', 'suggest', term.toLowerCase()],
+    queryFn: async () => {
+      const res = await apiFetch<{ suggestions: string[] }>(
+        `/search/suggest?q=${encodeURIComponent(term)}`,
+      );
+      return res.suggestions ?? [];
+    },
+    enabled: term.length >= 2,
+    staleTime: 60_000,
+  });
 }
 
 export async function updatePost(id: number, patch: Partial<Record<string, unknown>>): Promise<BdPost> {
@@ -119,4 +190,9 @@ export async function priceCheck(postId: number): Promise<BdPriceCheck> {
     { method: 'POST' },
   );
   return res.price_check;
+}
+
+/** Increment the share counter after the native share sheet (fire-and-forget). */
+export async function sharePost(postId: number): Promise<void> {
+  await apiFetch(`/posts/${postId}/share`, { method: 'POST' });
 }

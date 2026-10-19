@@ -1,26 +1,18 @@
 // components/organisms/FavoritesList.tsx
-// Shared liked-posts list + states + optimistic remove. Used by both the
-// favorites tab and the stack favorites screen (they differ only in header).
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+// Liked posts grid shared by the Favoris tab and the stack favorites screen.
+// Unlike is optimistic (removed instantly) with an "Annuler" undo toast that
+// re-likes the post (Doherty: no confirm dialog, reversible action instead).
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import ProductCard from '../molecules/ProductCard';
-import { showToast } from '../atoms/Toast';
-import { theme } from '../../utils/theme';
+import { useRouter } from 'expo-router';
+import React, { useCallback } from 'react';
 import { ApiError } from '@/lib/api';
-import { likedPostsQuery, unlikePost } from '@/lib/api/posts';
-import { toCardProps } from '@/lib/mapPost';
+import { applyLikeLocally } from '@/lib/api/likeToggle';
+import { likedPostsQuery, likePost, unlikePost } from '@/lib/api/posts';
+import { haptics } from '@/lib/haptics';
 import type { BdPost, BdPostListResponse } from '@/constants/types';
+import { showToast } from '../atoms/Toast';
+import EmptyState, { ErrorState } from '../molecules/EmptyState';
+import ListingGrid from './ListingGrid';
 
 const LIKED_KEY = ['posts', 'liked'] as const;
 
@@ -33,176 +25,95 @@ function errMessage(e: unknown): string {
   return 'Une erreur est survenue. Réessayez.';
 }
 
-export default function FavoritesList() {
+export default function FavoritesList({ header }: { header?: React.ReactElement | null }) {
   const router = useRouter();
   const qc = useQueryClient();
   const liked = useQuery(likedPostsQuery());
   const posts = liked.data?.posts ?? [];
 
+  const relike = useMutation({
+    mutationFn: (post: BdPost) => likePost(post.id),
+    onMutate: async (post: BdPost) => {
+      await qc.cancelQueries({ queryKey: LIKED_KEY });
+      qc.setQueryData<BdPostListResponse>(LIKED_KEY, (old) =>
+        old && !old.posts.some((p) => p.id === post.id)
+          ? { ...old, posts: [{ ...post, liked_by_me: true }, ...old.posts], total_posts: old.total_posts + 1 }
+          : old,
+      );
+      applyLikeLocally(qc, post.id, true);
+    },
+    onError: (e) => {
+      if (e instanceof ApiError && e.status === 400) return; // already liked
+      showToast.error('Échec', errMessage(e));
+    },
+    onSettled: (_d, _e, post) => {
+      qc.invalidateQueries({ queryKey: LIKED_KEY });
+      qc.invalidateQueries({ queryKey: ['post', post.id] });
+    },
+  });
+
   const unlike = useMutation({
-    mutationFn: (id: number) => unlikePost(id),
-    onMutate: async (id: number) => {
+    mutationFn: (post: BdPost) => unlikePost(post.id),
+    onMutate: async (post: BdPost) => {
       await qc.cancelQueries({ queryKey: LIKED_KEY });
       const prev = qc.getQueryData<BdPostListResponse>(LIKED_KEY);
       qc.setQueryData<BdPostListResponse>(LIKED_KEY, (old) =>
         old
           ? {
               ...old,
-              posts: old.posts.filter((p) => p.id !== id),
+              posts: old.posts.filter((p) => p.id !== post.id),
               total_posts: Math.max(0, old.total_posts - 1),
             }
           : old,
       );
+      applyLikeLocally(qc, post.id, false);
       return { prev };
     },
-    onError: (e, _id, ctx) => {
+    onSuccess: (_d, post) => {
+      showToast.undo('Retiré des favoris', () => relike.mutate(post));
+    },
+    onError: (e, post, ctx) => {
       // 400 = already unliked; keep the optimistic removal.
       if (e instanceof ApiError && e.status === 400) return;
       if (ctx?.prev) qc.setQueryData(LIKED_KEY, ctx.prev);
+      applyLikeLocally(qc, post.id, true);
       showToast.error('Échec', errMessage(e));
     },
-    onSettled: (_d, _e, id) => {
-      qc.invalidateQueries({ queryKey: LIKED_KEY });
-      qc.invalidateQueries({ queryKey: ['post', id] });
+    onSettled: (_d, _e, post) => {
+      qc.invalidateQueries({ queryKey: ['post', post.id] });
     },
   });
 
-  const handleRemove = (post: BdPost) => {
-    unlike.mutate(post.id);
-  };
+  const onToggleLike = useCallback(
+    (post: BdPost) => {
+      haptics.light();
+      unlike.mutate(post);
+    },
+    [unlike],
+  );
 
-  const renderProduct = ({ item }: { item: BdPost }) => {
-    const card = toCardProps(item);
-    return (
-      <View style={styles.productWrapper}>
-        <ProductCard
-          {...card}
-          onPress={() =>
-            router.push({ pathname: '/item-details', params: { id: String(item.id) } })
-          }
-        />
-        <TouchableOpacity style={styles.removeButton} onPress={() => handleRemove(item)}>
-          <Ionicons name="heart" size={20} color="#FF6B6B" />
-        </TouchableOpacity>
-      </View>
-    );
-  };
-
-  if (liked.isLoading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator color={theme.colors.primary} />
-      </View>
-    );
-  }
-
-  if (liked.isError) {
-    return (
-      <View style={styles.centered}>
-        <Ionicons name="alert-circle-outline" size={56} color="#FF6B6B" />
-        <Text style={styles.emptyTitle}>Impossible de charger vos favoris</Text>
-        <TouchableOpacity style={styles.browseButton} onPress={() => liked.refetch()}>
-          <Text style={styles.browseButtonText}>Réessayer</Text>
-        </TouchableOpacity>
-      </View>
-    );
+  if (liked.isError && posts.length === 0) {
+    return <ErrorState message="Impossible de charger vos favoris." onRetry={() => liked.refetch()} />;
   }
 
   return (
-    <FlatList
-      data={posts}
-      renderItem={renderProduct}
-      keyExtractor={(item) => String(item.id)}
-      contentContainerStyle={[styles.listContent, posts.length === 0 && styles.emptyContainer]}
-      showsVerticalScrollIndicator={false}
-      refreshControl={
-        <RefreshControl
-          refreshing={liked.isRefetching}
-          onRefresh={() => liked.refetch()}
-          tintColor={theme.colors.primary}
-        />
-      }
-      ItemSeparatorComponent={() => <View style={styles.separator} />}
+    <ListingGrid
+      posts={posts}
+      loading={liked.isLoading}
+      refreshing={liked.isRefetching}
+      onRefresh={() => liked.refetch()}
+      onToggleLike={onToggleLike}
+      showState
+      ListHeaderComponent={header}
       ListEmptyComponent={
-        <View style={styles.emptyContainer}>
-          <Ionicons name="heart-outline" size={64} color={theme.colors.gray} />
-          <Text style={styles.emptyTitle}>Aucun favori</Text>
-          <Text style={styles.emptyMessage}>
-            Explorez les annonces et ajoutez vos coups de cœur ici.
-          </Text>
-          <TouchableOpacity style={styles.browseButton} onPress={() => router.push('/(tabs)/home')}>
-            <Text style={styles.browseButtonText}>Parcourir les annonces</Text>
-          </TouchableOpacity>
-        </View>
+        <EmptyState
+          icon="heart-outline"
+          title="Aucun favori pour l’instant"
+          message="Touchez le cœur d’une annonce pour la retrouver ici."
+          actionLabel="Parcourir les annonces"
+          onAction={() => router.push('/(tabs)/home')}
+        />
       }
     />
   );
 }
-
-const styles = StyleSheet.create({
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: theme.spacing.xl,
-  },
-  listContent: {
-    padding: theme.spacing.lg,
-  },
-  productWrapper: {
-    position: 'relative',
-  },
-  removeButton: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  separator: {
-    height: 1,
-    backgroundColor: theme.colors.grayLight,
-    marginVertical: theme.spacing.sm,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 80,
-    paddingHorizontal: theme.spacing.xl,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    marginTop: theme.spacing.md,
-    marginBottom: theme.spacing.sm,
-    textAlign: 'center',
-  },
-  emptyMessage: {
-    fontSize: 14,
-    color: theme.colors.gray,
-    textAlign: 'center',
-    marginBottom: theme.spacing.xl,
-  },
-  browseButton: {
-    backgroundColor: theme.colors.primary,
-    borderRadius: 12,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-  },
-  browseButtonText: {
-    color: theme.colors.white,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-});

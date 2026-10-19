@@ -1,175 +1,124 @@
-// app/notification-settings.tsx - Notification Settings Screen
+// app/notification-settings.tsx — Notifications (MB-NOT-04)
+// Stored on the server (GET/PUT /auth/me/preferences), so they filter the
+// pushes BonDeal sends to every device. In-app notifications are always
+// kept. Defaults (default effect, §1.5 / §2.3): everything ON except
+// marketing. Moderation messages are always delivered.
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import React from 'react';
+import { Linking, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { showToast } from '../components/atoms/Toast';
-import { theme } from '../utils/theme';
+import { useTheme } from '@/theme';
+import { AppText, Button, ErrorState, ListGroup, ListRow, ScreenHeader, Skeleton } from '@/components/ui';
+import { usePreferences } from '@/lib/usePreferences';
+import type { BdNotificationPrefs } from '@/constants/types';
 
-interface NotificationSetting {
-  id: string;
-  title: string;
-  description: string;
-  enabled: boolean;
-}
+type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
-const notificationSettings: NotificationSetting[] = [
+const GROUPS: { title: string; items: { id: keyof BdNotificationPrefs; title: string; description: string; icon: IconName }[] }[] = [
   {
-    id: 'push',
-    title: 'Notifications push',
-    description: 'Recevoir des notifications sur votre appareil',
-    enabled: true,
+    title: 'Échanges',
+    items: [
+      {
+        id: 'messages',
+        title: 'Nouveaux messages',
+        description: 'Quand un acheteur ou un vendeur vous écrit',
+        icon: 'chatbubble-outline',
+      },
+      {
+        id: 'offers',
+        title: 'Offres et négociations',
+        description: 'Offres reçues, contre-offres, offres acceptées ou refusées',
+        icon: 'pricetag-outline',
+      },
+    ],
   },
   {
-    id: 'messages',
-    title: 'Nouveaux messages',
-    description: 'Notifications quand vous recevez un message',
-    enabled: true,
+    title: 'Mes annonces et recherches',
+    items: [
+      {
+        id: 'listings',
+        title: 'Expiration de mes annonces',
+        description: 'Trois jours avant l’expiration, puis à l’expiration',
+        icon: 'hourglass-outline',
+      },
+      {
+        id: 'saved_searches',
+        title: 'Alertes de recherche',
+        description: 'Nouvelles annonces qui correspondent à vos recherches enregistrées',
+        icon: 'bookmark-outline',
+      },
+    ],
   },
   {
-    id: 'likes',
-    title: 'Likes sur vos annonces',
-    description: 'Notifications quand quelqu\'un aime vos produits',
-    enabled: true,
-  },
-  {
-    id: 'views',
-    title: 'Vues sur vos annonces',
-    description: 'Notifications quand quelqu\'un consulte vos produits',
-    enabled: false,
-  },
-  {
-    id: 'offers',
-    title: 'Nouvelles offres',
-    description: 'Notifications pour les offres sur vos produits',
-    enabled: true,
-  },
-  {
-    id: 'sales',
-    title: 'Ventes confirmées',
-    description: 'Notifications quand une vente est confirmée',
-    enabled: true,
+    title: 'BonDeal',
+    items: [
+      {
+        id: 'marketing',
+        title: 'Actualités et bons plans',
+        description: 'Nouveautés et conseils de BonDeal. Désactivé par défaut.',
+        icon: 'megaphone-outline',
+      },
+    ],
   },
 ];
 
 export default function NotificationSettingsScreen() {
-  const router = useRouter();
-  const [settings, setSettings] = useState(notificationSettings);
-
-  const toggleSetting = (id: string) => {
-    setSettings(
-      settings.map(setting =>
-        setting.id === id ? { ...setting, enabled: !setting.enabled } : setting
-      )
-    );
-  };
-
-  const handleSave = () => {
-    // TODO: Save settings to API
-    showToast.success('Paramètres sauvegardés', 'Vos préférences de notification ont été mises à jour.');
-    router.back();
-  };
+  const t = useTheme();
+  const { prefs, isLoading, isError, refetch, setNotification } = usePreferences();
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="chevron-back" size={24} color="#000" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Notifications</Text>
-        <View style={{ width: 24 }} />
-      </View>
-
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <View style={styles.content}>
-          {settings.map((setting) => (
-            <View key={setting.id} style={styles.settingItem}>
-              <View style={styles.settingContent}>
-                <Text style={styles.settingTitle}>{setting.title}</Text>
-                <Text style={styles.settingDescription}>{setting.description}</Text>
-              </View>
-              <Switch
-                value={setting.enabled}
-                onValueChange={() => toggleSetting(setting.id)}
-                trackColor={{ false: '#e0e0e0', true: theme.colors.primary + '80' }}
-                thumbColor={setting.enabled ? theme.colors.primary : '#f4f3f4'}
-              />
-            </View>
-          ))}
+    <SafeAreaView style={[styles.container, { backgroundColor: t.colors.canvas }]}>
+      <ScreenHeader title="Notifications" />
+      <ScrollView contentContainerStyle={styles.content}>
+        {isLoading ? (
+          <View style={styles.loading}>
+            {[0, 1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} height={56} radius={t.radius.md} />
+            ))}
+          </View>
+        ) : isError || !prefs ? (
+          <ErrorState message="Impossible de charger vos réglages." onRetry={() => refetch()} />
+        ) : (
+          GROUPS.map((g) => (
+            <ListGroup key={g.title} title={g.title}>
+              {g.items.map((item, idx) => (
+                <ListRow
+                  key={item.id}
+                  icon={item.icon}
+                  title={item.title}
+                  subtitle={item.description}
+                  toggle={{ value: !!prefs.notifications[item.id], onChange: (v) => setNotification(item.id, v) }}
+                  last={idx === g.items.length - 1}
+                />
+              ))}
+            </ListGroup>
+          ))
+        )}
+        <View style={styles.note}>
+          <Ionicons name="information-circle-outline" size={16} color={t.colors.inkMuted} />
+          <AppText variant="caption" color="inkMuted" style={styles.flex}>
+            Ces choix s’appliquent aux notifications push sur tous vos appareils. Tout reste visible dans
+            l’onglet Notifications de l’application. Les messages de l’équipe de modération sont toujours envoyés.
+          </AppText>
         </View>
-
-        {/* Save Button */}
-        <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-          <Text style={styles.saveButtonText}>Enregistrer</Text>
-        </TouchableOpacity>
+        <Button
+          label="Autorisations du téléphone"
+          icon="phone-portrait-outline"
+          variant="ghost"
+          size="sm"
+          onPress={() => Linking.openSettings().catch(() => {})}
+          style={styles.system}
+        />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.white,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#333',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
-    padding: theme.spacing.lg,
-  },
-  settingItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  settingContent: {
-    flex: 1,
-    marginRight: theme.spacing.md,
-  },
-  settingTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-  },
-  settingDescription: {
-    fontSize: 14,
-    color: theme.colors.gray,
-    lineHeight: 20,
-  },
-  saveButton: {
-    backgroundColor: theme.colors.primary,
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginHorizontal: theme.spacing.lg,
-    marginTop: theme.spacing.lg,
-    marginBottom: 40,
-  },
-  saveButtonText: {
-    color: theme.colors.white,
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  container: { flex: 1 },
+  content: { padding: 16, paddingBottom: 32 },
+  loading: { gap: 12 },
+  note: { flexDirection: 'row', gap: 8, alignItems: 'flex-start', paddingHorizontal: 4 },
+  flex: { flex: 1 },
+  system: { alignSelf: 'flex-start', marginTop: 8 },
 });
-

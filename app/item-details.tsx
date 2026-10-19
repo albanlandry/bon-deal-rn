@@ -1,116 +1,101 @@
-// app/item-details.tsx - Item details screen
+// app/item-details.tsx — Item details (doc §4.1): full-bleed gallery, price
+// first, seller trust card, safety banner, similar items, sticky CTA bar.
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import React, { useState } from 'react';
+import { Href, useLocalSearchParams, useRouter } from 'expo-router';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import React, { useMemo, useState } from 'react';
+import { FlatList, ScrollView, Share, StyleSheet, View } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  ActivityIndicator,
-  Dimensions,
-  Image,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import Carousel from 'react-native-reanimated-carousel';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { theme } from '../utils/theme';
-import { showToast } from '../components/atoms/Toast';
+  AppText,
+  Badge,
+  Button,
+  ErrorState,
+  IconButton,
+  ListingCard,
+  Price,
+  SafetyBanner,
+  SellerCard,
+  Skeleton,
+  showToast,
+} from '@/components/ui';
+import ItemGallery from '@/components/organisms/ItemGallery';
+import ItemPriceCheckCard from '@/components/molecules/ItemPriceCheckCard';
+import ReportSheet from '@/components/organisms/ReportSheet';
+import { blockedMessage } from '@/lib/api/safety';
 import { useAuth } from '@/contexts/AuthContext';
-import { postByIdQuery, priceCheck, likePost, unlikePost } from '@/lib/api/posts';
+import {
+  likePost,
+  postByIdQuery,
+  postsInfiniteQuery,
+  priceCheck,
+  sharePost,
+  unlikePost,
+} from '@/lib/api/posts';
 import { getOrCreateConversation } from '@/lib/api/conversations';
 import { ApiError } from '@/lib/api';
-import { formatAmount, formatRelativeTime } from '@/lib/format';
+import { formatRelativeTime } from '@/lib/format';
+import { isReady, largeUrl } from '@/lib/images';
+import { haptics } from '@/lib/haptics';
+import { AGE_LABELS, categoryLabel, conditionLabel } from '@/constants/catalog';
 import type { BdPost, BdPriceCheck } from '@/constants/types';
-
-const { width: screenWidth } = Dimensions.get('window');
-
-// --- Bon prix ? (ephemeral verdict card) ------------------------------------
-
-const VERDICT_META = {
-  bonne_affaire: { label: 'Bonne affaire', color: '#28A745' },
-  prix_correct: { label: 'Prix correct', color: '#444' },
-  trop_cher: { label: 'Prix au-dessus du marché', color: '#D9534F' },
-} as const;
+import { createStyles, useStyles, useTheme } from '@/theme';
 
 function priceCheckErrorMessage(e: unknown): string {
   const status = e instanceof ApiError ? e.status : 0;
   if (status === 503) return "L'assistant prix n'est pas disponible pour le moment.";
   if (status === 429) return 'Trop de vérifications — réessayez plus tard.';
   if (status === 409) return "Cette annonce n'a pas de prix à vérifier.";
-  return "Impossible de vérifier le prix. Réessayez.";
+  return 'Impossible de vérifier le prix. Réessayez.';
 }
 
-function confidenceLabel(c: number): string {
-  if (c >= 0.7) return 'Avis fiable';
-  if (c >= 0.4) return 'Avis indicatif';
-  return 'À prendre avec prudence';
+function plural(n: number, word: string) {
+  return `${n} ${word}${n > 1 ? 's' : ''}`;
 }
 
-function BonPrixCard({ check, onDismiss }: { check: BdPriceCheck; onDismiss: () => void }) {
-  const meta = VERDICT_META[check.verdict];
-  const m = check.market;
-  const span = m ? m.range_max - m.range_min : 0;
-  const dotPos = m
-    ? Math.min(Math.max(span > 0 ? (check.listed_price - m.range_min) / span : 0.5, 0), 1)
-    : 0.5;
-  const deltaLine =
-    check.delta_pct != null
-      ? ` · ${check.delta_pct > 0 ? '+' : ''}${Math.round(check.delta_pct)}% vs marché`
-      : '';
-
+function DetailsSkeleton() {
+  const t = useTheme();
   return (
-    <View style={styles.bonprixCard}>
-      <View style={styles.bonprixTitleRow}>
-        <Text style={styles.bonprixTitle}>💡 Bon prix ?</Text>
-        <Text style={styles.bonprixPrivate}>Visible par vous seul</Text>
+    <SafeAreaView edges={['bottom']} style={{ flex: 1, backgroundColor: t.colors.canvas }}>
+      <Skeleton height={340} radius={0} />
+      <View style={{ padding: 16, gap: 12 }}>
+        <Skeleton width="40%" height={28} />
+        <Skeleton width="85%" height={20} />
+        <Skeleton width="60%" height={14} />
+        <Skeleton height={80} style={{ marginTop: 12 }} />
+        <Skeleton height={120} />
       </View>
-      <Text style={[styles.bonprixVerdict, { color: meta.color }]}>{meta.label}</Text>
-      <Text style={styles.bonprixRationale}>{check.rationale_fr}</Text>
-      {m ? (
-        <>
-          <Text style={styles.bonprixMeta}>
-            Marché : {formatAmount(m.range_min)} – {formatAmount(m.range_max)} ·{' '}
-            {m.comparable_count} annonce{m.comparable_count > 1 ? 's' : ''} similaire
-            {m.comparable_count > 1 ? 's' : ''}
-            {deltaLine}
-          </Text>
-          <View style={styles.bonprixBarTrack}>
-            <View style={[styles.bonprixBarDot, { left: `${dotPos * 100}%` }]} />
-          </View>
-        </>
-      ) : (
-        <Text style={styles.bonprixMeta}>
-          Peu d'annonces similaires — avis basé sur l'annonce elle-même
-        </Text>
-      )}
-      {check.condition_flags_fr.map((flag, i) => (
-        <Text key={i} style={styles.bonprixFlag}>⚠ {flag}</Text>
-      ))}
-      {!!check.warning && <Text style={styles.bonprixWarning}>{check.warning}</Text>}
-      <View style={styles.bonprixFooterRow}>
-        <Text style={styles.bonprixMeta}>{confidenceLabel(check.confidence)}</Text>
-        <TouchableOpacity onPress={onDismiss}>
-          <Text style={styles.bonprixDismiss}>Fermer</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
 export default function ItemDetailsScreen() {
   const router = useRouter();
+  const t = useTheme();
+  const styles = useStyles(makeStyles);
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { user } = useAuth();
   const postId = Number(id);
-
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [bonPrix, setBonPrix] = useState<BdPriceCheck | null>(null);
-
   const queryClient = useQueryClient();
+
+  const [bonPrix, setBonPrix] = useState<BdPriceCheck | null>(null);
+  const [reportOpen, setReportOpen] = useState(false);
   const { data: post, isLoading, error, refetch } = useQuery(postByIdQuery(postId));
+
+  // Similar items: same first category, current post excluded.
+  const firstCat = post?.categories?.[0];
+  const similarQuery = useInfiniteQuery({
+    ...postsInfiniteQuery({ categories: firstCat ? [firstCat] : undefined }),
+    enabled: !!firstCat,
+  });
+  const similar = useMemo(
+    () =>
+      (similarQuery.data?.pages.flatMap((p) => p.posts) ?? [])
+        .filter((p) => p.id !== postId && p.state === 'published')
+        .slice(0, 10),
+    [similarQuery.data, postId],
+  );
 
   const bonPrixMutation = useMutation({
     mutationFn: () => priceCheck(postId),
@@ -118,11 +103,11 @@ export default function ItemDetailsScreen() {
     onError: (e: any) => showToast.error('Bon prix ?', priceCheckErrorMessage(e)),
   });
 
-  // Like/unlike with optimistic cache update; post.liked_by_me is the source of truth.
+  // Like/unlike with optimistic cache update (Doherty); post.liked_by_me is the source of truth.
   const likeMutation = useMutation({
-    mutationFn: (currentlyLiked: boolean) =>
-      currentlyLiked ? unlikePost(postId) : likePost(postId),
+    mutationFn: (currentlyLiked: boolean) => (currentlyLiked ? unlikePost(postId) : likePost(postId)),
     onMutate: async (currentlyLiked: boolean) => {
+      haptics.light();
       await queryClient.cancelQueries({ queryKey: ['post', postId] });
       const prev = queryClient.getQueryData<BdPost>(['post', postId]);
       queryClient.setQueryData<BdPost>(['post', postId], (old) =>
@@ -151,659 +136,345 @@ export default function ItemDetailsScreen() {
   const contactMutation = useMutation({
     mutationFn: () => getOrCreateConversation(postId),
     onSuccess: (conv) => {
-      router.push({
-        pathname: '/chatroom',
-        params: { conversationId: String(conv.id) },
-      });
+      router.push({ pathname: '/chatroom', params: { conversationId: String(conv.id) } });
     },
     onError: (e: any) => {
-      showToast.error('Échec', e?.message || "Impossible d'ouvrir la conversation.");
+      // 403 between blocked users carries a French server message.
+      const blocked = blockedMessage(e);
+      showToast.error(blocked ? 'Contact impossible' : 'Échec', blocked ?? (e?.message || "Impossible d'ouvrir la conversation."));
     },
   });
 
+  const handleShare = async () => {
+    if (!post) return;
+    try {
+      const priceText = post.is_free ? 'Gratuit' : post.price != null ? `${post.price} FCFA` : '';
+      const res = await Share.share({
+        message: `${post.title}${priceText ? ` — ${priceText}` : ''} sur BonDeal`,
+      });
+      if (res.action === Share.sharedAction) sharePost(post.id).catch(() => {});
+    } catch {
+      // user cancelled / share unavailable
+    }
+  };
+
   if (!Number.isFinite(postId) || postId <= 0) {
     return (
-      <SafeAreaView style={styles.centered}>
-        <Ionicons name="alert-circle-outline" size={48} color="#FF6B6B" />
-        <Text style={styles.stateText}>Article introuvable.</Text>
-        <TouchableOpacity style={styles.stateButton} onPress={() => router.back()}>
-          <Text style={styles.stateButtonText}>Retour</Text>
-        </TouchableOpacity>
+      <SafeAreaView style={styles.screen}>
+        <ErrorState message="Cette annonce est introuvable." />
+        <Button label="Retour" variant="secondary" onPress={() => router.back()} style={styles.backBtn} />
       </SafeAreaView>
     );
   }
 
-  if (isLoading) {
-    return (
-      <SafeAreaView style={styles.centered}>
-        <ActivityIndicator color={theme.colors.primary} />
-      </SafeAreaView>
-    );
-  }
+  if (isLoading) return <DetailsSkeleton />;
 
   if (error || !post) {
     return (
-      <SafeAreaView style={styles.centered}>
-        <Ionicons name="alert-circle-outline" size={48} color="#FF6B6B" />
-        <Text style={styles.stateText}>Impossible de charger cet article.</Text>
-        <TouchableOpacity style={styles.stateButton} onPress={() => refetch()}>
-          <Text style={styles.stateButtonText}>Réessayer</Text>
-        </TouchableOpacity>
+      <SafeAreaView style={styles.screen}>
+        <ErrorState message="Impossible de charger cette annonce." onRetry={() => refetch()} />
+        <Button label="Retour" variant="ghost" onPress={() => router.back()} style={styles.backBtn} />
       </SafeAreaView>
     );
   }
 
-  const imageUrls = post.images.map((img) => img.url);
+  const imageUrls = post.images.filter(isReady).map((img) => largeUrl(img)!).filter(Boolean);
   const isOwner = !!user && user.id === post.owner_id;
-  const priceLabel = post.is_free ? 'Gratuit' : formatAmount(post.price);
+  const available = post.state === 'published';
+  const canOffer = !isOwner && available && post.allow_negotiation && !post.is_free;
+  const condition = conditionLabel(post.condition);
+  const age = post.age_bucket ? AGE_LABELS[post.age_bucket] : null;
   const locationText = [post.pickup_quartier, post.city].filter(Boolean).join(', ');
+  const stateBadge =
+    post.state === 'sold'
+      ? { label: 'Vendu', tone: 'neutral' as const }
+      : post.state === 'reserved'
+        ? { label: 'Réservé', tone: 'warning' as const }
+        : post.state === 'draft'
+          ? { label: 'Brouillon', tone: 'neutral' as const }
+          : post.state === 'unpublished'
+            ? { label: 'Masquée', tone: 'neutral' as const }
+            : null;
 
-  const handleImagePress = (index: number) => {
-    setCurrentImageIndex(index);
-    setIsFullscreen(true);
-  };
+  const facts = [
+    { icon: 'pricetags-outline' as const, label: 'Catégorie', value: categoryLabel(post.categories[0]) },
+    condition ? { icon: 'sparkles-outline' as const, label: 'État', value: condition } : null,
+    age ? { icon: 'time-outline' as const, label: 'Âge', value: age } : null,
+  ].filter(Boolean) as { icon: React.ComponentProps<typeof Ionicons>['name']; label: string; value: string }[];
 
-  const handleNegotiate = () => {
-    router.push({ pathname: '/make-offer', params: { postId: String(post.id) } });
-  };
-
-  return (
-    <SafeAreaView style={styles.container}>
-      {/* Fullscreen Carousel Modal */}
-      {isFullscreen && imageUrls.length > 0 && (
-        <View style={styles.fullscreenContainer}>
-          <TouchableOpacity
-            style={styles.closeButton}
-            onPress={() => setIsFullscreen(false)}>
-            <Ionicons name="close" size={24} color="white" />
-          </TouchableOpacity>
-
-          <Carousel
-            loop
-            width={screenWidth}
-            height={screenWidth}
-            autoPlay={false}
-            data={imageUrls}
-            defaultIndex={currentImageIndex}
-            scrollAnimationDuration={300}
-            onSnapToItem={(index) => setCurrentImageIndex(index)}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={styles.fullscreenImageContainer}
-                onPress={() => setIsFullscreen(false)}
-                activeOpacity={1}>
-                <Image source={{ uri: item }} style={styles.fullscreenImage} />
-              </TouchableOpacity>
-            )}
-          />
-
-          <View style={styles.fullscreenPagination}>
-            {imageUrls.map((_, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.fullscreenPaginationDot,
-                  index === currentImageIndex && styles.fullscreenPaginationDotActive,
-                ]}
-              />
-            ))}
-          </View>
-        </View>
-      )}
-
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.headerButton} onPress={() => router.back()}>
-          <Ionicons name="chevron-back" size={24} color="#000" />
-        </TouchableOpacity>
-
-        <View style={styles.sellerInfo}>
-          <View style={styles.sellerAvatar}>
-            <Ionicons name="person" size={20} color="#999" />
-          </View>
-          <View style={styles.sellerDetails}>
-            <Text style={styles.sellerName} numberOfLines={1}>
-              {post.owner_username ?? 'Vendeur'}
-            </Text>
-            <Text style={styles.postedTime}>
-              Publié {formatRelativeTime(post.created_at)}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.headerActions}>
-          <TouchableOpacity
-            style={styles.headerButton}
-            onPress={() => router.push('/(tabs)/home')}>
-            <Ionicons name="home" size={24} color="#000" />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}>
-        {/* Image Carousel */}
-        <View style={styles.imageContainer}>
-          {imageUrls.length > 0 ? (
-            <>
-              <Carousel
-                loop
-                width={screenWidth}
-                height={300}
-                autoPlay={false}
-                data={imageUrls}
-                scrollAnimationDuration={300}
-                onSnapToItem={(index) => setCurrentImageIndex(index)}
-                renderItem={({ item, index }) => (
-                  <TouchableOpacity
-                    onPress={() => handleImagePress(index)}
-                    activeOpacity={0.9}>
-                    <Image source={{ uri: item }} style={styles.productImage} />
-                  </TouchableOpacity>
-                )}
-              />
-              <View style={styles.paginationContainer}>
-                {imageUrls.map((_, index) => (
-                  <View
-                    key={index}
-                    style={[
-                      styles.paginationDot,
-                      index === currentImageIndex && styles.paginationDotActive,
-                    ]}
-                  />
-                ))}
-              </View>
-            </>
-          ) : (
-            <View style={styles.imagePlaceholder}>
-              <Ionicons name="image-outline" size={56} color="#ccc" />
-            </View>
-          )}
-        </View>
-
-        {/* Product Info */}
-        <View style={styles.productInfo}>
-          <Text style={styles.productTitle}>{post.title}</Text>
-
-          <View style={styles.engagementContainer}>
-            <View style={styles.engagementItem}>
-              <Ionicons name="heart" size={16} color="#FF6B6B" />
-              <Text style={styles.engagementText}>{post.likes_count}</Text>
-            </View>
-            <View style={styles.engagementItem}>
-              <Ionicons name="eye" size={16} color="#666" />
-              <Text style={styles.engagementText}>{post.views_count}</Text>
-            </View>
-            <View style={styles.engagementItem}>
-              <Ionicons name="pricetag" size={16} color="#666" />
-              <Text style={styles.engagementText}>{post.offer_count}</Text>
-            </View>
-          </View>
-
-          <Text style={styles.productDescription}>{post.description}</Text>
-
-          {/* Bon prix ? */}
-          {!post.is_free && !!post.price && !bonPrix && (
-            <TouchableOpacity
-              style={styles.bonprixPill}
-              onPress={() => bonPrixMutation.mutate()}
-              disabled={bonPrixMutation.isPending}>
-              {bonPrixMutation.isPending ? (
-                <View style={styles.bonprixPillRow}>
-                  <ActivityIndicator size="small" color="#6B4FA1" />
-                  <Text style={styles.bonprixPillText}> Analyse du marché…</Text>
-                </View>
-              ) : (
-                <Text style={styles.bonprixPillText}>💡 C'est un bon prix ?</Text>
-              )}
-            </TouchableOpacity>
-          )}
-          {bonPrix && <BonPrixCard check={bonPrix} onDismiss={() => setBonPrix(null)} />}
-
-          {/* Location */}
-          {(locationText || post.pickup_location_note) && (
-            <View style={styles.locationSection}>
-              <Text style={styles.sectionTitle}>Localisation</Text>
-              <View style={styles.locationCard}>
-                <Ionicons name="location" size={20} color={theme.colors.primary} />
-                <View style={styles.locationTextWrap}>
-                  {!!locationText && (
-                    <Text style={styles.locationPrimary}>{locationText}</Text>
-                  )}
-                  {!!post.pickup_location_note && (
-                    <Text style={styles.locationNote}>{post.pickup_location_note}</Text>
-                  )}
-                </View>
-              </View>
-            </View>
-          )}
-        </View>
-      </ScrollView>
-
-      {/* Bottom Action Bar */}
-      <View style={styles.bottomBar}>
-        <View style={styles.bottomLeft}>
-          <TouchableOpacity
-            style={styles.actionButton}
-            disabled={likeMutation.isPending}
-            onPress={() => likeMutation.mutate(post.liked_by_me)}>
-            <Ionicons
-              name={post.liked_by_me ? 'heart' : 'heart-outline'}
-              size={24}
-              color={post.liked_by_me ? '#FF6B6B' : '#666'}
-            />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.bottomCenter}>
-          <Text style={styles.price}>{priceLabel}</Text>
-          {post.allow_negotiation && !isOwner && (
-            <TouchableOpacity onPress={handleNegotiate}>
-              <Text style={styles.negotiateText}>Negotier</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {isOwner ? (
-          <View style={[styles.contactButton, styles.contactButtonDisabled]}>
-            <Text style={styles.contactButtonText}>Votre annonce</Text>
-          </View>
-        ) : (
-          <TouchableOpacity
-            style={styles.contactButton}
-            onPress={() => contactMutation.mutate()}
-            disabled={contactMutation.isPending}>
-            {contactMutation.isPending ? (
-              <ActivityIndicator color={theme.colors.white} />
-            ) : (
-              <Text style={styles.contactButtonText}>Contacter</Text>
-            )}
-          </TouchableOpacity>
+  const headerOverlay = (
+    <View style={[styles.galleryHeader, { top: insets.top + 4 }]}>
+      <IconButton
+        icon="arrow-back"
+        label="Retour"
+        variant="overlay"
+        onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/home'))}
+      />
+      <View style={styles.row}>
+        <IconButton icon="share-social-outline" label="Partager l'annonce" variant="overlay" onPress={handleShare} />
+        {!isOwner && (
+          <IconButton icon="flag-outline" label="Signaler l'annonce" variant="overlay" onPress={() => setReportOpen(true)} />
         )}
       </View>
-    </SafeAreaView>
+    </View>
+  );
+
+  return (
+    <View style={styles.screen}>
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: 96 + insets.bottom }}
+        showsVerticalScrollIndicator={false}>
+        <ItemGallery images={imageUrls} title={post.title} overlay={headerOverlay} />
+
+        <View style={styles.body}>
+          {/* Price first, then badges */}
+          <Price amount={post.price} isFree={post.is_free} isExchange={!!post.exchange_items} size="lg" />
+          {post.is_free && (
+            <AppText variant="small" color="inkMuted">
+              Donnez une seconde vie à cet objet.
+            </AppText>
+          )}
+          <View style={styles.badges}>
+            {stateBadge && <Badge label={stateBadge.label} tone={stateBadge.tone} />}
+            {post.is_free && <Badge label="Gratuit" tone="success" icon="gift-outline" />}
+            {!!post.exchange_items && <Badge label="Échange possible" tone="trust" icon="swap-horizontal" />}
+            {post.allow_negotiation && !post.is_free && <Badge label="Négociable" tone="brand" icon="chatbubbles-outline" />}
+          </View>
+
+          <AppText variant="h2" accessibilityRole="header">
+            {post.title}
+          </AppText>
+          <AppText variant="caption" color="inkMuted">
+            Publié {formatRelativeTime(post.created_at).toLowerCase()}
+            {` · ${plural(post.views_count, 'vue')} · ${plural(post.likes_count, 'favori')}`}
+          </AppText>
+
+          {facts.length > 0 && (
+            <View style={styles.facts}>
+              {facts.map((f) => (
+                <View key={f.label} style={styles.fact}>
+                  <Ionicons name={f.icon} size={18} color={t.colors.inkMuted} />
+                  <View>
+                    <AppText variant="caption" color="inkMuted">
+                      {f.label}
+                    </AppText>
+                    <AppText variant="labelStrong">{f.value}</AppText>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {!!post.exchange_items && (
+            <View style={styles.section}>
+              <AppText variant="h3">Échange contre</AppText>
+              <AppText variant="body" color="inkMuted">
+                {post.exchange_items}
+              </AppText>
+            </View>
+          )}
+
+          {/* Bon prix ? (buyer-facing price check) */}
+          {!post.is_free && !!post.price && !bonPrix && (
+            <Button
+              label={bonPrixMutation.isPending ? 'Analyse du marché…' : "C'est un bon prix ?"}
+              icon="analytics-outline"
+              variant="secondary"
+              size="sm"
+              loading={bonPrixMutation.isPending}
+              onPress={() => bonPrixMutation.mutate()}
+              style={styles.alignStart}
+            />
+          )}
+          {bonPrix && <ItemPriceCheckCard check={bonPrix} onDismiss={() => setBonPrix(null)} />}
+
+          {/* Seller trust card */}
+          <View style={styles.section}>
+            <AppText variant="h3">Vendeur</AppText>
+            <SellerCard
+              userId={post.owner_id}
+              username={post.owner_username}
+              city={post.city}
+              isMe={isOwner}
+              onPress={() =>
+                router.push({
+                  pathname: '/seller-profile',
+                  params: { userId: String(post.owner_id), username: post.owner_username ?? '' },
+                } as unknown as Href)
+              }
+            />
+            {!isOwner && (
+              <Button
+                label="Signaler cette annonce"
+                icon="flag-outline"
+                variant="ghost"
+                size="sm"
+                onPress={() => setReportOpen(true)}
+                style={styles.alignStart}
+              />
+            )}
+          </View>
+
+          {!!post.description && (
+            <View style={styles.section}>
+              <AppText variant="h3">Description</AppText>
+              <AppText variant="body">{post.description}</AppText>
+            </View>
+          )}
+
+          {(locationText || post.pickup_location_note) && (
+            <View style={styles.section}>
+              <AppText variant="h3">Lieu de remise</AppText>
+              <View style={styles.location}>
+                <Ionicons name="location" size={20} color={t.colors.brandStrong} />
+                <View style={styles.flex}>
+                  {!!locationText && <AppText variant="bodyStrong">{locationText}</AppText>}
+                  {!!post.pickup_location_note && (
+                    <AppText variant="small" color="inkMuted">
+                      {post.pickup_location_note}
+                    </AppText>
+                  )}
+                </View>
+              </View>
+            </View>
+          )}
+
+          {!isOwner && <SafetyBanner />}
+        </View>
+
+        {similar.length > 0 && (
+          <View style={styles.similar}>
+            <AppText variant="h3" style={styles.similarTitle}>
+              Annonces similaires
+            </AppText>
+            <FlatList
+              data={similar}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyExtractor={(p) => String(p.id)}
+              contentContainerStyle={styles.similarList}
+              renderItem={({ item }) => (
+                <ListingCard
+                  post={item}
+                  width={160}
+                  onPress={() => router.push({ pathname: '/item-details', params: { id: String(item.id) } })}
+                />
+              )}
+            />
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Sticky CTA bar — thumb zone (Fitts) */}
+      <View style={[styles.ctaBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+        {isOwner ? (
+          <>
+            <Button
+              label="Mes annonces"
+              variant="secondary"
+              onPress={() => router.push('/my-listings')}
+              style={styles.flex}
+            />
+            <Button
+              label="Modifier"
+              icon="create-outline"
+              onPress={() => router.push({ pathname: '/post-item', params: { id: String(post.id), mode: 'edit' } })}
+              style={styles.flex}
+            />
+          </>
+        ) : (
+          <>
+            <IconButton
+              icon={post.liked_by_me ? 'heart' : 'heart-outline'}
+              label={post.liked_by_me ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+              color={post.liked_by_me ? 'brandStrong' : 'ink'}
+              variant="outline"
+              disabled={likeMutation.isPending}
+              onPress={() => likeMutation.mutate(post.liked_by_me)}
+            />
+            <Button
+              label="Contacter"
+              icon="chatbubble-outline"
+              variant={canOffer ? 'secondary' : 'primary'}
+              loading={contactMutation.isPending}
+              onPress={() => contactMutation.mutate()}
+              style={styles.flex}
+            />
+            {canOffer && (
+              <Button
+                label="Faire une offre"
+                haptic
+                onPress={() => router.push({ pathname: '/make-offer', params: { postId: String(post.id) } })}
+                style={styles.flex}
+              />
+            )}
+          </>
+        )}
+      </View>
+      <ReportSheet
+        visible={reportOpen}
+        onClose={() => setReportOpen(false)}
+        targetType="post"
+        targetId={post.id}
+        subject={post.title}
+      />
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.white,
-  },
-  centered: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: theme.spacing.xl,
-    backgroundColor: theme.colors.white,
-  },
-  stateText: {
-    fontSize: 16,
-    color: '#666',
-    marginTop: theme.spacing.md,
-    textAlign: 'center',
-  },
-  stateButton: {
-    backgroundColor: theme.colors.primary,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    borderRadius: 8,
-    marginTop: theme.spacing.lg,
-  },
-  stateButtonText: {
-    color: theme.colors.white,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.grayLight,
-  },
-  headerButton: {
-    padding: theme.spacing.sm,
-  },
-  sellerInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    marginHorizontal: theme.spacing.md,
-  },
-  sellerAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: theme.spacing.sm,
-    backgroundColor: '#f0f0f0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  sellerDetails: {
-    flex: 1,
-  },
-  sellerName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#000',
-  },
-  postedTime: {
-    fontSize: 12,
-    color: theme.colors.gray,
-    marginTop: 2,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: theme.spacing.xl,
-  },
-  imageContainer: {
-    position: 'relative',
-    marginBottom: theme.spacing.lg,
-  },
-  productImage: {
-    width: screenWidth,
-    height: 300,
-    resizeMode: 'cover',
-  },
-  imagePlaceholder: {
-    width: screenWidth,
-    height: 300,
-    backgroundColor: '#F8F9FA',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  paginationContainer: {
+const makeStyles = createStyles((t) => ({
+  screen: { flex: 1, backgroundColor: t.colors.canvas },
+  backBtn: { margin: t.spacing.md },
+  row: { flexDirection: 'row' },
+  flex: { flex: 1 },
+  alignStart: { alignSelf: 'flex-start' },
+  galleryHeader: {
     position: 'absolute',
-    bottom: 16,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  paginationDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
-    marginHorizontal: 4,
-  },
-  paginationDotActive: {
-    backgroundColor: '#000',
-  },
-  productInfo: {
-    paddingHorizontal: theme.spacing.lg,
-  },
-  productTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#000',
-    marginBottom: theme.spacing.sm,
-  },
-  engagementContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-  },
-  engagementItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: theme.spacing.lg,
-  },
-  engagementText: {
-    fontSize: 14,
-    color: '#666',
-    marginLeft: 4,
-    fontWeight: '500',
-  },
-  productDescription: {
-    fontSize: 16,
-    lineHeight: 24,
-    color: '#333',
-  },
-  bonprixPill: {
-    alignSelf: 'center',
-    borderWidth: 1,
-    borderColor: '#E4D9F8',
-    borderRadius: 14,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: 6,
-    marginTop: theme.spacing.md,
-    backgroundColor: '#FFFFFF',
-  },
-  bonprixPillRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  bonprixPillText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#6B4FA1',
-  },
-  bonprixCard: {
-    backgroundColor: '#F5F0FF',
-    borderColor: '#E4D9F8',
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: theme.spacing.md,
-    marginTop: theme.spacing.md,
-  },
-  bonprixTitleRow: {
+    left: t.spacing.xs,
+    right: t.spacing.xs,
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  bonprixTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#6B4FA1',
-  },
-  bonprixPrivate: {
-    fontSize: 10,
-    color: '#8a8a8a',
-  },
-  bonprixVerdict: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginTop: 6,
-  },
-  bonprixRationale: {
-    fontSize: 13,
-    color: '#444',
-    marginTop: 4,
-    lineHeight: 18,
-  },
-  bonprixMeta: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 8,
-  },
-  bonprixBarTrack: {
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#E4D9F8',
-    marginTop: 6,
-  },
-  bonprixBarDot: {
-    position: 'absolute',
-    top: -3,
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginLeft: -5,
-    backgroundColor: '#6B4FA1',
-  },
-  bonprixFlag: {
-    backgroundColor: '#FFF6E5',
-    color: '#B45309',
-    fontSize: 12,
-    borderRadius: 8,
-    padding: 8,
-    marginTop: 8,
-    overflow: 'hidden',
-  },
-  bonprixWarning: {
-    backgroundColor: '#FDECEC',
-    color: '#C0392B',
-    fontSize: 12,
-    borderRadius: 8,
-    padding: 8,
-    marginTop: 8,
-    overflow: 'hidden',
-  },
-  bonprixFooterRow: {
+  body: { padding: t.spacing.md, gap: t.spacing.xs },
+  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginVertical: 4 },
+  facts: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  bonprixDismiss: {
-    fontSize: 12,
-    color: '#6B4FA1',
-    fontWeight: '600',
-    marginTop: 8,
-  },
-  locationSection: {
-    marginTop: theme.spacing.lg,
-    marginBottom: theme.spacing.lg,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#333',
-    marginBottom: theme.spacing.md,
-  },
-  locationCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: theme.spacing.sm,
-    borderRadius: 12,
-    padding: theme.spacing.md,
-    backgroundColor: '#F8F9FA',
+    flexWrap: 'wrap',
+    gap: t.spacing.md,
+    marginTop: t.spacing.sm,
+    padding: t.spacing.sm,
+    backgroundColor: t.colors.surface,
+    borderColor: t.colors.line,
     borderWidth: 1,
-    borderColor: theme.colors.grayLight,
+    borderRadius: t.radius.md,
   },
-  locationTextWrap: {
-    flex: 1,
-  },
-  locationPrimary: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#333',
-  },
-  locationNote: {
-    fontSize: 13,
-    color: theme.colors.gray,
-    marginTop: 2,
-  },
-  bottomBar: {
+  fact: { flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: '40%' },
+  section: { marginTop: t.spacing.lg, gap: t.spacing.xs },
+  location: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    backgroundColor: theme.colors.white,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.grayLight,
+    gap: t.spacing.sm,
+    padding: t.spacing.sm,
+    backgroundColor: t.colors.surface,
+    borderColor: t.colors.line,
+    borderWidth: 1,
+    borderRadius: t.radius.md,
   },
-  bottomLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  actionButton: {
-    padding: theme.spacing.sm,
-    marginRight: theme.spacing.sm,
-  },
-  bottomCenter: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  price: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#000',
-    marginBottom: 4,
-  },
-  negotiateText: {
-    fontSize: 14,
-    color: theme.colors.gray,
-    textDecorationLine: 'underline',
-  },
-  contactButton: {
-    backgroundColor: theme.colors.primary,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    borderRadius: 8,
-    minWidth: 120,
-    alignItems: 'center',
-  },
-  contactButtonDisabled: {
-    backgroundColor: '#B0B0B0',
-  },
-  contactButtonText: {
-    color: theme.colors.white,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  fullscreenContainer: {
+  similar: { marginTop: t.spacing.sm },
+  similarTitle: { paddingHorizontal: t.spacing.md, marginBottom: t.spacing.xs },
+  similarList: { paddingHorizontal: t.spacing.md, gap: t.spacing.sm },
+  ctaBar: {
     position: 'absolute',
-    top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: '#000',
-    zIndex: 1000,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  closeButton: {
-    position: 'absolute',
-    top: 50,
-    right: 20,
-    zIndex: 1001,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    borderRadius: 20,
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  fullscreenImageContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  fullscreenImage: {
-    width: screenWidth,
-    height: screenWidth,
-    resizeMode: 'contain',
-  },
-  fullscreenPagination: {
-    position: 'absolute',
-    bottom: 50,
-    left: 0,
-    right: 0,
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
+    gap: t.spacing.xs,
+    paddingHorizontal: t.spacing.md,
+    paddingTop: t.spacing.sm,
+    backgroundColor: t.colors.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: t.colors.line,
+    ...(t.elevation.sheet as object),
   },
-  fullscreenPaginationDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
-    marginHorizontal: 4,
-  },
-  fullscreenPaginationDotActive: {
-    backgroundColor: 'white',
-  },
-});
+}));

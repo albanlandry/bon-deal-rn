@@ -1,8 +1,39 @@
-/** "12 500 FCFA" — space-grouped amount, Intl-independent (Hermes-safe). */
+/** Narrow no-break space: thin-space digit grouping that never wraps. */
+export const THIN_SPACE = '\u202F';
+
+/** "12 500 FCFA" — thin-space-grouped amount (Miller chunking), Intl-independent
+ *  (Hermes-safe). The unit is glued with a no-break space. */
 export function formatAmount(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return '—';
-  const grouped = String(Math.round(value)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-  return `${grouped} FCFA`;
+  return `${formatNumber(value)}\u00A0FCFA`;
+}
+
+/** "12 500" — grouped integer without unit. */
+export function formatNumber(value: number): string {
+  return String(Math.round(value)).replace(/\B(?=(\d{3})+(?!\d))/g, THIN_SPACE);
+}
+
+/** Section label for grouping lists by day: "Aujourd'hui", "Hier", "12 octobre". */
+const MONTHS = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+export function formatDayLabel(iso: string | null | undefined): string {
+  if (!iso) return 'Plus ancien';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return 'Plus ancien';
+  const today = new Date();
+  const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((startOf(today) - startOf(d)) / 86400000);
+  if (diff === 0) return "Aujourd'hui";
+  if (diff === 1) return 'Hier';
+  const base = `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  return d.getFullYear() === today.getFullYear() ? base : `${base} ${d.getFullYear()}`;
+}
+
+/** "Membre depuis mars 2025". */
+export function formatMemberSince(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return `Membre depuis ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
 /** Short relative time in French: "à l'instant", "Il y a 5 min", "Il y a 3 h",
@@ -30,4 +61,21 @@ export function formatClock(iso: string | null | undefined): string {
   const hh = String(d.getHours()).padStart(2, '0');
   const mm = String(d.getMinutes()).padStart(2, '0');
   return `${hh}:${mm}`;
+}
+
+/** Median reply delay → "~15 min", "~2 h", "~1 j" (for "Répond en ~X"). */
+export function formatResponseTime(minutes: number | null | undefined): string | null {
+  if (minutes == null || !Number.isFinite(minutes)) return null;
+  if (minutes < 60) return `~${Math.max(1, Math.round(minutes))} min`;
+  const h = Math.round(minutes / 60);
+  if (h < 24) return `~${h} h`;
+  return `~${Math.round(h / 24)} j`;
+}
+
+/** Days until an ISO date (ceil, can be ≤ 0 when past). */
+export function daysUntil(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return null;
+  return Math.ceil((then - Date.now()) / 86400000);
 }

@@ -1,52 +1,53 @@
-// app/notifications.tsx - Notifications Screen
+// app/notifications.tsx — Notifications grouped by day, icon per type, deep links.
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import React from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { useRouter } from 'expo-router';
+import React, { useMemo } from 'react';
+import { Pressable, RefreshControl, SectionList, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { theme } from '../utils/theme';
-import { showToast } from '../components/atoms/Toast';
-import { useAuth } from '@/contexts/AuthContext';
-import {
-  markAllRead,
-  markRead,
-  notificationsQuery,
-} from '@/lib/api/notifications';
-import { formatRelativeTime } from '@/lib/format';
+
+import { AppText, Button, EmptyState, ErrorState, ScreenHeader, showToast, Skeleton } from '@/components/ui';
 import type { BdNotification } from '@/constants/types';
+import { useAuth } from '@/contexts/AuthContext';
+import { markAllRead, markRead, notificationsQuery } from '@/lib/api/notifications';
+import { filtersToRouteParams, savedSearchesQuery } from '@/lib/api/savedSearches';
+import { formatDayLabel, formatRelativeTime } from '@/lib/format';
+import { ColorTokens, createStyles, useStyles, useTheme } from '@/theme';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
+type BdNotificationsResponseLike = { unread_count: number; notifications: BdNotification[] };
 
-function iconFor(type: string): { name: IconName; color: string } {
+function iconFor(type: string): { name: IconName; color: keyof ColorTokens; tint: keyof ColorTokens } {
   switch (type) {
     case 'new_message':
-      return { name: 'chatbubble-outline', color: theme.colors.primary };
+      return { name: 'chatbubble-outline', color: 'brandStrong', tint: 'brandTint' };
     case 'offer_received':
-      return { name: 'pricetag-outline', color: '#9C27B0' };
+      return { name: 'pricetag-outline', color: 'trust', tint: 'trustTint' };
     case 'counter_received':
-      return { name: 'swap-horizontal-outline', color: '#FF9800' };
+      return { name: 'swap-horizontal-outline', color: 'warning', tint: 'warningTint' };
     case 'offer_accepted':
-      return { name: 'checkmark-circle-outline', color: theme.colors.success };
+      return { name: 'checkmark-circle-outline', color: 'success', tint: 'successTint' };
     case 'offer_rejected':
     case 'offer_auto_rejected':
-      return { name: 'close-circle-outline', color: '#FF3B30' };
+      return { name: 'close-circle-outline', color: 'danger', tint: 'dangerTint' };
     case 'negotiation_cancelled':
-      return { name: 'ban-outline', color: theme.colors.gray };
+      return { name: 'ban-outline', color: 'inkMuted', tint: 'surfaceAlt' };
+    case 'staff_warning':
+      return { name: 'shield-outline', color: 'warning', tint: 'warningTint' };
+    case 'listing_expiring':
+      return { name: 'hourglass-outline', color: 'warning', tint: 'warningTint' };
+    case 'listing_expired':
+      return { name: 'time-outline', color: 'inkMuted', tint: 'surfaceAlt' };
+    case 'saved_search_match':
+      return { name: 'bookmark-outline', color: 'trust', tint: 'trustTint' };
     default:
-      return { name: 'notifications-outline', color: theme.colors.gray };
+      return { name: 'notifications-outline', color: 'inkMuted', tint: 'surfaceAlt' };
   }
 }
 
 export default function NotificationsScreen() {
+  const t = useTheme();
+  const s = useStyles(makeStyles);
   const router = useRouter();
   const queryClient = useQueryClient();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
@@ -56,329 +57,247 @@ export default function NotificationsScreen() {
     enabled: isAuthenticated,
   });
 
-  const notifications = data?.notifications ?? [];
+  const notifications: BdNotification[] = data?.notifications ?? [];
   const unreadCount = data?.unread_count ?? 0;
+
+  const sections = useMemo(() => {
+    const groups: { title: string; data: BdNotification[] }[] = [];
+    for (const n of notifications) {
+      const title = formatDayLabel(n.created_at);
+      const last = groups[groups.length - 1];
+      if (last && last.title === title) last.data.push(n);
+      else groups.push({ title, data: [n] });
+    }
+    return groups;
+  }, [notifications]);
+
+  // Optimistic read state (Doherty).
+  const setReadLocally = (ids: number[] | 'all') => {
+    const now = new Date().toISOString();
+    queryClient.setQueryData<BdNotificationsResponseLike>(['notifications'], (old) =>
+      old
+        ? {
+            ...old,
+            unread_count:
+              ids === 'all' ? 0 : Math.max(0, old.unread_count - old.notifications.filter((n) => ids.includes(n.id) && !n.read_at).length),
+            notifications: old.notifications.map((n) =>
+              (ids === 'all' || ids.includes(n.id)) && !n.read_at ? { ...n, read_at: now } : n,
+            ),
+          }
+        : old,
+    );
+  };
 
   const markReadMutation = useMutation({
     mutationFn: (id: number) => markRead(id),
-    onSuccess: () => {
+    onMutate: (id) => setReadLocally([id]),
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
     },
   });
 
   const markAllMutation = useMutation({
     mutationFn: () => markAllRead(),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
-      showToast.success('Notifications marquées comme lues');
-    },
+    onMutate: () => setReadLocally('all'),
+    onSuccess: () => showToast.success('Tout est lu'),
     onError: (e: any) => showToast.error('Échec', e?.message || 'Veuillez réessayer.'),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    },
   });
+
+  // Saved-search alert: replay the search (or open the single new listing).
+  const openSavedSearchMatch = async (item: BdNotification) => {
+    const p = item.payload ?? {};
+    if (Number(p.count) === 1 && p.post_id != null) {
+      router.push({ pathname: '/item-details', params: { id: String(p.post_id) } });
+      return;
+    }
+    try {
+      const list = await queryClient.fetchQuery(savedSearchesQuery());
+      const ss = list.find((x) => x.id === Number(p.saved_search_id));
+      if (ss) {
+        router.push({ pathname: '/search-results', params: filtersToRouteParams(ss.filters) });
+        return;
+      }
+    } catch {
+      // fall through to the list
+    }
+    router.push('/saved-searches' as any);
+  };
+
+  const targetOf = (item: BdNotification): (() => void) | null => {
+    if (item.type === 'staff_warning') return null;
+    if (item.type === 'listing_expiring' || item.type === 'listing_expired') {
+      return () => router.push('/my-listings');
+    }
+    if (item.type === 'saved_search_match') return () => openSavedSearchMatch(item);
+    if (item.conversation_id) {
+      return () =>
+        router.push({ pathname: '/chatroom', params: { conversationId: String(item.conversation_id) } });
+    }
+    const postId = item.payload?.post_id;
+    if (postId != null && Number.isFinite(Number(postId))) {
+      return () => router.push({ pathname: '/item-details', params: { id: String(postId) } });
+    }
+    return null;
+  };
 
   const handlePress = (item: BdNotification) => {
     if (!item.read_at) markReadMutation.mutate(item.id);
-    if (item.conversation_id) {
-      router.push({
-        pathname: '/chatroom',
-        params: { conversationId: String(item.conversation_id) },
-      });
-    }
+    targetOf(item)?.();
   };
 
-  const renderSkeleton = () => (
-    <View style={styles.notificationItem}>
-      <View style={styles.notificationContent}>
-        <View style={styles.skeletonIconContainer} />
-        <View style={styles.textContent}>
-          <View style={styles.titleRow}>
-            <View style={styles.skeletonTitle} />
-            <View style={styles.skeletonTimestamp} />
-          </View>
-          <View style={styles.skeletonMessage} />
-        </View>
-      </View>
-    </View>
-  );
-
-  const renderNotification = ({ item }: { item: BdNotification }) => {
+  const renderItem = ({ item }: { item: BdNotification }) => {
     const icon = iconFor(item.type);
-    const isRead = !!item.read_at;
+    const unread = !item.read_at;
+    const hasTarget = !!targetOf(item);
     return (
-      <TouchableOpacity
-        style={[styles.notificationItem, !isRead && styles.unreadNotification]}
-        onPress={() => handlePress(item)}>
-        <View style={styles.notificationContent}>
-          <View style={[styles.iconContainer, { backgroundColor: `${icon.color}15` }]}>
-            <Ionicons name={icon.name} size={20} color={icon.color} />
-          </View>
-
-          <View style={styles.textContent}>
-            <View style={styles.titleRow}>
-              <Text style={[styles.notificationTitle, !isRead && styles.unreadTitle]}>
-                {item.title}
-              </Text>
-              <Text style={styles.timestamp}>{formatRelativeTime(item.created_at)}</Text>
-            </View>
-            <Text style={styles.notificationMessage} numberOfLines={2}>
-              {item.body}
-            </Text>
-          </View>
-
-          {!isRead && <View style={styles.unreadIndicator} />}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${unread ? 'Non lu. ' : ''}${item.title}. ${item.body}`}
+        accessibilityHint={hasTarget ? 'Ouvre l’élément concerné' : undefined}
+        onPress={() => handlePress(item)}
+        style={({ pressed }) => [s.row, unread && s.rowUnread, pressed && s.pressed]}>
+        <View style={[s.icon, { backgroundColor: t.colors[icon.tint] }]}>
+          <Ionicons name={icon.name} size={20} color={t.colors[icon.color]} />
         </View>
-      </TouchableOpacity>
+        <View style={s.flex}>
+          <View style={s.titleRow}>
+            <AppText variant={unread ? 'labelStrong' : 'label'} style={s.flex} numberOfLines={1}>
+              {item.title}
+            </AppText>
+            <AppText variant="caption" color="inkSubtle">
+              {formatRelativeTime(item.created_at)}
+            </AppText>
+          </View>
+          <AppText variant="small" color="inkMuted" numberOfLines={item.type === 'staff_warning' ? undefined : 2}>
+            {item.type === 'staff_warning' && item.payload?.message ? item.payload.message : item.body}
+          </AppText>
+          {item.type === 'staff_warning' && (
+            <AppText variant="caption" color="warning" style={s.warnNote}>
+              Message de l’équipe de modération BonDeal
+            </AppText>
+          )}
+        </View>
+        {unread ? (
+          <View style={s.dot} accessibilityElementsHidden />
+        ) : hasTarget ? (
+          <Ionicons name="chevron-forward" size={16} color={t.colors.inkSubtle} />
+        ) : null}
+      </Pressable>
     );
   };
 
   let body: React.ReactNode;
-  if (authLoading || isLoading) {
+  if (authLoading || (isAuthenticated && isLoading)) {
     body = (
-      <FlatList
-        data={Array(5).fill({})}
-        renderItem={renderSkeleton}
-        keyExtractor={(_, index) => `skeleton-${index}`}
-        contentContainerStyle={styles.listContainer}
-        showsVerticalScrollIndicator={false}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-      />
+      <View style={s.skeletons}>
+        {[0, 1, 2, 3, 4].map((i) => (
+          <View key={i} style={s.row}>
+            <Skeleton width={40} height={40} radius={20} />
+            <View style={[s.flex, { gap: 8 }]}>
+              <Skeleton width="60%" height={14} />
+              <Skeleton width="90%" height={12} />
+            </View>
+          </View>
+        ))}
+      </View>
     );
   } else if (!isAuthenticated) {
     body = (
-      <View style={styles.emptyContainer}>
-        <Ionicons name="lock-closed-outline" size={56} color={theme.colors.gray} />
-        <Text style={styles.emptyTitle}>Connectez-vous</Text>
-        <Text style={styles.emptyMessage}>
-          Connectez-vous pour voir vos notifications.
-        </Text>
-        <TouchableOpacity style={styles.primaryButton} onPress={() => router.push('/login')}>
-          <Text style={styles.primaryButtonText}>Se connecter</Text>
-        </TouchableOpacity>
-      </View>
+      <EmptyState
+        icon="lock-closed-outline"
+        title="Connectez-vous"
+        message="Connectez-vous pour voir vos notifications."
+        actionLabel="Se connecter"
+        onAction={() => router.push('/login')}
+      />
     );
-  } else if (error) {
-    body = (
-      <View style={styles.emptyContainer}>
-        <Ionicons name="alert-circle-outline" size={56} color="#FF6B6B" />
-        <Text style={styles.emptyMessage}>Impossible de charger les notifications.</Text>
-        <TouchableOpacity style={styles.primaryButton} onPress={() => refetch()}>
-          <Text style={styles.primaryButtonText}>Réessayer</Text>
-        </TouchableOpacity>
-      </View>
-    );
+  } else if (error && notifications.length === 0) {
+    body = <ErrorState message="Impossible de charger les notifications." onRetry={() => refetch()} />;
   } else {
     body = (
-      <FlatList
-        data={notifications}
-        renderItem={renderNotification}
+      <SectionList
+        sections={sections}
         keyExtractor={(item) => String(item.id)}
-        contentContainerStyle={styles.listContainer}
-        showsVerticalScrollIndicator={false}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-        refreshing={isRefetching}
-        onRefresh={refetch}
+        renderItem={renderItem}
+        renderSectionHeader={({ section }) => (
+          <AppText variant="captionStrong" color="inkMuted" style={s.sectionHeader} accessibilityRole="header">
+            {section.title.toUpperCase()}
+          </AppText>
+        )}
+        stickySectionHeadersEnabled={false}
+        contentContainerStyle={[s.list, notifications.length === 0 && s.grow]}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={refetch}
+            colors={[t.colors.brandStrong]}
+            tintColor={t.colors.brandStrong}
+          />
+        }
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons name="notifications-off-outline" size={64} color={theme.colors.gray} />
-            <Text style={styles.emptyTitle}>Aucune notification</Text>
-            <Text style={styles.emptyMessage}>
-              Vous recevrez des notifications ici quand quelqu'un interagit avec vos
-              annonces.
-            </Text>
-          </View>
+          <EmptyState
+            icon="notifications-off-outline"
+            title="Rien de neuf"
+            message="Les messages, offres et réponses à vos annonces apparaîtront ici."
+          />
         }
       />
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={theme.colors.white} />
-
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Ionicons name="chevron-back" size={24} color={theme.colors.gray} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Notifications</Text>
-        {unreadCount > 0 ? (
-          <TouchableOpacity
-            style={styles.markAllButton}
-            onPress={() => markAllMutation.mutate()}
-            disabled={markAllMutation.isPending}>
-            {markAllMutation.isPending ? (
-              <ActivityIndicator size="small" color={theme.colors.primary} />
-            ) : (
-              <Text style={styles.markAllText}>Tout marquer</Text>
-            )}
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.markAllButton} />
-        )}
-      </View>
-
+    <SafeAreaView style={s.container}>
+      <ScreenHeader
+        title="Notifications"
+        subtitle={unreadCount > 0 ? `${unreadCount} non lue${unreadCount > 1 ? 's' : ''}` : undefined}
+        right={
+          unreadCount > 0 ? (
+            <Button
+              label="Tout lire"
+              variant="ghost"
+              size="sm"
+              icon="checkmark-done"
+              onPress={() => markAllMutation.mutate()}
+              loading={markAllMutation.isPending}
+            />
+          ) : undefined
+        }
+      />
       {body}
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.white,
+const makeStyles = createStyles((t) => ({
+  container: { flex: 1, backgroundColor: t.colors.canvas },
+  flex: { flex: 1 },
+  grow: { flexGrow: 1 },
+  list: { paddingBottom: t.spacing.xxl },
+  skeletons: { paddingTop: t.spacing.md },
+  sectionHeader: {
+    paddingHorizontal: t.spacing.md,
+    paddingTop: t.spacing.lg,
+    paddingBottom: t.spacing.xs,
+    letterSpacing: 0.5,
   },
-  header: {
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    backgroundColor: theme.colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.grayLight,
+    gap: t.spacing.sm,
+    minHeight: 64,
+    paddingHorizontal: t.spacing.md,
+    paddingVertical: t.spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: t.colors.line,
+    backgroundColor: t.colors.canvas,
   },
-  backButton: {
-    padding: theme.spacing.sm,
-    minWidth: 44,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#333',
-    flex: 1,
-    textAlign: 'center',
-  },
-  markAllButton: {
-    padding: theme.spacing.sm,
-    minWidth: 90,
-    alignItems: 'flex-end',
-  },
-  markAllText: {
-    fontSize: 14,
-    color: theme.colors.primary,
-    fontWeight: '600',
-  },
-  listContainer: {
-    paddingBottom: theme.spacing.lg,
-    flexGrow: 1,
-  },
-  notificationItem: {
-    backgroundColor: theme.colors.white,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-  },
-  unreadNotification: {
-    backgroundColor: '#F8F9FA',
-  },
-  notificationContent: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  iconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: theme.spacing.md,
-  },
-  textContent: {
-    flex: 1,
-    marginRight: theme.spacing.sm,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 4,
-  },
-  notificationTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    flex: 1,
-  },
-  unreadTitle: {
-    fontWeight: '700',
-  },
-  timestamp: {
-    fontSize: 12,
-    color: theme.colors.gray,
-    marginLeft: theme.spacing.sm,
-  },
-  notificationMessage: {
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 18,
-  },
-  unreadIndicator: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: theme.colors.primary,
-  },
-  separator: {
-    height: 1,
-    backgroundColor: theme.colors.grayLight,
-    marginLeft: theme.spacing.lg,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: theme.spacing.xl,
-    paddingVertical: theme.spacing.xxl,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    marginTop: theme.spacing.md,
-    marginBottom: theme.spacing.sm,
-  },
-  emptyMessage: {
-    fontSize: 14,
-    color: theme.colors.gray,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  primaryButton: {
-    backgroundColor: theme.colors.primary,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    borderRadius: 8,
-    marginTop: theme.spacing.lg,
-  },
-  primaryButtonText: {
-    color: theme.colors.white,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  skeletonIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#E0E0E0',
-    marginRight: theme.spacing.md,
-  },
-  skeletonTitle: {
-    height: 16,
-    backgroundColor: '#E0E0E0',
-    borderRadius: 4,
-    width: '60%',
-    marginBottom: 4,
-  },
-  skeletonTimestamp: {
-    height: 12,
-    backgroundColor: '#E0E0E0',
-    borderRadius: 4,
-    width: '30%',
-  },
-  skeletonMessage: {
-    height: 14,
-    backgroundColor: '#E0E0E0',
-    borderRadius: 4,
-    width: '90%',
-  },
-});
+  rowUnread: { backgroundColor: t.colors.surface },
+  pressed: { backgroundColor: t.colors.surfaceAlt },
+  icon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs },
+  warnNote: { marginTop: 4 },
+  dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: t.colors.brand },
+}));

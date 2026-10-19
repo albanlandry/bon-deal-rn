@@ -34,6 +34,11 @@ export interface AppConfig {
     crashlytics: boolean;
     logging: boolean;
   };
+  /** Local test login without Firebase (backend DEV_OTP_*). Never on in production. */
+  devLogin: {
+    enabled: boolean;
+    phone: string;
+  };
   debug: {
     enabled: boolean;
     logLevel: 'debug' | 'info' | 'warn' | 'error';
@@ -110,6 +115,10 @@ const buildConfig = (): AppConfig => {
       crashlytics: getEnvBool('ENABLE_CRASHLYTICS', env === 'production'),
       logging: getEnvBool('ENABLE_LOGGING', env !== 'production'),
     },
+    devLogin: {
+      enabled: env !== 'production' && Constants.expoConfig?.extra?.devOtpEnabled === true,
+      phone: String(Constants.expoConfig?.extra?.devOtpPhone || '+24106123456'),
+    },
     debug: {
       enabled: getEnvBool('DEBUG_MODE', env === 'local'),
       logLevel: (getEnvVar('LOG_LEVEL', env === 'production' ? 'error' : 'debug') as 'debug' | 'info' | 'warn' | 'error'),
@@ -136,6 +145,13 @@ export const getApiUrl = (endpoint: string = ''): string => {
   const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   return `${baseUrl}${path}`;
 };
+
+/**
+ * WebSocket URL derived from the API base URL: http → ws, https → wss,
+ * same host and path prefix, then `/ws`.
+ */
+export const getWsUrl = (endpoint: string = '/ws'): string =>
+  getApiUrl(endpoint).replace(/^http(s?):\/\//i, (_m, s) => `ws${s ? 's' : ''}://`);
 
 // Log configuration on startup (only in development)
 if (__DEV__ && config.debug.enabled) {

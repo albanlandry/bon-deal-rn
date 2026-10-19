@@ -1,240 +1,170 @@
-// app/help-support.tsx - Help & Support Screen
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React from 'react';
-import { Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+// app/help-support.tsx — Aide & Support (MB-TS-04)
+// FAQ and community rules are in-screen accordions; terms open the terms
+// screen in read mode; contact opens the mail app.
+import { Href, useRouter } from 'expo-router';
+import React, { useRef, useState } from 'react';
+import { Linking, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { theme } from '../utils/theme';
+import { useTheme } from '@/theme';
+import {
+  AppText,
+  Button,
+  Card,
+  ListGroup,
+  ListRow,
+  SafetyBanner,
+  ScreenHeader,
+  showToast,
+} from '@/components/ui';
+import ProfileFaqItem from '@/components/molecules/ProfileFaqItem';
 
-interface HelpItem {
-  id: string;
-  title: string;
-  icon: string;
-  onPress: () => void;
-}
+const SUPPORT_EMAIL = 'support@bondeal.com';
 
-const helpItems: HelpItem[] = [
-  {
-    id: 'faq',
-    title: 'Questions fréquentes (FAQ)',
-    icon: 'help-circle-outline',
-    onPress: () => {
-      // TODO: Navigate to FAQ screen
-    },
-  },
-  {
-    id: 'contact',
-    title: 'Contacter le support',
-    icon: 'mail-outline',
-    onPress: () => {
-      Linking.openURL('mailto:support@bondeal.com');
-    },
-  },
-  {
-    id: 'terms',
-    title: 'Conditions d\'utilisation',
-    icon: 'document-text-outline',
-    onPress: () => {
-      // TODO: Navigate to terms screen
-    },
-  },
-  {
-    id: 'privacy',
-    title: 'Politique de confidentialité',
-    icon: 'shield-outline',
-    onPress: () => {
-      // TODO: Navigate to privacy policy screen
-    },
-  },
-];
-
-const faqItems = [
+const FAQ = [
   {
     question: 'Comment publier une annonce ?',
-    answer: 'Appuyez sur le bouton "+" en bas de l\'écran d\'accueil, remplissez les informations de votre produit et publiez.',
+    answer:
+      'Appuyez sur « Vendre » au centre de la barre du bas. Ajoutez au moins une photo : les Suggestions IA proposent un titre, une catégorie et une description que vous pouvez modifier. Choisissez ensuite votre prix (un prix conseillé vous est montré quand des annonces similaires existent), vérifiez l’aperçu et publiez. Votre brouillon est enregistré automatiquement.',
   },
   {
     question: 'Comment contacter un vendeur ?',
-    answer: 'Sur la page de détails d\'un produit, appuyez sur "Contacter" pour envoyer un message au vendeur.',
+    answer:
+      'Sur la page d’une annonce, appuyez sur « Contacter ». La conversation est liée à l’annonce et apparaît dans l’onglet Messages.',
   },
   {
-    question: 'Comment retirer un produit des favoris ?',
-    answer: 'Allez dans vos favoris et appuyez sur l\'icône cœur pour retirer un produit.',
+    question: 'Comment faire une offre ?',
+    answer:
+      'Si le vendeur accepte la négociation, appuyez sur « Faire une offre » depuis l’annonce. Le vendeur peut accepter, refuser ou faire une contre-offre ; tout l’historique s’affiche dans la conversation.',
   },
   {
-    question: 'Puis-je modifier mon annonce après publication ?',
-    answer: 'Oui, allez dans "Mes annonces", sélectionnez votre produit et appuyez sur "Modifier".',
+    question: 'Comment payer en toute sécurité ?',
+    answer:
+      'Ne payez jamais d’avance. Rencontrez le vendeur dans un lieu public, vérifiez l’article, puis payez sur place. BonDeal ne vous demandera jamais de payer en dehors de l’application.',
+  },
+  {
+    question: 'Puis-je modifier ou retirer mon annonce ?',
+    answer: 'Oui : Profil › Mes annonces, puis choisissez l’annonce à modifier, masquer ou supprimer.',
+  },
+  {
+    question: 'Comment signaler une annonce ou un membre ?',
+    answer:
+      'Sur une annonce, appuyez sur le drapeau. Pour un membre, ouvrez son profil (menu ⋮) ou le menu de la conversation. Pour un message, faites un appui long dessus. Les signalements sont anonymes et examinés par notre équipe.',
+  },
+  {
+    question: 'Comment bloquer quelqu’un ?',
+    answer:
+      'Depuis son profil ou le menu ⋮ de la conversation, choisissez « Bloquer ». Vous ne verrez plus ses annonces et vous ne pourrez plus vous écrire. Pour débloquer : Paramètres › Confidentialité.',
+  },
+  {
+    question: 'Que faire après une offre acceptée ?',
+    answer:
+      'Une transaction apparaît dans la conversation et dans Profil › Mes transactions. Après l’échange, confirmez-le, puis laissez un avis. En cas de problème, utilisez « Signaler un problème ».',
+  },
+  {
+    question: 'Comment changer de quartier ?',
+    answer: 'Depuis l’accueil, appuyez sur le quartier en haut de l’écran, ou allez dans Paramètres › Mon quartier.',
+  },
+  {
+    question: 'Comment retirer une annonce de mes favoris ?',
+    answer: 'Dans l’onglet Favoris, appuyez sur le cœur de l’annonce.',
+  },
+];
+
+const RULES = [
+  {
+    question: 'Soyez honnête',
+    answer: 'Décrivez l’état réel de l’article et utilisez vos propres photos. Indiquez les défauts.',
+  },
+  {
+    question: 'Restez respectueux',
+    answer: 'Pas d’insultes, de harcèlement ni de discrimination dans les annonces et les messages.',
+  },
+  {
+    question: 'Articles interdits',
+    answer:
+      'Armes, drogues, médicaments, contrefaçons, animaux protégés, objets volés et tout article illégal au Gabon sont interdits.',
+  },
+  {
+    question: 'Pas d’arnaque',
+    answer:
+      'Ne demandez jamais de paiement d’avance ni d’informations bancaires. Les comptes frauduleux sont bannis.',
   },
 ];
 
 export default function HelpSupportScreen() {
   const router = useRouter();
+  const t = useTheme();
+  const scrollRef = useRef<ScrollView>(null);
+  const [faqY, setFaqY] = useState(0);
+  const [rulesY, setRulesY] = useState(0);
 
-  const renderHelpItem = (item: HelpItem) => (
-    <TouchableOpacity key={item.id} style={styles.helpItem} onPress={item.onPress}>
-      <View style={styles.helpItemLeft}>
-        <View style={styles.helpIconContainer}>
-          <Ionicons name={item.icon as any} size={20} color={theme.colors.primary} />
-        </View>
-        <Text style={styles.helpItemTitle}>{item.title}</Text>
-      </View>
-      <Ionicons name="chevron-forward" size={16} color={theme.colors.gray} />
-    </TouchableOpacity>
-  );
+  const contact = () => {
+    Linking.openURL(`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('Aide BonDeal')}`).catch(() =>
+      showToast.error('Aucune application e-mail', `Écrivez-nous à ${SUPPORT_EMAIL}`),
+    );
+  };
+
+  const openTerms = () =>
+    router.push({ pathname: '/terms-and-conditions', params: { mode: 'read' } } as Href);
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="chevron-back" size={24} color="#000" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Aide & Support</Text>
-        <View style={{ width: 24 }} />
-      </View>
+    <SafeAreaView style={[styles.container, { backgroundColor: t.colors.canvas }]}>
+      <ScreenHeader title="Aide & Support" />
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <ListGroup title="Besoin d'aide ?">
+          <ListRow
+            icon="help-circle-outline"
+            title="Questions fréquentes"
+            onPress={() => scrollRef.current?.scrollTo({ y: faqY, animated: !t.reduceMotion })}
+          />
+          <ListRow
+            icon="people-outline"
+            title="Règles de la communauté"
+            onPress={() => scrollRef.current?.scrollTo({ y: rulesY, animated: !t.reduceMotion })}
+          />
+          <ListRow icon="document-text-outline" title="Conditions d'utilisation" onPress={openTerms} />
+          {/* No standalone privacy-policy document exists yet: the data-use
+              commitments live in the terms screen. */}
+          <ListRow icon="shield-outline" title="Politique de confidentialité" onPress={openTerms} />
+          <ListRow icon="mail-outline" title="Contacter le support" onPress={contact} last />
+        </ListGroup>
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Help Actions */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Besoin d'aide ?</Text>
-          <View style={styles.helpContainer}>
-            {helpItems.map(renderHelpItem)}
-          </View>
-        </View>
+        <SafetyBanner />
 
-        {/* FAQ Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Questions fréquentes</Text>
-          <View style={styles.faqContainer}>
-            {faqItems.map((faq, index) => (
-              <View key={index} style={styles.faqItem}>
-                <Text style={styles.faqQuestion}>{faq.question}</Text>
-                <Text style={styles.faqAnswer}>{faq.answer}</Text>
-              </View>
+        <View onLayout={(e) => setFaqY(e.nativeEvent.layout.y)} style={styles.section}>
+          <ListGroup title="Questions fréquentes">
+            {FAQ.map((f, i) => (
+              <ProfileFaqItem key={f.question} question={f.question} answer={f.answer} last={i === FAQ.length - 1} />
             ))}
-          </View>
+          </ListGroup>
         </View>
 
-        {/* Contact Info */}
-        <View style={styles.contactSection}>
-          <Ionicons name="mail" size={24} color={theme.colors.primary} />
-          <Text style={styles.contactTitle}>Nous contacter</Text>
-          <Text style={styles.contactText}>
-            support@bondeal.com
-          </Text>
-          <Text style={styles.contactText}>
-            +241 01 23 45 67
-          </Text>
+        <View onLayout={(e) => setRulesY(e.nativeEvent.layout.y)}>
+          <ListGroup title="Règles de la communauté">
+            {RULES.map((f, i) => (
+              <ProfileFaqItem key={f.question} question={f.question} answer={f.answer} last={i === RULES.length - 1} />
+            ))}
+          </ListGroup>
         </View>
+
+        <Card style={styles.contact}>
+          <AppText variant="h3" align="center">
+            Vous n’avez pas trouvé ?
+          </AppText>
+          <AppText variant="small" color="inkMuted" align="center">
+            Notre équipe vous répond par e-mail : {SUPPORT_EMAIL}
+          </AppText>
+          <Button label="Écrire au support" icon="mail-outline" onPress={contact} style={styles.contactBtn} />
+        </Card>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.white,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#333',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  section: {
-    marginTop: theme.spacing.xl,
-    paddingHorizontal: theme.spacing.lg,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: theme.spacing.md,
-  },
-  helpContainer: {
-    backgroundColor: theme.colors.white,
-    borderRadius: 12,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  helpItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.grayLight,
-  },
-  helpItemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  helpIconContainer: {
-    width: 32,
-    height: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: theme.spacing.md,
-  },
-  helpItemTitle: {
-    fontSize: 16,
-    color: '#333',
-    fontWeight: '500',
-  },
-  faqContainer: {
-    gap: theme.spacing.md,
-  },
-  faqItem: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: 12,
-    padding: theme.spacing.md,
-  },
-  faqQuestion: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: theme.spacing.sm,
-  },
-  faqAnswer: {
-    fontSize: 14,
-    color: theme.colors.gray,
-    lineHeight: 20,
-  },
-  contactSection: {
-    alignItems: 'center',
-    padding: theme.spacing.xl,
-    marginTop: theme.spacing.md,
-    marginBottom: 40,
-  },
-  contactTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    marginTop: theme.spacing.sm,
-    marginBottom: theme.spacing.md,
-  },
-  contactText: {
-    fontSize: 14,
-    color: theme.colors.gray,
-    marginBottom: 4,
-  },
+  container: { flex: 1 },
+  content: { padding: 16, paddingBottom: 32 },
+  section: { marginTop: 20 },
+  contact: { alignItems: 'center', gap: 6, paddingVertical: 20 },
+  contactBtn: { marginTop: 10 },
 });
-

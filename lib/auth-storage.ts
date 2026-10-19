@@ -8,6 +8,8 @@
 import * as SecureStore from 'expo-secure-store';
 
 const JWT_KEY = 'bondeal.jwt';
+// Set while signed in through the local test login (no Firebase session).
+const DEV_PHONE_KEY = 'bondeal.devPhone';
 
 export async function getJwt(): Promise<string | null> {
   try {
@@ -28,6 +30,30 @@ export async function setJwt(token: string): Promise<void> {
 export async function clearJwt(): Promise<void> {
   try {
     await SecureStore.deleteItemAsync(JWT_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+export async function getDevPhone(): Promise<string | null> {
+  try {
+    return await SecureStore.getItemAsync(DEV_PHONE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export async function setDevPhone(phone: string): Promise<void> {
+  try {
+    await SecureStore.setItemAsync(DEV_PHONE_KEY, phone);
+  } catch {
+    // session still works for this run
+  }
+}
+
+export async function clearDevPhone(): Promise<void> {
+  try {
+    await SecureStore.deleteItemAsync(DEV_PHONE_KEY);
   } catch {
     // ignore
   }

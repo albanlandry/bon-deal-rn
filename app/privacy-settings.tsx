@@ -1,186 +1,168 @@
-// app/privacy-settings.tsx - Privacy Settings Screen
+// app/privacy-settings.tsx — Confidentialité (MB-PRF-03, MB-TS-02, MB-AUTH-09)
+// What other members see of you (server-side privacy prefs, enforced on the
+// public profile), the people you blocked (with unblock), and a copy of your
+// data (10-minute export link opened in the browser).
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import React from 'react';
+import { Linking, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { showToast } from '../components/atoms/Toast';
-import { theme } from '../utils/theme';
-
-interface PrivacySetting {
-  id: string;
-  title: string;
-  description: string;
-  enabled: boolean;
-}
-
-const privacySettings: PrivacySetting[] = [
-  {
-    id: 'profileVisibility',
-    title: 'Profil public',
-    description: 'Autoriser les autres utilisateurs à voir votre profil',
-    enabled: true,
-  },
-  {
-    id: 'showLocation',
-    title: 'Afficher la localisation',
-    description: 'Afficher votre localisation sur votre profil',
-    enabled: true,
-  },
-  {
-    id: 'showPhone',
-    title: 'Afficher le téléphone',
-    description: 'Autoriser les autres à voir votre numéro de téléphone',
-    enabled: false,
-  },
-  {
-    id: 'allowMessages',
-    title: 'Accepter les messages',
-    description: 'Autoriser les autres utilisateurs à vous envoyer des messages',
-    enabled: true,
-  },
-];
+import { useTheme } from '@/theme';
+import {
+  AppText,
+  Avatar,
+  Button,
+  Card,
+  ErrorState,
+  ListGroup,
+  ListRow,
+  ScreenHeader,
+  showToast,
+  Skeleton,
+} from '@/components/ui';
+import { useAuth } from '@/contexts/AuthContext';
+import { ApiError } from '@/lib/api';
+import { createExportUrl } from '@/lib/api/account';
+import { blocksQuery } from '@/lib/api/safety';
+import { formatDayLabel } from '@/lib/format';
+import { useBlockActions } from '@/lib/useBlock';
+import { usePreferences } from '@/lib/usePreferences';
 
 export default function PrivacySettingsScreen() {
-  const router = useRouter();
-  const [settings, setSettings] = useState(privacySettings);
+  const t = useTheme();
+  const { user } = useAuth();
+  const { prefs, isLoading, isError, refetch, setPrivacy } = usePreferences();
+  const blocks = useQuery(blocksQuery());
+  const { confirmUnblock, busy } = useBlockActions();
 
-  const toggleSetting = (id: string) => {
-    setSettings(
-      settings.map(setting =>
-        setting.id === id ? { ...setting, enabled: !setting.enabled } : setting
-      )
-    );
-  };
+  const exportMut = useMutation({
+    mutationFn: createExportUrl,
+    onSuccess: async (url) => {
+      try {
+        await Linking.openURL(url);
+        showToast.info('Téléchargement lancé', 'Le lien reste valable 10 minutes.');
+      } catch {
+        showToast.error('Aucun navigateur', 'Impossible d’ouvrir le lien de téléchargement.');
+      }
+    },
+    onError: (e) =>
+      showToast.error(
+        'Export impossible',
+        e instanceof ApiError && e.status === 429 ? 'Trop de demandes. Réessayez dans une heure.' : 'Réessayez.',
+      ),
+  });
 
-  const handleSave = () => {
-    // TODO: Save settings to API
-    showToast.success('Paramètres sauvegardés', 'Vos préférences de confidentialité ont été mises à jour.');
-    router.back();
-  };
+  const lastInitial = user?.last_name ? `${user.last_name[0]}.` : null;
+  const nameExample = [user?.first_name, lastInitial].filter(Boolean).join(' ');
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Ionicons name="chevron-back" size={24} color="#000" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Confidentialité</Text>
-        <View style={{ width: 24 }} />
-      </View>
+    <SafeAreaView style={[styles.container, { backgroundColor: t.colors.canvas }]}>
+      <ScreenHeader title="Confidentialité" />
+      <ScrollView contentContainerStyle={styles.content}>
+        {isLoading ? (
+          <View style={styles.loading}>
+            <Skeleton height={56} radius={t.radius.md} />
+            <Skeleton height={56} radius={t.radius.md} />
+          </View>
+        ) : isError || !prefs ? (
+          <ErrorState message="Impossible de charger vos réglages." onRetry={() => refetch()} />
+        ) : (
+          <ListGroup title="Mon profil public">
+            <ListRow
+              icon="person-outline"
+              title="Afficher mon nom complet"
+              subtitle={
+                prefs.privacy.show_last_name
+                  ? 'Votre nom de famille est visible en entier'
+                  : `Seule l’initiale du nom est visible${nameExample ? ` (« ${nameExample} »)` : ''}`
+              }
+              toggle={{ value: prefs.privacy.show_last_name, onChange: (v) => setPrivacy('show_last_name', v) }}
+            />
+            <ListRow
+              icon="location-outline"
+              title="Afficher mon quartier"
+              subtitle="Sinon, seule votre ville apparaît sur votre profil"
+              toggle={{ value: prefs.privacy.show_quartier, onChange: (v) => setPrivacy('show_quartier', v) }}
+              last
+            />
+          </ListGroup>
+        )}
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <View style={styles.content}>
-          {settings.map((setting) => (
-            <View key={setting.id} style={styles.settingItem}>
-              <View style={styles.settingContent}>
-                <Text style={styles.settingTitle}>{setting.title}</Text>
-                <Text style={styles.settingDescription}>{setting.description}</Text>
-              </View>
-              <Switch
-                value={setting.enabled}
-                onValueChange={() => toggleSetting(setting.id)}
-                trackColor={{ false: '#e0e0e0', true: theme.colors.primary + '80' }}
-                thumbColor={setting.enabled ? theme.colors.primary : '#f4f3f4'}
-              />
+        <ListGroup title="Membres bloqués">
+          {blocks.isLoading ? (
+            <View style={styles.pad}>
+              <Skeleton height={44} />
             </View>
-          ))}
-        </View>
+          ) : blocks.isError ? (
+            <ListRow icon="refresh" title="Réessayer le chargement" onPress={() => blocks.refetch()} last />
+          ) : (blocks.data?.length ?? 0) === 0 ? (
+            <View style={styles.pad}>
+              <AppText variant="small" color="inkMuted">
+                Vous n’avez bloqué personne. Pour bloquer un membre, ouvrez son profil ou le menu d’une conversation.
+              </AppText>
+            </View>
+          ) : (
+            blocks.data!.map((b, i) => (
+              <View
+                key={b.user_id}
+                style={[
+                  styles.blockRow,
+                  i < blocks.data!.length - 1 && { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.colors.line },
+                ]}>
+                <Avatar uri={b.avatar_url} name={b.username} size={36} />
+                <View style={styles.flex}>
+                  <AppText variant="body" numberOfLines={1}>
+                    {b.username}
+                  </AppText>
+                  {!!b.blocked_at && (
+                    <AppText variant="caption" color="inkMuted">
+                      Bloqué · {formatDayLabel(b.blocked_at).toLowerCase()}
+                    </AppText>
+                  )}
+                </View>
+                <Button
+                  label="Débloquer"
+                  size="sm"
+                  variant="secondary"
+                  disabled={busy}
+                  onPress={() => confirmUnblock(b.user_id, b.username)}
+                />
+              </View>
+            ))
+          )}
+        </ListGroup>
 
-        {/* Info Section */}
-        <View style={styles.infoSection}>
-          <Ionicons name="information-circle-outline" size={20} color={theme.colors.primary} />
-          <Text style={styles.infoText}>
-            Vos informations personnelles sont protégées et ne seront jamais partagées avec des tiers sans votre consentement.
-          </Text>
-        </View>
+        <ListGroup title="Mes données">
+          <ListRow
+            icon="download-outline"
+            title={exportMut.isPending ? 'Préparation du lien…' : 'Télécharger mes données'}
+            subtitle="Profil, annonces, messages, transactions et avis (fichier JSON)"
+            onPress={exportMut.isPending ? undefined : () => exportMut.mutate()}
+            last
+          />
+        </ListGroup>
 
-        {/* Save Button */}
-        <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-          <Text style={styles.saveButtonText}>Enregistrer</Text>
-        </TouchableOpacity>
+        <Card tone="trust" style={styles.info}>
+          <Ionicons name="shield-checkmark-outline" size={20} color={t.colors.trust} />
+          <View style={styles.flex}>
+            <AppText variant="labelStrong">Vos données vous appartiennent</AppText>
+            <AppText variant="caption" color="inkMuted">
+              BonDeal ne vend pas vos données personnelles. Votre numéro de téléphone n’est jamais affiché aux
+              autres membres. Pour tout effacer : Paramètres › Supprimer mon compte.
+            </AppText>
+          </View>
+        </Card>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.white,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#333',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  content: {
-    padding: theme.spacing.lg,
-  },
-  settingItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  settingContent: {
-    flex: 1,
-    marginRight: theme.spacing.md,
-  },
-  settingTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
-  },
-  settingDescription: {
-    fontSize: 14,
-    color: theme.colors.gray,
-    lineHeight: 20,
-  },
-  infoSection: {
-    flexDirection: 'row',
-    backgroundColor: '#F0F8FF',
-    borderRadius: 12,
-    padding: theme.spacing.md,
-    marginHorizontal: theme.spacing.lg,
-    marginTop: theme.spacing.md,
-  },
-  infoText: {
-    flex: 1,
-    fontSize: 13,
-    color: '#666',
-    marginLeft: theme.spacing.sm,
-    lineHeight: 18,
-  },
-  saveButton: {
-    backgroundColor: theme.colors.primary,
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginHorizontal: theme.spacing.lg,
-    marginTop: theme.spacing.lg,
-    marginBottom: 40,
-  },
-  saveButtonText: {
-    color: theme.colors.white,
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  container: { flex: 1 },
+  content: { padding: 16, paddingBottom: 32 },
+  loading: { gap: 12, marginBottom: 20 },
+  pad: { padding: 16 },
+  blockRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 10, minHeight: 56 },
+  info: { flexDirection: 'row', gap: 12 },
+  flex: { flex: 1 },
 });
-
