@@ -22,6 +22,7 @@ import {
   SegmentedControl,
   Sheet,
   showToast,
+  Stagger,
   TextField,
 } from '@/components/ui';
 
@@ -115,6 +116,8 @@ export default function SettingsScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: t.colors.canvas }]}>
       <ScreenHeader title="Paramètres" />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Grouped cards; destructive actions last, in red (docs/09 §4). */}
+        <Stagger>
         <ListGroup title="Compte">
           <ListRow icon="person-outline" title="Modifier le profil" onPress={() => router.push('/edit-profile')} />
           <ListRow
@@ -156,7 +159,7 @@ export default function SettingsScreen() {
           <ListRow icon="information-circle-outline" title="À propos" onPress={() => router.push('/about' as Href)} last />
         </ListGroup>
 
-        <ListGroup>
+        <ListGroup title="Session et compte">
           <ListRow
             icon="log-out-outline"
             title={signingOut ? 'Déconnexion…' : 'Se déconnecter'}
@@ -173,8 +176,9 @@ export default function SettingsScreen() {
             last
           />
         </ListGroup>
+        </Stagger>
 
-        <AppText variant="caption" color="inkSubtle" align="center">
+        <AppText variant="caption" color="inkMuted" align="center">
           {config.app.name} v{config.app.version}
         </AppText>
       </ScrollView>

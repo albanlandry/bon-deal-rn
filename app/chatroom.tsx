@@ -1,11 +1,14 @@
 // app/chatroom.tsx — chatroom: live delivery over the WebSocket (polling only
 // while it is down), optimistic send, inline negotiation + Négo-Coach,
 // quick replies and a first-chat safety banner.
+// docs/09 §4 Chatroom: listing mini-card header, bubbles that rise in (new
+// messages only) with sending → sent → read ticks, offers as structured cards
+// with inline actions (accepting celebrates), sticky day separators.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -13,9 +16,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  StyleSheet,
   TextInput,
   View,
 } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   AppImage,
@@ -25,6 +30,8 @@ import {
   BUYER_QUICK_REPLIES,
   Button,
   Card,
+  Celebrate,
+  PressableScale,
   ErrorState,
   IconButton,
   ListRow,
@@ -55,6 +62,7 @@ import { formatAmount, formatClock, formatDayLabel } from '@/lib/format';
 import { haptics } from '@/lib/haptics';
 import type { BdChatMessage, BdCoachVerdict, BdConversation } from '@/constants/types';
 import { createStyles, Theme, useStyles, useTheme } from '@/theme';
+import { enterFade, enterFromBottom, exitFade, layoutEase } from '@/components/motion/anim';
 
 const SAFETY_DISMISSED_KEY = 'bondeal.chat.safety.dismissed.v1';
 
@@ -105,19 +113,26 @@ function TextBubble({
   mine,
   onRetry,
   onLongPress,
+  animate,
 }: {
   msg: BdChatMessage;
   mine: boolean;
   onRetry: (m: BdChatMessage) => void;
   /** Incoming messages: long-press opens the report sheet. */
   onLongPress?: (m: BdChatMessage) => void;
+  /** Rise in (150 ms) — new messages only, never the history. */
+  animate?: boolean;
 }) {
   const t = useTheme();
   const styles = useStyles(makeStyles);
   const failed = msg.client_status === 'failed';
   const sending = msg.client_status === 'sending';
+  const read = mine && !sending && !failed && !!msg.read_at;
+  const tick = sending ? 'time-outline' : read ? 'checkmark-done' : 'checkmark';
   return (
-    <View style={[styles.bubbleRow, mine ? styles.right : styles.left]}>
+    <Animated.View
+      entering={animate ? enterFromBottom() : undefined}
+      style={[styles.bubbleRow, mine ? styles.right : styles.left]}>
       <Pressable
         disabled={!failed && !onLongPress}
         onPress={failed ? () => onRetry(msg) : undefined}
@@ -131,8 +146,8 @@ function TextBubble({
         style={[
           styles.bubble,
           mine
-            ? { backgroundColor: t.colors.brandTint, borderBottomRightRadius: 4 }
-            : { backgroundColor: t.colors.surface, borderColor: t.colors.line, borderWidth: 1, borderBottomLeftRadius: 4 },
+            ? { backgroundColor: t.colors.brandTint, borderBottomRightRadius: 6 }
+            : { backgroundColor: t.colors.surface, borderColor: t.colors.line, borderWidth: 1, borderBottomLeftRadius: 6 },
           failed && { borderColor: t.colors.danger, borderWidth: 1 },
         ]}>
         <AppText variant="body">{msg.body}</AppText>
@@ -141,25 +156,27 @@ function TextBubble({
             {sending ? 'Envoi…' : failed ? 'Échec · Réessayer' : formatClock(msg.created_at)}
           </AppText>
           {mine && !failed && (
-            <Ionicons
-              name={sending ? 'time-outline' : 'checkmark'}
-              size={12}
-              color={t.colors.inkSubtle}
-            />
+            // Key swap = the tick cross-fades when its state changes.
+            <Animated.View
+              key={tick}
+              entering={enterFade()}
+              accessibilityLabel={sending ? 'Envoi en cours' : read ? 'Lu' : 'Envoyé'}>
+              <Ionicons name={tick} size={14} color={read ? t.colors.trust : t.colors.inkSubtle} />
+            </Animated.View>
           )}
           {failed && <Ionicons name="refresh" size={12} color={t.colors.danger} />}
         </View>
       </Pressable>
-    </View>
+    </Animated.View>
   );
 }
 
-function SystemPill({ text, kind }: { text: string; kind: string }) {
+function SystemPill({ text, kind, animate }: { text: string; kind: string; animate?: boolean }) {
   const t = useTheme();
   const styles = useStyles(makeStyles);
   const accepted = kind === 'system_accepted';
   return (
-    <View style={styles.systemRow} accessibilityRole="text">
+    <Animated.View entering={animate ? enterFromBottom() : undefined} style={styles.systemRow} accessibilityRole="text">
       <View
         style={[
           styles.systemPill,
@@ -174,18 +191,163 @@ function SystemPill({ text, kind }: { text: string; kind: string }) {
           {text}
         </AppText>
       </View>
+    </Animated.View>
+  );
+}
+
+/** Sticky (stickyHeaderIndices) day pill. */
+function DaySeparator({ label }: { label: string }) {
+  const t = useTheme();
+  const styles = useStyles(makeStyles);
+  return (
+    <View style={styles.dayRow} accessibilityRole="header">
+      <View style={[styles.dayPill, { backgroundColor: t.colors.surface, borderColor: t.colors.line }]}>
+        <AppText variant="captionStrong" color="inkMuted">
+          {label}
+        </AppText>
+      </View>
     </View>
   );
 }
 
-function DaySeparator({ label }: { label: string }) {
+// --- Offers as structured cards ---------------------------------------------
+
+type OfferStatus = { label: string; tone: 'warning' | 'success' | 'neutral' | 'brand' | 'danger'; icon: any };
+
+function offerStatus(isLatest: boolean, conv: BdConversation | undefined, mine: boolean): OfferStatus {
+  const ln = conv?.latest_negotiation;
+  if (!isLatest || !ln) return { label: 'Remplacée', tone: 'neutral', icon: 'swap-horizontal' };
+  switch (ln.status) {
+    case 'pending':
+      return mine
+        ? { label: 'En attente', tone: 'warning', icon: 'hourglass-outline' }
+        : { label: 'À vous de répondre', tone: 'brand', icon: 'alert-circle-outline' };
+    case 'accepted':
+      return { label: 'Acceptée', tone: 'success', icon: 'checkmark-circle' };
+    case 'rejected':
+      return { label: 'Refusée', tone: 'danger', icon: 'close-circle-outline' };
+    default:
+      return { label: 'Annulée', tone: 'neutral', icon: 'close-circle-outline' };
+  }
+}
+
+function OfferCard({
+  msg,
+  conv,
+  myId,
+  isLatest,
+  animate,
+  busy,
+  coachLoading,
+  coachVisible,
+  onAccept,
+  onReject,
+  onCounter,
+  onCoach,
+}: {
+  msg: BdChatMessage;
+  conv: BdConversation | undefined;
+  myId: number | undefined;
+  isLatest: boolean;
+  animate?: boolean;
+  busy: boolean;
+  coachLoading: boolean;
+  coachVisible: boolean;
+  onAccept: () => void;
+  onReject: () => void;
+  onCounter: () => void;
+  onCoach: () => void;
+}) {
+  const t = useTheme();
   const styles = useStyles(makeStyles);
+  const p = msg.payload ?? {};
+  const amount = typeof p.amount === 'number' ? p.amount : Number(p.amount);
+  const mine = p.by_user_id === myId || (p.by_user_id == null && msg.sender_id === myId);
+  const status = offerStatus(isLatest, conv, mine);
+  const ln = conv?.latest_negotiation;
+  const actionable = isLatest && ln?.status === 'pending' && ln.last_offer_by_id !== myId;
+  const kindLabel = msg.kind === 'system_counter' ? 'Contre-offre' : 'Offre';
+  const who = mine ? 'Vous' : (conv?.counterparty?.username ?? "L'autre partie");
+  const asking = conv?.post?.price;
+  const superseded = status.label === 'Remplacée';
+
   return (
-    <View style={styles.systemRow}>
-      <AppText variant="caption" color="inkSubtle">
-        {label}
-      </AppText>
-    </View>
+    <Animated.View
+      entering={animate ? enterFromBottom() : undefined}
+      layout={layoutEase()}
+      style={[styles.offerWrap, mine ? styles.right : styles.left]}>
+      <View
+        accessibilityRole="summary"
+        accessibilityLabel={`${kindLabel} de ${who} : ${formatAmount(amount)}, ${status.label}`}
+        style={[
+          styles.offerCard,
+          {
+            backgroundColor: t.colors.surface,
+            borderColor: actionable ? t.colors.brandStrong : t.colors.line,
+            borderWidth: actionable ? 1.5 : 1,
+            opacity: superseded ? 0.75 : 1,
+          },
+        ]}>
+        <View style={styles.inlineBetween}>
+          <View style={styles.inline}>
+            <Ionicons name="pricetag" size={14} color={t.colors.brandStrong} />
+            <AppText variant="captionStrong" color="inkMuted">
+              {kindLabel} · {who}
+            </AppText>
+          </View>
+          <Badge label={status.label} tone={status.tone} icon={status.icon} />
+        </View>
+        <AppText
+          variant="priceLarge"
+          style={superseded ? { textDecorationLine: 'line-through', color: t.colors.inkMuted } : undefined}>
+          {formatAmount(amount)}
+        </AppText>
+        {!!asking && asking > 0 && Number.isFinite(amount) && amount !== asking && (
+          <AppText variant="caption" color="inkMuted">
+            Prix affiché {formatAmount(asking)} · {amount < asking ? '−' : '+'}
+            {Math.round((Math.abs(asking - amount) / asking) * 100)} %
+          </AppText>
+        )}
+        <AppText variant="caption" color="inkSubtle">
+          {formatClock(msg.created_at)}
+        </AppText>
+        {actionable && (
+          <Animated.View entering={enterFade()} exiting={exitFade()} style={styles.offerActions}>
+            <View style={styles.bannerActions}>
+              <Button size="sm" label="Accepter" icon="checkmark" onPress={onAccept} disabled={busy} style={styles.flex} />
+              <Button size="sm" variant="secondary" label="Contre-offre" onPress={onCounter} disabled={busy} style={styles.flex} />
+            </View>
+            <View style={styles.inlineBetween}>
+              <Button size="sm" variant="ghost" label="Refuser" onPress={onReject} disabled={busy} />
+              {!coachVisible && (
+                <PressableScale
+                  accessibilityRole="button"
+                  accessibilityLabel="Demander l'avis du Négo-Coach"
+                  onPress={onCoach}
+                  disabled={coachLoading || busy}
+                  style={[styles.coachPill, { backgroundColor: t.colors.brandTint }]}>
+                  {coachLoading ? (
+                    <>
+                      <ActivityIndicator size="small" color={t.colors.brandStrong} />
+                      <AppText variant="captionStrong" color="brandStrong">
+                        Le coach regarde le marché…
+                      </AppText>
+                    </>
+                  ) : (
+                    <>
+                      <Ionicons name="bulb-outline" size={14} color={t.colors.brandStrong} />
+                      <AppText variant="captionStrong" color="brandStrong">
+                        Avis du coach
+                      </AppText>
+                    </>
+                  )}
+                </PressableScale>
+              )}
+            </View>
+          </Animated.View>
+        )}
+      </View>
+    </Animated.View>
   );
 }
 
@@ -321,7 +483,10 @@ function NegotiationBanner({
   coachLoading,
   coachVisible,
   busy,
+  hasOfferCard,
 }: {
+  /** The pending offer is shown (with its actions) as a card in the thread. */
+  hasOfferCard: boolean;
   conv: BdConversation;
   myId: number | undefined;
   onAccept: () => void;
@@ -336,8 +501,10 @@ function NegotiationBanner({
   const styles = useStyles(makeStyles);
   const neg = conv.latest_negotiation;
   if (!neg) return null;
+  if (hasOfferCard && neg.status !== 'pending' && neg.status !== 'accepted') return null;
   const amount = formatAmount(neg.current_offer_amount);
 
+  if (neg.status === 'pending' && hasOfferCard) return null;
   if (neg.status === 'pending') {
     const myTurn = neg.last_offer_by_id !== myId;
     if (!myTurn) {
@@ -392,6 +559,7 @@ function NegotiationBanner({
   }
 
   if (neg.status === 'accepted') {
+    if (hasOfferCard) return null;
     return (
       <View style={[styles.banner, { backgroundColor: t.colors.successTint }]}>
         <Ionicons name="checkmark-circle" size={18} color={t.colors.success} />
@@ -435,6 +603,10 @@ export default function ChatroomScreen() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [report, setReport] = useState<{ type: 'user' | 'message'; id: number; subject?: string } | null>(null);
   const [actionMsg, setActionMsg] = useState<BdChatMessage | null>(null);
+  const [celebrate, setCelebrate] = useState(0);
+  // Ids present at first paint: those never animate (only new messages rise in).
+  const seenIds = useRef<Set<number> | null>(null);
+  const safetyShownFull = useRef(false);
   const { confirmBlock, confirmUnblock } = useBlockActions();
   const listRef = useRef<FlatList<Row>>(null);
 
@@ -533,6 +705,7 @@ export default function ChatroomScreen() {
     mutationFn: () => acceptOffer(conv!.latest_negotiation!.id),
     onSuccess: () => {
       haptics.success();
+      setCelebrate(Date.now()); // peak–end: short confetti, never blocks touches
       showToast.success('Offre acceptée');
       invalidateThread();
     },
@@ -635,6 +808,27 @@ export default function ChatroomScreen() {
     AsyncStorage.setItem(SAFETY_DISMISSED_KEY, '1').catch(() => {});
   };
 
+  // "Collapses after first read": once the full banner has been on screen in
+  // a room, later rooms show the compact version.
+  useEffect(() => {
+    if (!safetyDismissed) safetyShownFull.current = true;
+  }, [safetyDismissed]);
+  useEffect(
+    () => () => {
+      if (safetyShownFull.current) AsyncStorage.setItem(SAFETY_DISMISSED_KEY, '1').catch(() => {});
+    },
+    [],
+  );
+
+  if (messages && !seenIds.current) seenIds.current = new Set(messages.map((m) => m.id));
+  const shouldAnimate = (m: BdChatMessage) => {
+    const seen = seenIds.current;
+    if (!seen || seen.has(m.id)) return false;
+    seen.add(m.id);
+    // Own server echoes replace an already-animated temp bubble: don't replay.
+    return m.sender_id !== myId || m.client_status === 'sending' || m.kind !== 'text';
+  };
+
   // --- Render ----------------------------------------------------------------
   if (authLoading) {
     return (
@@ -653,14 +847,18 @@ export default function ChatroomScreen() {
   }
 
   const rows: Row[] = [];
+  const stickyDays: number[] = [];
   let lastDay = '';
+  let latestOfferId: number | null = null;
   (messages ?? []).forEach((m) => {
     const day = formatDayLabel(m.created_at);
     if (day !== lastDay) {
-      rows.push({ type: 'day', key: `day-${day}-${m.id}`, label: day });
+      stickyDays.push(rows.length);
+      rows.push({ type: 'day', key: `day-${day}`, label: day });
       lastDay = day;
     }
     rows.push({ type: 'msg', key: String(m.id), msg: m });
+    if (m.kind === 'system_offer_made' || m.kind === 'system_counter') latestOfferId = m.id;
   });
 
   const hasMyMessage = (messages ?? []).some((m) => m.kind === 'text' && m.sender_id === myId);
@@ -675,46 +873,49 @@ export default function ChatroomScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {/* Header: counterparty + listing (price and state) */}
+      {/* Header: counterparty, then the listing mini-card (thumb + price + state). */}
       <View style={styles.header}>
         <IconButton icon="arrow-back" label="Retour" onPress={() => router.back()} />
-        <Pressable
+        <PressableScale
           accessibilityRole="button"
           accessibilityLabel={`Voir le profil de ${conv?.counterparty?.username ?? ''}`}
           disabled={!otherId}
-          onPress={openProfile}>
-          <Avatar uri={otherProfile.data?.avatar_url} name={conv?.counterparty?.username} size={36} />
-        </Pressable>
-        <View style={styles.flex}>
-          <AppText variant="bodyStrong" numberOfLines={1}>
-            {conv?.counterparty?.username ?? 'Conversation'}
-          </AppText>
-          <AppText variant="caption" color="inkMuted">
-            {conv ? (isBuyer ? 'Vendeur' : 'Acheteur') : ' '}
-          </AppText>
-        </View>
+          onPress={openProfile}
+          style={styles.who}>
+          <Avatar uri={otherProfile.data?.avatar_url} name={conv?.counterparty?.username} size={40} />
+          <View style={styles.flex}>
+            <AppText variant="bodyStrong" numberOfLines={1}>
+              {conv?.counterparty?.username ?? 'Conversation'}
+            </AppText>
+            <AppText variant="caption" color="inkMuted">
+              {conv ? (isBuyer ? 'Vendeur' : 'Acheteur') : ' '}
+            </AppText>
+          </View>
+        </PressableScale>
         {conv && (
           <IconButton icon="ellipsis-vertical" label="Options de la conversation" onPress={() => setMenuOpen(true)} />
         )}
       </View>
       {post && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Voir l'annonce ${post.title}`}
-          onPress={() => router.push({ pathname: '/item-details', params: { id: String(post.id) } })}
-          style={styles.listing}>
-          <AppImage uri={post.thumbnail_url} style={styles.listingThumb} />
-          <View style={styles.flex}>
-            <AppText variant="label" numberOfLines={1}>
-              {post.title}
-            </AppText>
-            <AppText variant="labelStrong" color={post.is_free ? 'success' : 'ink'}>
-              {post.is_free ? 'Gratuit' : formatAmount(post.price)}
-            </AppText>
-          </View>
-          {postBadge && <Badge label={postBadge} tone={postBadge === 'Vendu' ? 'neutral' : 'warning'} />}
-          <Ionicons name="chevron-forward" size={16} color={t.colors.inkSubtle} />
-        </Pressable>
+        <View style={styles.listingWrap}>
+          <PressableScale
+            accessibilityRole="button"
+            accessibilityLabel={`Voir l'annonce ${post.title}, ${post.is_free ? 'Gratuit' : formatAmount(post.price)}${postBadge ? `, ${postBadge}` : ''}`}
+            onPress={() => router.push({ pathname: '/item-details', params: { id: String(post.id) } })}
+            style={[styles.listing, { backgroundColor: t.colors.canvas, borderColor: t.colors.line }]}>
+            <AppImage uri={post.thumbnail_url} style={styles.listingThumb} recyclingKey={`p${post.id}`} />
+            <View style={styles.flex}>
+              <AppText variant="price" color={post.is_free ? 'success' : 'ink'}>
+                {post.is_free ? 'Gratuit' : formatAmount(post.price)}
+              </AppText>
+              <AppText variant="small" color="inkMuted" numberOfLines={1}>
+                {post.title}
+              </AppText>
+            </View>
+            {postBadge && <Badge label={postBadge} tone={postBadge === 'Vendu' ? 'overlay' : 'warning'} />}
+            <Ionicons name="chevron-forward" size={18} color={t.colors.inkSubtle} />
+          </PressableScale>
+        </View>
       )}
 
       {conv && (
@@ -728,6 +929,7 @@ export default function ChatroomScreen() {
           coachLoading={coachMutation.isPending}
           coachVisible={!!coach}
           busy={negBusy}
+          hasOfferCard={latestOfferId != null}
         />
       )}
 
@@ -774,6 +976,7 @@ export default function ChatroomScreen() {
             ref={listRef}
             data={rows}
             keyExtractor={(r) => r.key}
+            stickyHeaderIndices={stickyDays}
             renderItem={({ item }) =>
               item.type === 'day' ? (
                 <DaySeparator label={item.label} />
@@ -783,9 +986,29 @@ export default function ChatroomScreen() {
                   mine={item.msg.sender_id === myId}
                   onRetry={handleRetry}
                   onLongPress={item.msg.sender_id !== myId && item.msg.id > 0 ? setActionMsg : undefined}
+                  animate={shouldAnimate(item.msg)}
+                />
+              ) : item.msg.kind === 'system_offer_made' || item.msg.kind === 'system_counter' ? (
+                <OfferCard
+                  msg={item.msg}
+                  conv={conv}
+                  myId={myId}
+                  isLatest={item.msg.id === latestOfferId}
+                  animate={shouldAnimate(item.msg)}
+                  busy={negBusy}
+                  coachLoading={coachMutation.isPending}
+                  coachVisible={!!coach}
+                  onAccept={handleAccept}
+                  onReject={handleReject}
+                  onCounter={handleCounter}
+                  onCoach={() => coachMutation.mutate()}
                 />
               ) : (
-                <SystemPill text={renderSystemMessage(item.msg, conv, myId)} kind={item.msg.kind} />
+                <SystemPill
+                  text={renderSystemMessage(item.msg, conv, myId)}
+                  kind={item.msg.kind}
+                  animate={shouldAnimate(item.msg)}
+                />
               )
             }
             contentContainerStyle={styles.messagesContent}
@@ -793,15 +1016,9 @@ export default function ChatroomScreen() {
             showsVerticalScrollIndicator={false}
             onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: !t.reduceMotion })}
             ListHeaderComponent={
-              !safetyDismissed ? (
-                <View style={styles.safety}>
-                  <SafetyBanner onDismiss={dismissSafety} />
-                </View>
-              ) : (
-                <View style={styles.safety}>
-                  <SafetyBanner compact />
-                </View>
-              )
+              <Animated.View layout={layoutEase()} style={styles.safety}>
+                {!safetyDismissed ? <SafetyBanner onDismiss={dismissSafety} /> : <SafetyBanner compact />}
+              </Animated.View>
             }
             ListEmptyComponent={
               <View style={styles.emptyChat}>
@@ -816,10 +1033,12 @@ export default function ChatroomScreen() {
         )}
 
         {showQuickReplies && (
-          <QuickReplies
-            replies={isBuyer ? BUYER_QUICK_REPLIES : SELLER_QUICK_REPLIES}
-            onPick={(r) => send(r)}
-          />
+          <Animated.View entering={enterFade()} exiting={exitFade()}>
+            <QuickReplies
+              replies={isBuyer ? BUYER_QUICK_REPLIES : SELLER_QUICK_REPLIES}
+              onPick={(r) => send(r)}
+            />
+          </Animated.View>
         )}
 
         {canMakeOffer && (
@@ -851,12 +1070,13 @@ export default function ChatroomScreen() {
             accessibilityLabel="Message"
             maxFontSizeMultiplier={1.3}
           />
-          <Pressable
+          <PressableScale
             accessibilityRole="button"
             accessibilityLabel="Envoyer"
             accessibilityState={{ disabled: !messageText.trim() }}
             onPress={handleSend}
             disabled={!messageText.trim()}
+            scaleTo={0.9}
             style={[
               styles.send,
               { backgroundColor: messageText.trim() ? t.colors.brand : t.colors.surfaceAlt },
@@ -866,7 +1086,7 @@ export default function ChatroomScreen() {
               size={20}
               color={messageText.trim() ? t.colors.onBrand : t.colors.inkSubtle}
             />
-          </Pressable>
+          </PressableScale>
         </View>
       </KeyboardAvoidingView>
 
@@ -932,6 +1152,8 @@ export default function ChatroomScreen() {
         />
       </Sheet>
 
+      <Celebrate trigger={celebrate} haptic={false} onDone={() => setCelebrate(0)} />
+
       <ReportSheet
         visible={!!report}
         onClose={() => setReport(null)}
@@ -952,24 +1174,41 @@ const makeStyles = createStyles((t: Theme) => ({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingRight: t.spacing.md,
+    gap: 4,
+    paddingRight: 4,
     paddingLeft: 4,
-    minHeight: 56,
+    minHeight: 60,
     backgroundColor: t.colors.surface,
+  },
+  who: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 48 },
+  listingWrap: {
+    paddingHorizontal: t.spacing.sm,
+    paddingBottom: t.spacing.xs,
+    backgroundColor: t.colors.surface,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: t.colors.line,
   },
   listing: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: t.spacing.sm,
-    paddingHorizontal: t.spacing.md,
-    paddingVertical: t.spacing.xs,
-    backgroundColor: t.colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: t.colors.line,
-    minHeight: 56,
+    padding: t.spacing.xs,
+    paddingRight: t.spacing.sm,
+    borderRadius: t.radius.md,
+    borderWidth: 1,
+    minHeight: 64,
   },
-  listingThumb: { width: 40, height: 40, borderRadius: t.radius.sm },
+  listingThumb: { width: 48, height: 48, borderRadius: t.radius.sm },
+  dayRow: { alignItems: 'center', paddingVertical: 6 },
+  dayPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: t.radius.full,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  offerWrap: { marginVertical: 6, width: '82%', maxWidth: 360 },
+  offerCard: { borderRadius: t.radius.lg, padding: t.spacing.sm, gap: 4 },
+  offerActions: { gap: 4, marginTop: t.spacing.xs },
   banner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -983,7 +1222,7 @@ const makeStyles = createStyles((t: Theme) => ({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    minHeight: 36,
+    minHeight: 40,
     paddingHorizontal: 10,
     borderRadius: t.radius.full,
     backgroundColor: t.colors.surface,

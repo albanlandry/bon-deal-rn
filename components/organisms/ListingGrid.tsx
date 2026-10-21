@@ -1,8 +1,10 @@
+import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
 import React, { useCallback } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   RefreshControl,
   StyleSheet,
   useWindowDimensions,
@@ -10,6 +12,7 @@ import {
 } from 'react-native';
 import type { BdPost } from '@/constants/types';
 import { useTheme } from '@/theme';
+import FadeInView, { useDelayedFlag, useFirstPaint } from '../motion/FadeInView';
 import ListingCard, { ListingCardSkeleton } from '../molecules/ListingCard';
 
 const PAD = 16;
@@ -26,9 +29,26 @@ export interface ListingGridProps {
   ListHeaderComponent?: React.ReactElement | null;
   ListEmptyComponent?: React.ReactElement | null;
   showState?: boolean;
+  /** Scroll passthrough (e.g. `useScrollChrome().onScroll`). */
+  onScroll?: (e: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  scrollEventThrottle?: number;
+  /** Room for an absolute header above / the tab bar below. */
+  contentPaddingTop?: number;
+  contentPaddingBottom?: number;
 }
 
-/** 2-column marketplace grid (Jakob's law) with skeletons + pull-to-refresh. */
+/** Columns: 2 on phones (docs/09), 3 on wide screens / tablets. */
+export function gridColumns(width: number): number {
+  return width >= 900 ? 4 : width >= 600 ? 3 : 2;
+}
+
+type Cell = BdPost | null;
+
+/**
+ * Marketplace grid on FlashList v2 (recycling, fixed 4:5 photos so nothing
+ * jumps). First paint staggers the first 8 cards (30 ms); skeletons only
+ * when a load takes over ~1 s (NN/g); pull-to-refresh in brand colours.
+ */
 export default function ListingGrid({
   posts,
   loading,
@@ -40,57 +60,79 @@ export default function ListingGrid({
   ListHeaderComponent,
   ListEmptyComponent,
   showState,
+  onScroll,
+  scrollEventThrottle,
+  contentPaddingTop = 0,
+  contentPaddingBottom = 0,
 }: ListingGridProps) {
   const t = useTheme();
   const router = useRouter();
   const { width } = useWindowDimensions();
-  const cardWidth = Math.floor((width - PAD * 2 - GAP) / 2);
+  const cols = gridColumns(width);
+  const cardWidth = Math.floor((width - PAD * 2 - GAP * (cols - 1)) / cols);
+  const showSkeletons = useDelayedFlag(!!loading, 1000);
+  const firstPaint = useFirstPaint(!loading && posts.length > 0);
 
   const renderItem = useCallback(
-    ({ item }: { item: BdPost | null }) =>
-      item ? (
-        <ListingCard
-          post={item}
-          width={cardWidth}
-          showState={showState}
-          onPress={() => router.push({ pathname: '/item-details', params: { id: String(item.id) } })}
-          onToggleLike={onToggleLike ? () => onToggleLike(item) : undefined}
-        />
-      ) : (
-        <ListingCardSkeleton width={cardWidth} />
-      ),
-    [cardWidth, onToggleLike, router, showState],
+    ({ item, index }: { item: Cell; index: number }) => (
+      <View style={styles.cell}>
+        {item ? (
+          <FadeInView index={index} animate={firstPaint}>
+            <ListingCard
+              post={item}
+              width={cardWidth}
+              showState={showState}
+              onPress={() => router.push({ pathname: '/item-details', params: { id: String(item.id) } })}
+              onToggleLike={onToggleLike ? () => onToggleLike(item) : undefined}
+            />
+          </FadeInView>
+        ) : (
+          <ListingCardSkeleton width={cardWidth} />
+        )}
+      </View>
+    ),
+    [cardWidth, onToggleLike, router, showState, firstPaint],
   );
 
-  const data: (BdPost | null)[] = loading ? Array(6).fill(null) : posts;
+  // While loading: nothing for the first second, then card-shaped skeletons.
+  const data: Cell[] = loading ? (showSkeletons ? Array(cols * 3).fill(null) : []) : posts;
 
   return (
-    <FlatList
+    <FlashList
+      key={`cols-${cols}`}
       data={data}
-      numColumns={2}
+      numColumns={cols}
       renderItem={renderItem}
       keyExtractor={(item, i) => (item ? String(item.id) : `sk-${i}`)}
-      columnWrapperStyle={styles.row}
-      contentContainerStyle={[styles.content, !loading && posts.length === 0 && styles.grow]}
+      getItemType={(item) => (item ? 'card' : 'skeleton')}
+      contentContainerStyle={{
+        paddingHorizontal: PAD - GAP / 2,
+        paddingTop: contentPaddingTop,
+        paddingBottom: contentPaddingBottom + 24,
+      }}
       showsVerticalScrollIndicator={false}
-      ListHeaderComponent={ListHeaderComponent}
-      ListEmptyComponent={loading ? null : ListEmptyComponent}
+      ListHeaderComponent={ListHeaderComponent ? <View style={styles.bleed}>{ListHeaderComponent}</View> : null}
+      ListEmptyComponent={loading || !ListEmptyComponent ? null : <View style={styles.bleed}>{ListEmptyComponent}</View>}
       onEndReached={onEndReached}
       onEndReachedThreshold={0.6}
-      initialNumToRender={6}
-      windowSize={7}
-      removeClippedSubviews
+      onScroll={onScroll}
+      scrollEventThrottle={scrollEventThrottle ?? (onScroll ? 16 : undefined)}
       ListFooterComponent={
-        fetchingMore ? <ActivityIndicator style={styles.footer} color={t.colors.brandStrong} /> : <View style={styles.footer} />
+        fetchingMore ? (
+          <ActivityIndicator style={styles.footer} color={t.colors.brandStrong} />
+        ) : (
+          <View style={styles.footer} />
+        )
       }
       refreshControl={
         onRefresh ? (
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            colors={[t.colors.brandStrong]}
+            colors={[t.colors.brandStrong, t.colors.brand]}
             tintColor={t.colors.brandStrong}
             progressBackgroundColor={t.colors.surface}
+            progressViewOffset={contentPaddingTop}
           />
         ) : undefined
       }
@@ -99,8 +141,7 @@ export default function ListingGrid({
 }
 
 const styles = StyleSheet.create({
-  content: { paddingBottom: 24 },
-  grow: { flexGrow: 1 },
-  row: { paddingHorizontal: PAD, gap: GAP, marginBottom: GAP },
+  cell: { paddingHorizontal: GAP / 2, paddingBottom: GAP },
   footer: { paddingVertical: 16 },
+  bleed: { marginHorizontal: -(PAD - GAP / 2) },
 });

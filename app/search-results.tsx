@@ -3,13 +3,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { NativeScrollEvent, NativeSyntheticEvent, ScrollView, View } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import {
   AppText,
   Button,
+  CategoryRow,
   Chip,
+  PressableScale,
   EmptyState,
   ErrorState,
   IconButton,
@@ -18,10 +21,10 @@ import {
   showToast,
   TextField,
 } from '@/components/ui';
-import { CATEGORY_ICONS } from '@/components/molecules/CategorySheet';
+import { enterFade, exitFade, layoutSpring, spring } from '@/components/motion/anim';
 import ListingGrid from '@/components/organisms/ListingGrid';
 import SaveSearchSheet from '@/components/organisms/SaveSearchSheet';
-import { CATEGORIES, categoryLabel } from '@/constants/catalog';
+import { CATEGORIES, categoryIcon, categoryLabel } from '@/constants/catalog';
 import type { BdPost } from '@/constants/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToggleLike } from '@/lib/api/likeToggle';
@@ -245,9 +248,14 @@ export default function SearchResultsScreen() {
         : { ...d, minPrice: BUCKET_RANGE[b].min, maxPrice: BUCKET_RANGE[b].max },
     );
 
-  const activeChips: { key: string; label: string; clear: () => void }[] = [];
+  const activeChips: { key: string; label: string; clear: () => void; icon?: string }[] = [];
   if (filters.category)
-    activeChips.push({ key: 'cat', label: categoryLabel(filters.category), clear: () => setFilters((f) => ({ ...f, category: null })) });
+    activeChips.push({
+      key: 'cat',
+      label: categoryLabel(filters.category),
+      icon: categoryIcon(filters.category, false),
+      clear: () => setFilters((f) => ({ ...f, category: null })),
+    });
   if (filters.minPrice != null || filters.maxPrice != null)
     activeChips.push({
       key: 'price',
@@ -275,6 +283,25 @@ export default function SearchResultsScreen() {
 
   const showError = feed.isError && results.length === 0 && !feed.isLoading;
 
+  // "Enregistrer cette recherche" floating pill: appears after the first scroll.
+  const savePill = useSharedValue(0);
+  const scrolledOnce = React.useRef(false);
+  const [saveShown, setSaveShown] = useState(false);
+  const onScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      if (scrolledOnce.current || e.nativeEvent.contentOffset.y < 48) return;
+      scrolledOnce.current = true;
+      setSaveShown(true);
+      savePill.value = spring(1, 'default');
+    },
+    [savePill],
+  );
+  const savePillStyle = useAnimatedStyle(() => ({
+    opacity: savePill.value,
+    transform: [{ translateY: (1 - savePill.value) * 80 }],
+  }));
+
+  const countText = feed.isLoading ? 'Recherche…' : `${total} résultat${total > 1 ? 's' : ''}`;
   const header = (
     <View style={s.listHeader}>
       <SegmentedControl
@@ -283,25 +310,13 @@ export default function SearchResultsScreen() {
         onChange={setSort}
         accessibilityLabel="Trier les résultats"
       />
-      {activeChips.length > 0 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.activeRow}>
-          {activeChips.map((c) => (
-            <Chip key={c.key} label={c.label} selected kind="action" trailingIcon="close" onPress={c.clear} />
-          ))}
-        </ScrollView>
-      )}
-      <View style={s.countRow}>
-        <AppText variant="small" color="inkMuted" accessibilityLiveRegion="polite" style={s.flex}>
-          {feed.isLoading ? 'Recherche…' : `${total} résultat${total > 1 ? 's' : ''}`}
-        </AppText>
-        <Button
-          label="Enregistrer"
-          icon="bookmark-outline"
-          variant="ghost"
-          size="sm"
-          onPress={() => setShowSave(true)}
-          accessibilityHint="Enregistrer cette recherche et recevoir une alerte pour les nouvelles annonces"
-        />
+      <View style={s.countRow} accessibilityLiveRegion="polite">
+        {/* Count cross-fades on change. */}
+        <Animated.View key={countText} entering={enterFade()} exiting={exitFade()} style={s.flex}>
+          <AppText variant="labelStrong" color="inkMuted">
+            {countText}
+          </AppText>
+        </Animated.View>
       </View>
     </View>
   );
@@ -310,7 +325,7 @@ export default function SearchResultsScreen() {
     <SafeAreaView style={s.container}>
       <View style={s.topBar}>
         <IconButton icon="arrow-back" label="Retour" onPress={() => router.back()} />
-        <Pressable
+        <PressableScale
           accessibilityRole="search"
           accessibilityLabel={query ? `Recherche : ${query}. Modifier` : 'Rechercher'}
           onPress={() => router.push('/search')}
@@ -319,15 +334,33 @@ export default function SearchResultsScreen() {
           <AppText variant="body" numberOfLines={1} style={s.flex} color={query ? 'ink' : 'inkSubtle'}>
             {query || 'Parcourir les annonces'}
           </AppText>
-        </Pressable>
+        </PressableScale>
         <IconButton icon="bookmark-outline" label="Enregistrer cette recherche" onPress={() => setShowSave(true)} />
-        <IconButton
-          icon="options-outline"
-          label="Filtres"
-          variant="tonal"
-          badge={activeCount}
-          onPress={openSheet}
-        />
+      </View>
+
+      {/* Sticky filter bar: removable chips animate in and out. */}
+      <View style={s.filterBar}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.activeRow}>
+          <Chip
+            label={activeCount ? `Filtres · ${activeCount}` : 'Filtres'}
+            icon="options-outline"
+            kind="action"
+            selected={activeCount > 0}
+            onPress={openSheet}
+          />
+          {activeChips.map((c) => (
+            <Animated.View key={c.key} entering={enterFade()} exiting={exitFade()} layout={layoutSpring()}>
+              <Chip
+                label={c.label}
+                icon={c.icon as any}
+                selected
+                kind="action"
+                trailingIcon="close"
+                onPress={c.clear}
+              />
+            </Animated.View>
+          ))}
+        </ScrollView>
       </View>
 
       {showError ? (
@@ -343,6 +376,9 @@ export default function SearchResultsScreen() {
           }}
           fetchingMore={feed.isFetchingNextPage}
           onToggleLike={onToggleLike}
+          onScroll={onScroll}
+          scrollEventThrottle={32}
+          contentPaddingBottom={72}
           ListHeaderComponent={header}
           ListEmptyComponent={
             <EmptyState
@@ -358,10 +394,27 @@ export default function SearchResultsScreen() {
         />
       )}
 
-      {/* Filter bottom sheet — 3 groups (Hick) */}
+      <Animated.View pointerEvents={saveShown ? 'box-none' : 'none'} style={[s.saveWrap, savePillStyle]}>
+        <PressableScale
+          accessibilityRole="button"
+          accessibilityLabel="Enregistrer cette recherche"
+          accessibilityHint="Recevoir une alerte pour les nouvelles annonces"
+          haptic="light"
+          onPress={() => setShowSave(true)}
+          style={[s.savePill, t.elevation.sheet as object]}>
+          <Ionicons name="bookmark-outline" size={18} color={t.colors.surface} />
+          <AppText variant="labelStrong" style={{ color: t.colors.surface }}>
+            Enregistrer cette recherche
+          </AppText>
+        </PressableScale>
+      </Animated.View>
+
+      {/* Filter bottom sheet — snaps at 50 % / 90 % */}
       <Sheet
         visible={showSheet}
         onClose={() => setShowSheet(false)}
+        snapPoints={[0.5, 0.9]}
+        initialSnap={0}
         title="Filtres"
         footer={
           <View style={s.sheetActions}>
@@ -385,17 +438,13 @@ export default function SearchResultsScreen() {
         <AppText variant="labelStrong" style={s.groupTitle}>
           Catégorie
         </AppText>
-        <View style={s.wrap}>
-          <Chip label="Toutes" selected={!draft.category} onPress={() => setDraft((d) => ({ ...d, category: null }))} />
-          {CATEGORIES.map((c) => (
-            <Chip
-              key={c.value}
-              label={c.label}
-              icon={CATEGORY_ICONS[c.value]}
-              selected={draft.category === c.value}
-              onPress={() => setDraft((d) => ({ ...d, category: d.category === c.value ? null : c.value }))}
-            />
-          ))}
+        <View style={s.bleed}>
+          <CategoryRow
+            items={[{ value: null, label: 'Toutes' }, ...CATEGORIES.map((c) => ({ value: c.value }))]}
+            selected={draft.category}
+            onSelect={(v) => setDraft((d) => ({ ...d, category: v }))}
+            style={s.catRow}
+          />
         </View>
 
         <AppText variant="labelStrong" style={s.groupTitle}>
@@ -534,9 +583,26 @@ const makeStyles = createStyles((t) => ({
     borderColor: t.colors.line,
     backgroundColor: t.colors.surface,
   },
-  listHeader: { paddingHorizontal: t.spacing.md, paddingTop: t.spacing.xs, gap: t.spacing.xs },
-  activeRow: { gap: t.spacing.xs },
-  countRow: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs, paddingBottom: t.spacing.xs },
+  listHeader: { paddingHorizontal: t.spacing.md, paddingTop: t.spacing.sm, gap: t.spacing.xs },
+  filterBar: {
+    borderBottomWidth: 1,
+    borderBottomColor: t.colors.line,
+    backgroundColor: t.colors.canvas,
+  },
+  activeRow: { gap: t.spacing.xs, paddingHorizontal: t.spacing.md, paddingVertical: t.spacing.xs },
+  countRow: { flexDirection: 'row', alignItems: 'center', minHeight: 28, paddingBottom: t.spacing.xs },
+  saveWrap: { position: 'absolute', left: 0, right: 0, bottom: 40, alignItems: 'center' },
+  savePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: t.spacing.xs,
+    minHeight: 48,
+    paddingHorizontal: t.spacing.lg,
+    borderRadius: t.radius.full,
+    backgroundColor: t.colors.ink,
+  },
+  bleed: { marginHorizontal: -20 },
+  catRow: { paddingHorizontal: 20 },
   hint: { marginTop: t.spacing.xs },
   groupTitle: { marginTop: t.spacing.md, marginBottom: t.spacing.xs },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.xs },

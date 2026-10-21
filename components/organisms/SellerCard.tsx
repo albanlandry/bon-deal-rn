@@ -7,7 +7,6 @@ import { publicProfileQuery } from '@/lib/api/account';
 import { formatMemberSince, formatResponseTime } from '@/lib/format';
 import AppText from '../atoms/AppText';
 import Avatar from '../atoms/Avatar';
-import Badge from '../atoms/Badge';
 import Card from '../atoms/Card';
 import RatingStars from '../atoms/RatingStars';
 import Skeleton from '../atoms/Skeleton';
@@ -21,9 +20,11 @@ export interface SellerCardProps {
 }
 
 /**
- * Social proof + uncertainty reduction: who you're dealing with. Every field
- * comes from GET /users/{id}/profile (rating, sales, response time, member
- * since, verified phone); a missing value is simply not shown.
+ * Trust card (docs/09 §4, social proof + uncertainty reduction): avatar with
+ * the teal verified ring, rating stars, then three facts — sales, response
+ * time, member since. Every field comes from GET /users/{id}/profile; a
+ * missing value is simply not shown (no fake social proof). Press scales the
+ * card (Card → PressableScale); tap opens the seller profile.
  */
 export default function SellerCard({ userId, username, city, onPress, isMe }: SellerCardProps) {
   const t = useTheme();
@@ -33,11 +34,24 @@ export default function SellerCard({ userId, username, city, onPress, isMe }: Se
   const place = p ? [p.quartier, p.city].filter(Boolean).join(', ') : city;
   const response = formatResponseTime(p?.response_time_minutes);
   const since = formatMemberSince(p?.member_since);
+  const verified = !!p?.phone_verified;
+
+  const facts: { icon: React.ComponentProps<typeof Ionicons>['name']; value: string; label: string }[] = [];
+  if (p && p.sales_count > 0)
+    facts.push({ icon: 'bag-check-outline', value: String(p.sales_count), label: p.sales_count > 1 ? 'ventes' : 'vente' });
+  if (response) facts.push({ icon: 'time-outline', value: response, label: 'pour répondre' });
+  if (since) facts.push({ icon: 'calendar-outline', value: since.replace('Membre depuis ', ''), label: 'membre depuis' });
 
   return (
-    <Card onPress={onPress} accessibilityLabel={`Vendeur ${name}, voir le profil`}>
+    <Card onPress={onPress} elevated accessibilityLabel={`Vendeur ${name}${verified ? ', téléphone vérifié' : ''}, voir le profil`}>
       <View style={styles.row}>
-        <Avatar uri={p?.avatar_url} name={name} size={52} verified={!!p?.phone_verified} />
+        <View
+          style={[
+            styles.ring,
+            { borderColor: verified ? t.colors.trust : 'transparent' },
+          ]}>
+          <Avatar uri={p?.avatar_url} name={name} size={52} verified={verified} />
+        </View>
         <View style={styles.text}>
           <AppText variant="bodyStrong" numberOfLines={1}>
             {name}
@@ -52,6 +66,14 @@ export default function SellerCard({ userId, username, city, onPress, isMe }: Se
               Pas encore d’avis
             </AppText>
           )}
+          {verified && (
+            <View style={styles.meta}>
+              <Ionicons name="shield-checkmark" size={12} color={t.colors.trust} />
+              <AppText variant="captionStrong" color="trust">
+                Téléphone vérifié
+              </AppText>
+            </View>
+          )}
           {!!place && (
             <View style={styles.meta}>
               <Ionicons name="location-outline" size={12} color={t.colors.inkMuted} />
@@ -63,14 +85,21 @@ export default function SellerCard({ userId, username, city, onPress, isMe }: Se
         </View>
         {onPress && <Ionicons name="chevron-forward" size={18} color={t.colors.inkSubtle} />}
       </View>
-      {p && (
-        <View style={styles.badges}>
-          {p.phone_verified && <Badge label="Téléphone vérifié" tone="trust" icon="shield-checkmark" />}
-          {p.sales_count > 0 && (
-            <Badge label={`${p.sales_count} vente${p.sales_count > 1 ? 's' : ''}`} tone="success" icon="bag-check-outline" />
-          )}
-          {!!response && <Badge label={`Répond en ${response}`} tone="neutral" icon="time-outline" />}
-          {!!since && <Badge label={since} tone="neutral" />}
+      {facts.length > 0 && (
+        <View style={[styles.facts, { borderTopColor: t.colors.line }]}>
+          {facts.map((f, i) => (
+            <View key={f.label} style={[styles.fact, i > 0 && { borderLeftColor: t.colors.line, borderLeftWidth: StyleSheet.hairlineWidth }]}>
+              <View style={styles.factTop}>
+                <Ionicons name={f.icon} size={14} color={t.colors.inkMuted} />
+                <AppText variant="labelStrong" numberOfLines={1}>
+                  {f.value}
+                </AppText>
+              </View>
+              <AppText variant="caption" color="inkMuted" numberOfLines={1}>
+                {f.label}
+              </AppText>
+            </View>
+          ))}
         </View>
       )}
     </Card>
@@ -79,7 +108,10 @@ export default function SellerCard({ userId, username, city, onPress, isMe }: Se
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  ring: { borderWidth: 2, borderRadius: 32, padding: 2 },
   text: { flex: 1, gap: 2 },
-  meta: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
+  meta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  facts: { flexDirection: 'row', marginTop: 12, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth },
+  fact: { flex: 1, alignItems: 'center', gap: 2, paddingHorizontal: 4 },
+  factTop: { flexDirection: 'row', alignItems: 'center', gap: 4 },
 });

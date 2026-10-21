@@ -1,12 +1,28 @@
-// app/notifications.tsx — Notifications grouped by day, icon per type, deep links.
+// app/notifications.tsx — Notifications grouped by day (sticky headers), a
+// fixed icon + hue per type (category mnemonic when the payload names one),
+// swipe right to mark read, deep links (docs/09 §4 Notifications).
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import React, { useMemo } from 'react';
-import { Pressable, RefreshControl, SectionList, StyleSheet, View } from 'react-native';
+import { RefreshControl, SectionList, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AppText, Button, EmptyState, ErrorState, ScreenHeader, showToast, Skeleton } from '@/components/ui';
+import {
+  AppText,
+  Button,
+  CategoryTag,
+  EmptyState,
+  ErrorState,
+  FadeInView,
+  PressableScale,
+  ScreenHeader,
+  showToast,
+  Skeleton,
+  SwipeRow,
+  useFirstPaint,
+} from '@/components/ui';
+import { CATEGORY_META } from '@/constants/catalog';
 import type { BdNotification } from '@/constants/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { markAllRead, markRead, notificationsQuery } from '@/lib/api/notifications';
@@ -20,28 +36,28 @@ type BdNotificationsResponseLike = { unread_count: number; notifications: BdNoti
 function iconFor(type: string): { name: IconName; color: keyof ColorTokens; tint: keyof ColorTokens } {
   switch (type) {
     case 'new_message':
-      return { name: 'chatbubble-outline', color: 'brandStrong', tint: 'brandTint' };
+      return { name: 'chatbubble', color: 'brandStrong', tint: 'brandTint' };
     case 'offer_received':
-      return { name: 'pricetag-outline', color: 'trust', tint: 'trustTint' };
+      return { name: 'pricetag', color: 'trust', tint: 'trustTint' };
     case 'counter_received':
-      return { name: 'swap-horizontal-outline', color: 'warning', tint: 'warningTint' };
+      return { name: 'swap-horizontal', color: 'warning', tint: 'warningTint' };
     case 'offer_accepted':
-      return { name: 'checkmark-circle-outline', color: 'success', tint: 'successTint' };
+      return { name: 'checkmark-circle', color: 'success', tint: 'successTint' };
     case 'offer_rejected':
     case 'offer_auto_rejected':
-      return { name: 'close-circle-outline', color: 'danger', tint: 'dangerTint' };
+      return { name: 'close-circle', color: 'danger', tint: 'dangerTint' };
     case 'negotiation_cancelled':
-      return { name: 'ban-outline', color: 'inkMuted', tint: 'surfaceAlt' };
+      return { name: 'ban', color: 'inkMuted', tint: 'surfaceAlt' };
     case 'staff_warning':
-      return { name: 'shield-outline', color: 'warning', tint: 'warningTint' };
+      return { name: 'shield', color: 'warning', tint: 'warningTint' };
     case 'listing_expiring':
-      return { name: 'hourglass-outline', color: 'warning', tint: 'warningTint' };
+      return { name: 'hourglass', color: 'warning', tint: 'warningTint' };
     case 'listing_expired':
-      return { name: 'time-outline', color: 'inkMuted', tint: 'surfaceAlt' };
+      return { name: 'time', color: 'inkMuted', tint: 'surfaceAlt' };
     case 'saved_search_match':
-      return { name: 'bookmark-outline', color: 'trust', tint: 'trustTint' };
+      return { name: 'bookmark', color: 'trust', tint: 'trustTint' };
     default:
-      return { name: 'notifications-outline', color: 'inkMuted', tint: 'surfaceAlt' };
+      return { name: 'notifications', color: 'inkMuted', tint: 'surfaceAlt' };
   }
 }
 
@@ -59,6 +75,9 @@ export default function NotificationsScreen() {
 
   const notifications: BdNotification[] = data?.notifications ?? [];
   const unreadCount = data?.unread_count ?? 0;
+
+  const firstPaint = useFirstPaint(notifications.length > 0);
+  const order = useMemo(() => new Map(notifications.map((n, i) => [n.id, i])), [notifications]);
 
   const sections = useMemo(() => {
     const groups: { title: string; data: BdNotification[] }[] = [];
@@ -152,40 +171,64 @@ export default function NotificationsScreen() {
     const icon = iconFor(item.type);
     const unread = !item.read_at;
     const hasTarget = !!targetOf(item);
+    const rawCat = item.payload?.category ?? item.payload?.categories?.[0];
+    const category = typeof rawCat === 'string' && CATEGORY_META[rawCat] ? rawCat : null;
     return (
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`${unread ? 'Non lu. ' : ''}${item.title}. ${item.body}`}
-        accessibilityHint={hasTarget ? 'Ouvre l’élément concerné' : undefined}
-        onPress={() => handlePress(item)}
-        style={({ pressed }) => [s.row, unread && s.rowUnread, pressed && s.pressed]}>
-        <View style={[s.icon, { backgroundColor: t.colors[icon.tint] }]}>
-          <Ionicons name={icon.name} size={20} color={t.colors[icon.color]} />
-        </View>
-        <View style={s.flex}>
-          <View style={s.titleRow}>
-            <AppText variant={unread ? 'labelStrong' : 'label'} style={s.flex} numberOfLines={1}>
-              {item.title}
-            </AppText>
-            <AppText variant="caption" color="inkSubtle">
-              {formatRelativeTime(item.created_at)}
-            </AppText>
-          </View>
-          <AppText variant="small" color="inkMuted" numberOfLines={item.type === 'staff_warning' ? undefined : 2}>
-            {item.type === 'staff_warning' && item.payload?.message ? item.payload.message : item.body}
-          </AppText>
-          {item.type === 'staff_warning' && (
-            <AppText variant="caption" color="warning" style={s.warnNote}>
-              Message de l’équipe de modération BonDeal
-            </AppText>
-          )}
-        </View>
-        {unread ? (
-          <View style={s.dot} accessibilityElementsHidden />
-        ) : hasTarget ? (
-          <Ionicons name="chevron-forward" size={16} color={t.colors.inkSubtle} />
-        ) : null}
-      </Pressable>
+      <FadeInView index={order.get(item.id) ?? 99} animate={firstPaint}>
+        <SwipeRow
+          enabled={unread}
+          left={
+            unread
+              ? {
+                  label: 'Marquer lu',
+                  icon: 'checkmark-done',
+                  color: t.colors.trust,
+                  onColor: t.isDark ? t.colors.onBrand : '#FFFFFF',
+                  onAction: () => markReadMutation.mutate(item.id),
+                }
+              : undefined
+          }>
+          <PressableScale
+            accessibilityRole="button"
+            accessibilityLabel={`${unread ? 'Non lu. ' : ''}${item.title}. ${item.body}`}
+            accessibilityHint={hasTarget ? 'Ouvre l’élément concerné' : undefined}
+            accessibilityActions={unread ? [{ name: 'markRead', label: 'Marquer comme lu' }] : undefined}
+            onAccessibilityAction={(e) => e.nativeEvent.actionName === 'markRead' && markReadMutation.mutate(item.id)}
+            scaleTo={0.98}
+            onPress={() => handlePress(item)}
+            style={[s.row, unread && s.rowUnread]}>
+            <View>
+              <View style={[s.icon, { backgroundColor: t.colors[icon.tint] }]}>
+                <Ionicons name={icon.name} size={20} color={t.colors[icon.color]} />
+              </View>
+              {category && <CategoryTag value={category} iconOnly size={22} style={[s.catBadge, { borderColor: t.colors.surface }]} />}
+            </View>
+            <View style={s.flex}>
+              <View style={s.titleRow}>
+                <AppText variant={unread ? 'labelStrong' : 'label'} style={s.flex} numberOfLines={1}>
+                  {item.title}
+                </AppText>
+                <AppText variant="caption" color="inkMuted">
+                  {formatRelativeTime(item.created_at)}
+                </AppText>
+              </View>
+              <AppText variant="small" color="inkMuted" numberOfLines={item.type === 'staff_warning' ? undefined : 2}>
+                {item.type === 'staff_warning' && item.payload?.message ? item.payload.message : item.body}
+              </AppText>
+              {item.type === 'staff_warning' && (
+                <AppText variant="caption" color="warning" style={s.warnNote}>
+                  Message de l’équipe de modération BonDeal
+                </AppText>
+              )}
+            </View>
+            {unread ? (
+              <View style={s.dot} accessibilityElementsHidden />
+            ) : hasTarget ? (
+              <Ionicons name="chevron-forward" size={16} color={t.colors.inkSubtle} />
+            ) : null}
+          </PressableScale>
+        </SwipeRow>
+      </FadeInView>
     );
   };
 
@@ -223,11 +266,13 @@ export default function NotificationsScreen() {
         keyExtractor={(item) => String(item.id)}
         renderItem={renderItem}
         renderSectionHeader={({ section }) => (
-          <AppText variant="captionStrong" color="inkMuted" style={s.sectionHeader} accessibilityRole="header">
-            {section.title.toUpperCase()}
-          </AppText>
+          <View style={s.sectionHeader}>
+            <AppText variant="captionStrong" color="inkMuted" style={s.sectionText} accessibilityRole="header">
+              {section.title.toUpperCase()}
+            </AppText>
+          </View>
         )}
-        stickySectionHeadersEnabled={false}
+        stickySectionHeadersEnabled
         contentContainerStyle={[s.list, notifications.length === 0 && s.grow]}
         refreshControl={
           <RefreshControl
@@ -235,6 +280,7 @@ export default function NotificationsScreen() {
             onRefresh={refetch}
             colors={[t.colors.brandStrong]}
             tintColor={t.colors.brandStrong}
+            progressBackgroundColor={t.colors.surface}
           />
         }
         ListEmptyComponent={
@@ -279,10 +325,12 @@ const makeStyles = createStyles((t) => ({
   skeletons: { paddingTop: t.spacing.md },
   sectionHeader: {
     paddingHorizontal: t.spacing.md,
-    paddingTop: t.spacing.lg,
+    paddingTop: t.spacing.md,
     paddingBottom: t.spacing.xs,
-    letterSpacing: 0.5,
+    backgroundColor: t.colors.canvas,
   },
+  sectionText: { letterSpacing: 0.5 },
+  catBadge: { position: 'absolute', right: -6, bottom: -6, borderWidth: 2 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -295,7 +343,6 @@ const makeStyles = createStyles((t) => ({
     backgroundColor: t.colors.canvas,
   },
   rowUnread: { backgroundColor: t.colors.surface },
-  pressed: { backgroundColor: t.colors.surfaceAlt },
   icon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs },
   warnNote: { marginTop: 4 },

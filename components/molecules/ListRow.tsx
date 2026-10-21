@@ -1,6 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { Pressable, StyleSheet, Switch, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import PressableScale from '../motion/PressableScale';
+import SpringSwitch from './SpringSwitch';
 import { ColorTokens, useTheme } from '@/theme';
 import AppText from '../atoms/AppText';
 
@@ -44,7 +46,7 @@ export default function ListRow({
         </View>
       )}
       <View style={styles.text}>
-        <AppText variant="body" style={destructive ? { color: t.colors.danger } : undefined}>
+        <AppText variant={destructive ? 'bodyStrong' : 'body'} style={destructive ? { color: t.colors.danger } : undefined}>
           {title}
         </AppText>
         {!!subtitle && (
@@ -59,14 +61,7 @@ export default function ListRow({
         </AppText>
       )}
       {toggle && (
-        <Switch
-          value={toggle.value}
-          onValueChange={toggle.onChange}
-          disabled={toggle.disabled}
-          trackColor={{ true: t.colors.brand, false: t.colors.line }}
-          thumbColor={toggle.value ? t.colors.brandStrong : t.colors.surface}
-          accessibilityLabel={title}
-        />
+        <SpringSwitch value={toggle.value} disabled={toggle.disabled} />
       )}
       {chevron && <Ionicons name="chevron-forward" size={18} color={t.colors.inkSubtle} />}
     </>
@@ -77,25 +72,23 @@ export default function ListRow({
   ];
   if (toggle) {
     return (
-      <Pressable
+      <PressableScale
         accessibilityRole="switch"
         accessibilityState={{ checked: toggle.value, disabled: toggle.disabled }}
         accessibilityLabel={subtitle ? `${title}. ${subtitle}` : title}
+        haptic={toggle.disabled ? false : 'selection'}
+        scaleTo={0.99}
         onPress={() => !toggle.disabled && toggle.onChange(!toggle.value)}
         style={rowStyle}>
         {content}
-      </Pressable>
+      </PressableScale>
     );
   }
   if (onPress) {
     return (
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={title}
-        onPress={onPress}
-        style={({ pressed }) => [rowStyle, pressed && { backgroundColor: t.colors.surfaceAlt }]}>
+      <PressableScale accessibilityRole="button" accessibilityLabel={title} onPress={onPress} scaleTo={0.98} style={rowStyle}>
         {content}
-      </Pressable>
+      </PressableScale>
     );
   }
   return <View style={rowStyle}>{content}</View>;
@@ -114,7 +107,7 @@ export function ListGroup({ title, children }: { title?: string; children: React
       <View
         style={{
           backgroundColor: t.colors.surface,
-          borderRadius: t.radius.md,
+          borderRadius: t.radius.lg,
           borderWidth: 1,
           borderColor: t.colors.line,
           overflow: 'hidden',

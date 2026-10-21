@@ -9,6 +9,7 @@ import React, { useEffect, useState } from 'react';
 import { AccessibilityInfo, StyleSheet, Text, useColorScheme, View } from 'react-native';
 import Animated, {
   Easing,
+  ReduceMotion,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
@@ -53,11 +54,11 @@ export default function AnimatedSplashScreen({ onFinish }: AnimatedSplashScreenP
       textOpacity.value = 1;
       tagOpacity.value = 1;
     } else {
-      scale.value = withSpring(1, { damping: 12, stiffness: 120 });
-      opacity.value = withTiming(1, { duration: 400, easing: Easing.out(Easing.ease) });
-      textY.value = withDelay(300, withTiming(0, { duration: 400, easing: Easing.out(Easing.cubic) }));
-      textOpacity.value = withDelay(300, withTiming(1, { duration: 400 }));
-      tagOpacity.value = withDelay(700, withTiming(1, { duration: 400 }));
+      scale.value = withSpring(1, { damping: 12, stiffness: 120, reduceMotion: ReduceMotion.System });
+      opacity.value = withTiming(1, { duration: 400, easing: Easing.out(Easing.ease), reduceMotion: ReduceMotion.System });
+      textY.value = withDelay(300, withTiming(0, { duration: 400, easing: Easing.out(Easing.cubic), reduceMotion: ReduceMotion.System }));
+      textOpacity.value = withDelay(300, withTiming(1, { duration: 400, reduceMotion: ReduceMotion.System }));
+      tagOpacity.value = withDelay(700, withTiming(1, { duration: 400, reduceMotion: ReduceMotion.System }));
     }
     const timer = setTimeout(onFinish, reduce ? REDUCED_MS : FULL_MS);
     return () => clearTimeout(timer);

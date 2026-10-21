@@ -1,42 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useMemo } from 'react';
-import { Dimensions, Modal, StyleSheet, View } from 'react-native';
-import Animated, {
-  Easing,
-  FadeIn,
-  useAnimatedStyle,
-  useSharedValue,
-  withDelay,
-  withTiming,
-  ZoomIn,
-} from 'react-native-reanimated';
+import React, { useEffect, useState } from 'react';
+import { Modal, StyleSheet, View } from 'react-native';
+import Animated, { ZoomIn } from 'react-native-reanimated';
 import { useTheme } from '@/theme';
+import { duration } from '@/theme/motion';
 import AppText from '../atoms/AppText';
 import Button from '../atoms/Button';
-
-const { width: W, height: H } = Dimensions.get('window');
-
-function ConfettiPiece({ color, x, delay, rotate, size }: { color: string; x: number; delay: number; rotate: number; size: number }) {
-  const y = useSharedValue(-40);
-  const o = useSharedValue(1);
-  useEffect(() => {
-    y.value = withDelay(delay, withTiming(H * 0.55, { duration: 1600, easing: Easing.out(Easing.quad) }));
-    o.value = withDelay(delay + 1100, withTiming(0, { duration: 500 }));
-  }, []);
-  const style = useAnimatedStyle(() => ({
-    opacity: o.value,
-    transform: [{ translateY: y.value }, { rotate: `${rotate + y.value / 3}deg` }],
-  }));
-  return (
-    <Animated.View
-      style={[
-        styles.piece,
-        { left: x, width: size, height: size * 0.45, backgroundColor: color, borderRadius: 2 },
-        style,
-      ]}
-    />
-  );
-}
+import Celebrate from '../motion/Celebrate';
+import { ease, enterFade, enterUp, RM } from '../motion/anim';
 
 export interface SellCelebrationProps {
   visible: boolean;
@@ -51,8 +22,9 @@ export interface SellCelebrationProps {
 
 /**
  * Peak–end rule: celebrate the peak moment (listing published) with a light
- * confetti burst, then offer the natural next step (share). Confetti is
- * skipped when the OS "reduce motion" setting is on.
+ * confetti burst (components/motion/Celebrate, < 900 ms, never blocks
+ * touches), then offer the natural next step (share). With "reduce motion"
+ * the burst and the card's zoom jump to their end state.
  */
 export default function SellCelebration({
   visible,
@@ -64,30 +36,18 @@ export default function SellCelebration({
   onViewDuplicate,
 }: SellCelebrationProps) {
   const t = useTheme();
-  const pieces = useMemo(() => {
-    const palette = [t.colors.brand, t.colors.trust, t.colors.warning, t.colors.success, t.colors.brandStrong];
-    return Array.from({ length: 28 }, (_, i) => ({
-      key: i,
-      color: palette[i % palette.length],
-      x: Math.random() * (W - 12),
-      delay: Math.random() * 350,
-      rotate: Math.random() * 180,
-      size: 8 + Math.random() * 8,
-    }));
-  }, [t.colors]);
+  // Fire one burst (< 900 ms, docs/09 peak–end) each time the modal opens.
+  // The success haptic is fired by the publish mutation itself.
+  const [burst, setBurst] = useState(0);
+  useEffect(() => {
+    setBurst(visible ? Date.now() : 0);
+  }, [visible]);
 
   return (
-    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent>
-      <View style={[styles.fill, { backgroundColor: t.colors.scrim }]}>
-        {visible && !t.reduceMotion && (
-          <View style={StyleSheet.absoluteFill} pointerEvents="none">
-            {pieces.map((p) => (
-              <ConfettiPiece key={p.key} color={p.color} x={p.x} delay={p.delay} rotate={p.rotate} size={p.size} />
-            ))}
-          </View>
-        )}
+    <Modal visible={visible} transparent animationType="none" statusBarTranslucent onRequestClose={onHome}>
+      <Animated.View entering={enterFade(duration.medium)} style={[styles.fill, { backgroundColor: t.colors.scrim }]}>
         <Animated.View
-          entering={t.reduceMotion ? FadeIn.duration(0) : ZoomIn.duration(t.motion.enter)}
+          entering={ZoomIn.duration(duration.medium).easing(ease.enter).reduceMotion(RM)}
           accessibilityViewIsModal
           style={[styles.card, { backgroundColor: t.colors.surface, borderRadius: t.radius.lg }]}>
           <View style={[styles.icon, { backgroundColor: t.colors.successTint }]}>
@@ -123,18 +83,21 @@ export default function SellCelebration({
               </View>
             </View>
           )}
-          <Button label="Partager l’annonce" icon="share-social-outline" onPress={onShare} fullWidth />
-          <Button label="Voir mon annonce" variant="secondary" onPress={onView} fullWidth />
-          <Button label="Retour à l’accueil" variant="ghost" onPress={onHome} fullWidth />
+          <Animated.View entering={enterUp(3)} style={styles.actions}>
+            <Button label="Partager l’annonce" icon="share-social-outline" onPress={onShare} fullWidth size="lg" />
+            <Button label="Voir mon annonce" variant="secondary" onPress={onView} fullWidth />
+            <Button label="Retour à l’accueil" variant="ghost" onPress={onHome} fullWidth />
+          </Animated.View>
         </Animated.View>
-      </View>
+        <Celebrate trigger={burst} originY={0.3} haptic={false} />
+      </Animated.View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
   fill: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  piece: { position: 'absolute', top: 0 },
+  actions: { alignSelf: 'stretch', gap: 12 },
   card: { width: '100%', maxWidth: 380, padding: 24, gap: 12, alignItems: 'center' },
   dup: { flexDirection: 'row', gap: 10, padding: 12, alignSelf: 'stretch' },
   dupBtn: { alignSelf: 'flex-start', marginLeft: -8 },

@@ -1,12 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { useTheme } from '@/theme';
 import { haptics } from '@/lib/haptics';
 import { searchByName } from '@/lib/textSearch';
 import AppText from '../atoms/AppText';
 import TextField from '../atoms/TextField';
 import Sheet from '../organisms/Sheet';
+import PressableScale from '../motion/PressableScale';
+import CategoryTag from './CategoryTag';
 
 export interface SellOption {
   value: string;
@@ -23,6 +25,8 @@ export interface SellOptionSheetProps {
   onSelect: (value: string) => void;
   /** Show a search field (accent-insensitive), e.g. for long quartier lists. */
   searchPlaceholder?: string;
+  /** Options are categories: show each one's mnemonic icon + hue (docs/09 §5). */
+  categoryIcons?: boolean;
 }
 
 /** Single-select bottom sheet over {value,label} options (thumb zone). */
@@ -35,6 +39,7 @@ export default function SellOptionSheet({
   onClose,
   onSelect,
   searchPlaceholder,
+  categoryIcons,
 }: SellOptionSheetProps) {
   const t = useTheme();
   const [filter, setFilter] = useState('');
@@ -66,21 +71,19 @@ export default function SellOptionSheet({
       {shown.map((opt) => {
         const selected = opt.value === selectedValue;
         return (
-          <Pressable
+          <PressableScale
             key={opt.value}
             accessibilityRole="radio"
             accessibilityState={{ checked: selected }}
             accessibilityLabel={opt.label}
+            scaleTo={0.98}
             onPress={() => {
               haptics.selection();
               onSelect(opt.value);
               onClose();
             }}
-            style={({ pressed }) => [
-              styles.row,
-              { borderBottomColor: t.colors.line },
-              pressed && { backgroundColor: t.colors.surfaceAlt },
-            ]}>
+            style={[styles.row, { borderBottomColor: t.colors.line }]}>
+            {categoryIcons && <CategoryTag value={opt.value} iconOnly size={32} />}
             <Ionicons
               name={selected ? 'radio-button-on' : 'radio-button-off'}
               size={20}
@@ -89,7 +92,7 @@ export default function SellOptionSheet({
             <AppText variant="body" style={styles.flex}>
               {opt.label}
             </AppText>
-          </Pressable>
+          </PressableScale>
         );
       })}
     </Sheet>

@@ -4,11 +4,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import Animated, { Easing, ReduceMotion, withTiming } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AppText, Button, Card, Chip, IconButton, showToast } from '@/components/ui';
-import { CATEGORY_ICONS } from '@/components/molecules/CategorySheet';
+import { AppText, Button, CategoryTag, Chip, FadeInView, IconButton, PressableScale, showToast } from '@/components/ui';
+import { layoutEase } from '@/components/motion/anim';
+import AiGradientCard from '@/components/molecules/AiGradientCard';
+import HighlightText from '@/components/molecules/HighlightText';
 import { CATEGORIES } from '@/constants/catalog';
 import type { BdParsedSearch } from '@/constants/types';
 import { ApiError } from '@/lib/api';
@@ -148,10 +151,27 @@ export default function SearchScreen() {
 
   const looksLikeSentence = searchQuery.trim().split(/\s+/).length >= 3;
 
+  const suggestionRow = (
+    key: string,
+    icon: React.ReactNode,
+    label: string,
+    a11y: string,
+    onPress: () => void,
+    trailing?: React.ReactNode,
+  ) => (
+    <Animated.View key={key} layout={layoutEase()}>
+      <PressableScale accessibilityRole="button" accessibilityLabel={a11y} onPress={onPress} style={s.suggestion}>
+        {icon}
+        <HighlightText text={label} query={searchQuery} variant="body" color="inkMuted" style={s.flex} numberOfLines={1} />
+        {trailing}
+      </PressableScale>
+    </Animated.View>
+  );
+
   return (
     <SafeAreaView style={s.container}>
-      {/* Search bar */}
-      <View style={s.searchRow}>
+      {/* Search bar — grows in from the Home pill (container transform). */}
+      <Animated.View entering={growIn} style={s.searchRow}>
         <IconButton icon="arrow-back" label="Retour" onPress={() => router.back()} />
         <View style={s.inputWrap}>
           <Ionicons name="search" size={20} color={t.colors.inkMuted} />
@@ -172,100 +192,89 @@ export default function SearchScreen() {
             <IconButton icon="close-circle" label="Effacer" color="inkSubtle" size={20} onPress={() => setSearchQuery('')} />
           )}
         </View>
-      </View>
+      </Animated.View>
 
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={s.content}>
         {/* Trouve-moi ça — turns a vague need into a short ranked list (choice overload) */}
-        <Card tone="brand" style={s.aiCard}>
-          <View style={s.aiHeader}>
-            <Ionicons name="sparkles" size={20} color={t.colors.brandStrong} />
-            <AppText variant="labelStrong" style={s.flex}>
-              Trouve-moi ça
+        <FadeInView index={0}>
+          <AiGradientCard>
+            <View style={s.aiHeader}>
+              <View style={s.aiIcon}>
+                <Ionicons name="sparkles" size={18} color={t.colors.brandStrong} />
+              </View>
+              <AppText variant="h3" style={s.flex}>
+                Trouve-moi ça
+              </AppText>
+            </View>
+            <AppText variant="small" color="inkMuted">
+              {looksLikeSentence
+                ? 'Laissez l’IA transformer votre phrase en filtres (catégorie, prix, état).'
+                : 'Décrivez ce que vous cherchez avec vos mots, ex : « un frigo pas cher en bon état ».'}
             </AppText>
-          </View>
-          <AppText variant="small" color="inkMuted">
-            {looksLikeSentence
-              ? 'Laissez l’IA transformer votre phrase en filtres (catégorie, prix, état).'
-              : 'Décrivez ce que vous cherchez avec vos mots, ex : « un frigo pas cher en bon état ».'}
-          </AppText>
-          <Button
-            label={nlSearch.isPending ? 'Analyse de votre demande…' : 'Chercher avec l’IA'}
-            icon="sparkles-outline"
-            onPress={handleNlSearch}
-            loading={nlSearch.isPending}
-            disabled={!searchQuery.trim()}
-            disabledReason="Tapez d’abord ce que vous cherchez."
-            size="sm"
-            style={s.aiButton}
-          />
-        </Card>
+            <Button
+              label={nlSearch.isPending ? 'Analyse de votre demande…' : 'Chercher avec l’IA'}
+              icon="sparkles-outline"
+              onPress={handleNlSearch}
+              loading={nlSearch.isPending}
+              disabled={!searchQuery.trim()}
+              disabledReason="Tapez d’abord ce que vous cherchez."
+              size="sm"
+              style={s.aiButton}
+            />
+          </AiGradientCard>
+        </FadeInView>
 
         {q ? (
           <View style={s.section}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Rechercher ${searchQuery.trim()}`}
-              onPress={() => runSearch(searchQuery)}
-              style={({ pressed }) => [s.suggestion, pressed && s.pressed]}>
-              <Ionicons name="search" size={18} color={t.colors.inkMuted} />
-              <AppText variant="body" style={s.flex} numberOfLines={1}>
-                Rechercher « {searchQuery.trim()} »
-              </AppText>
-              <Ionicons name="arrow-forward" size={18} color={t.colors.inkSubtle} />
-            </Pressable>
-            {suggestions.recent.map((r) => (
-              <Pressable
-                key={`r-${r}`}
-                accessibilityRole="button"
-                accessibilityLabel={`Recherche récente : ${r}`}
-                onPress={() => {
+            {suggestionRow(
+              'go',
+              <Ionicons name="search" size={18} color={t.colors.brandStrong} />,
+              `Rechercher « ${searchQuery.trim()} »`,
+              `Rechercher ${searchQuery.trim()}`,
+              () => runSearch(searchQuery),
+              <Ionicons name="arrow-forward" size={18} color={t.colors.inkSubtle} />,
+            )}
+            {suggestions.recent.map((r) =>
+              suggestionRow(
+                `r-${r}`,
+                <Ionicons name="time-outline" size={18} color={t.colors.inkMuted} />,
+                r,
+                `Recherche récente : ${r}`,
+                () => {
                   setSearchQuery(r);
                   runSearch(r);
-                }}
-                style={({ pressed }) => [s.suggestion, pressed && s.pressed]}>
-                <Ionicons name="time-outline" size={18} color={t.colors.inkMuted} />
-                <AppText variant="body" style={s.flex} numberOfLines={1}>
-                  {r}
-                </AppText>
-              </Pressable>
-            ))}
-            {suggestions.server.map((title) => (
-              <Pressable
-                key={`s-${title}`}
-                accessibilityRole="button"
-                accessibilityLabel={`Suggestion : ${title}`}
-                onPress={() => {
+                },
+              ),
+            )}
+            {suggestions.server.map((title) =>
+              suggestionRow(
+                `s-${title}`,
+                <Ionicons name="search-outline" size={18} color={t.colors.inkMuted} />,
+                title,
+                `Suggestion : ${title}`,
+                () => {
                   setSearchQuery(title);
                   runSearch(title);
-                }}
-                style={({ pressed }) => [s.suggestion, pressed && s.pressed]}>
-                <Ionicons name="search-outline" size={18} color={t.colors.inkMuted} />
-                <AppText variant="body" style={s.flex} numberOfLines={1}>
-                  {title}
-                </AppText>
-              </Pressable>
-            ))}
-            {suggestions.cats.map((c) => (
-              <Pressable
-                key={`c-${c.value}`}
-                accessibilityRole="button"
-                accessibilityLabel={`Catégorie ${c.label}`}
-                onPress={() => browseCategory(c.value)}
-                style={({ pressed }) => [s.suggestion, pressed && s.pressed]}>
-                <Ionicons name={CATEGORY_ICONS[c.value] ?? 'pricetag-outline'} size={18} color={t.colors.inkMuted} />
-                <AppText variant="body" style={s.flex}>
-                  {c.label}
-                </AppText>
+                },
+              ),
+            )}
+            {suggestions.cats.map((c) =>
+              suggestionRow(
+                `c-${c.value}`,
+                <CategoryTag value={c.value} iconOnly size={30} />,
+                c.label,
+                `Catégorie ${c.label}`,
+                () => browseCategory(c.value),
                 <AppText variant="caption" color="inkSubtle">
                   Catégorie
-                </AppText>
-              </Pressable>
-            ))}
+                </AppText>,
+              ),
+            )}
           </View>
         ) : (
           <>
             {recentItems.length > 0 && (
-              <View style={s.section}>
+              <FadeInView index={1} style={s.section}>
                 <View style={s.sectionHeader}>
                   <AppText variant="h3" accessibilityRole="header">
                     Recherches récentes
@@ -286,25 +295,30 @@ export default function SearchScreen() {
                     />
                   ))}
                 </View>
-              </View>
+              </FadeInView>
             )}
 
-            <View style={s.section}>
+            <FadeInView index={2} style={s.section}>
               <AppText variant="h3" style={s.sectionTitle} accessibilityRole="header">
                 Parcourir par catégorie
               </AppText>
-              <View style={s.wrap}>
+              <View style={s.grid}>
                 {CATEGORIES.map((c) => (
-                  <Chip
+                  <PressableScale
                     key={c.value}
-                    label={c.label}
-                    icon={CATEGORY_ICONS[c.value]}
-                    kind="action"
+                    accessibilityRole="button"
+                    accessibilityLabel={`Catégorie ${c.label}`}
+                    haptic="selection"
                     onPress={() => browseCategory(c.value)}
-                  />
+                    style={s.catTile}>
+                    <CategoryTag value={c.value} iconOnly size={36} />
+                    <AppText variant="labelStrong" numberOfLines={1} style={s.flex}>
+                      {c.label}
+                    </AppText>
+                  </PressableScale>
                 ))}
               </View>
-            </View>
+            </FadeInView>
           </>
         )}
         {nlSearch.isPending && (
@@ -316,6 +330,16 @@ export default function SearchScreen() {
     </SafeAreaView>
   );
 }
+
+/** Field container grows in (scaleX + fade, 250 ms, emphasised ease). */
+const growIn = () => {
+  'worklet';
+  const cfg = { duration: 250, easing: Easing.bezier(0.05, 0.7, 0.1, 1), reduceMotion: ReduceMotion.System };
+  return {
+    initialValues: { opacity: 0, transform: [{ scaleX: 0.92 }] },
+    animations: { opacity: withTiming(1, cfg), transform: [{ scaleX: withTiming(1, cfg) }] },
+  };
+};
 
 const makeStyles = createStyles((t) => ({
   container: { flex: 1, backgroundColor: t.colors.canvas },
@@ -342,8 +366,28 @@ const makeStyles = createStyles((t) => ({
   },
   input: { flex: 1, color: t.colors.ink, paddingVertical: 10 },
   content: { padding: t.spacing.md, paddingBottom: t.spacing.xxl },
-  aiCard: { gap: t.spacing.xs },
   aiHeader: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs },
+  aiIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: t.colors.surface,
+  },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.xs },
+  catTile: {
+    flexGrow: 1,
+    flexBasis: '45%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: t.spacing.sm,
+    minHeight: 56,
+    paddingHorizontal: t.spacing.sm,
+    borderRadius: t.radius.md,
+    backgroundColor: t.colors.surface,
+    ...(t.elevation.card as object),
+  },
   aiButton: { alignSelf: 'flex-start', marginTop: 4 },
   section: { marginTop: t.spacing.xl },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: t.spacing.xs },
@@ -358,6 +402,5 @@ const makeStyles = createStyles((t) => ({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: t.colors.line,
   },
-  pressed: { backgroundColor: t.colors.surfaceAlt },
   pending: { paddingTop: t.spacing.xl },
 }));

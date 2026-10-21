@@ -9,7 +9,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -19,8 +19,10 @@ import {
     ScrollView,
     Share,
     StyleSheet,
+    useWindowDimensions,
     View,
 } from 'react-native';
+import Animated, { FadeInLeft, FadeInRight, Keyframe } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -29,14 +31,18 @@ import {
     Badge,
     Button,
     Card,
+    CategoryRow,
+    Chip,
     ErrorState,
     IconButton,
     ListingCard,
     ListRow,
     ListGroup,
     ScreenHeader,
+    ProgressRing,
+    PressableScale,
     SegmentedControl,
-    Sheet,
+    Shimmer,
     Skeleton,
     Stepper,
     TextField,
@@ -45,6 +51,11 @@ import {
 import SellLaborSteps from '@/components/molecules/SellLaborSteps';
 import SellOptionSheet from '@/components/molecules/SellOptionSheet';
 import SellCelebration from '@/components/organisms/SellCelebration';
+import SellPhotoTile from '@/components/molecules/SellPhotoTile';
+import SellPriceRange from '@/components/molecules/SellPriceRange';
+import { moveItem, pricePresets } from '@/components/molecules/sellGrid';
+import { enterFade, RM } from '@/components/motion/anim';
+import { duration } from '@/theme/motion';
 import { ApiError, apiErrorMessage } from '@/lib/api';
 import {
     attachPostImages,
@@ -108,6 +119,19 @@ const EMPTY_FORM: ListingForm = {
 };
 
 const STEPS = ['Photos', 'Détails', 'Prix', 'Aperçu'];
+const GRID_COLS = 3;
+
+/** Step change: slide/fade in from the side we're heading to (≤ 250 ms). */
+const stepEnter = (dir: number) =>
+    (dir >= 0 ? FadeInRight : FadeInLeft).duration(duration.medium).reduceMotion(RM);
+
+/** Aperçu: the buyer's card flips in (rotateY + fade, 350 ms). */
+const FLIP_IN = new Keyframe({
+    0: { opacity: 0, transform: [{ perspective: 900 }, { rotateY: '-70deg' }, { scale: 0.96 }] },
+    100: { opacity: 1, transform: [{ perspective: 900 }, { rotateY: '0deg' }, { scale: 1 }] },
+})
+    .duration(duration.long)
+    .reduceMotion(RM);
 // Fallback until GET /app-config answers (the server's platform setting).
 const DEFAULT_MAX_PHOTOS = 5;
 
@@ -255,7 +279,19 @@ export default function PostItemScreen() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const [step, setStep] = useState(0);
+    const [step, setStepState] = useState(0);
+    const stepDir = useRef(1);
+    const scrollRef = useRef<ScrollView>(null);
+    const setStep = useCallback((next: number | ((s: number) => number)) => {
+        setStepState((cur) => {
+            const n = typeof next === 'function' ? next(cur) : next;
+            stepDir.current = n >= cur ? 1 : -1;
+            return n;
+        });
+        scrollRef.current?.scrollTo({ y: 0, animated: false });
+    }, []);
+    const { width: winW } = useWindowDimensions();
+    const [gridW, setGridW] = useState(0);
     const [form, setForm] = useState<ListingForm>(EMPTY_FORM);
     const [existingImages, setExistingImages] = useState<BdPostImage[]>([]);
     const [errors, setErrors] = useState<Record<string, string>>({});
@@ -702,13 +738,19 @@ export default function PostItemScreen() {
         }
     };
 
-    const handleAddImage = () => {
+    const handleAddImage = (fromCamera: boolean) => {
         if (photoCount >= MAX_PHOTOS) {
             showToast.error('Limite atteinte', `Maximum ${MAX_PHOTOS} photos.`);
             return;
         }
-        setSheet('photo');
+        pickImage(fromCamera);
     };
+
+    // Drag-to-reorder / accessibility moves (create mode); index 0 = cover.
+    const movePhoto = useCallback((from: number, to: number) => {
+        haptics.selection();
+        setForm((prev) => ({ ...prev, images: moveItem(prev.images, from, to) }));
+    }, []);
 
     const handleRemoveImage = (index: number) => {
         const removed = form.images[index];
@@ -865,6 +907,51 @@ export default function PostItemScreen() {
 
     // --- step renderers ----------------------------------------------------
 
+    const gap = t.spacing.xs;
+    const cellW = gridW ? Math.floor((gridW - gap * (GRID_COLS - 1)) / GRID_COLS) : 0;
+    const cellStyle = cellW ? { width: cellW, height: cellW } : styles.photoCellFallback;
+    const canAdd = photoCount < MAX_PHOTOS;
+
+    /** Camera-first tiles: big pair when empty, two grid cells otherwise. */
+    const renderAddTiles = (large: boolean) => (
+        <>
+            <PressableScale
+                accessibilityRole="button"
+                accessibilityLabel="Prendre une photo"
+                haptic="light"
+                onPress={() => handleAddImage(true)}
+                style={[large ? styles.addLarge : [styles.photoCell, cellStyle], styles.addCamera]}>
+                <View style={[styles.addIcon, large && styles.addIconLarge, { backgroundColor: t.colors.surface }]}>
+                    <Ionicons name="camera" size={large ? 34 : 24} color={t.colors.brandStrong} />
+                </View>
+                <AppText variant={large ? 'bodyStrong' : 'labelStrong'} style={{ color: t.colors.onBrand }} align="center">
+                    {large ? 'Prendre une photo' : 'Photo'}
+                </AppText>
+                {large && (
+                    <AppText variant="caption" style={{ color: t.colors.onBrand }} align="center">
+                        Recommandé : lumière du jour
+                    </AppText>
+                )}
+            </PressableScale>
+            <PressableScale
+                accessibilityRole="button"
+                accessibilityLabel="Choisir dans la galerie"
+                haptic="light"
+                onPress={() => handleAddImage(false)}
+                style={[large ? styles.addLarge : [styles.photoCell, cellStyle], styles.addGallery]}>
+                <View style={[styles.addIcon, large && styles.addIconLarge, { backgroundColor: t.colors.brandTint }]}>
+                    <Ionicons name="images" size={large ? 32 : 22} color={t.colors.brandStrong} />
+                </View>
+                <AppText variant={large ? 'bodyStrong' : 'labelStrong'} align="center">
+                    {large ? 'Galerie' : 'Galerie'}
+                </AppText>
+                <AppText variant="caption" color="inkMuted" align="center">
+                    {photoCount}/{MAX_PHOTOS}
+                </AppText>
+            </PressableScale>
+        </>
+    );
+
     const renderPhotos = () => (
         <>
             <SectionTitle
@@ -872,135 +959,138 @@ export default function PostItemScreen() {
                 subtitle={
                     isEdit
                         ? 'Ajoutez ou retirez des photos. Les nouvelles sont enregistrées aussitôt.'
-                        : 'Une seule suffit pour démarrer : l’IA s’occupe du reste. La première photo sera la couverture.'
+                        : photoCount > 1
+                          ? 'Maintenez une photo appuyée puis glissez-la pour changer l’ordre. La première est la couverture.'
+                          : 'Une seule suffit pour démarrer : l’IA s’occupe du reste. La première photo sera la couverture.'
                 }
             />
-            <View style={styles.photoGrid}>
-                {existingImages.map((img, i) => {
-                    const status = img.status ?? 'ready';
-                    const src = img.variants?.thumb || img.url;
-                    return (
-                        <View key={`ex-${img.id}`} style={styles.photoCell}>
-                            {status === 'ready' && !!src ? (
-                                <AppImage uri={src} style={styles.photo} accessibilityLabel={`Photo ${i + 1}`} />
-                            ) : (
-                                <View
-                                    style={[styles.photo, styles.photoState]}
-                                    accessibilityLabel={
-                                        status === 'failed' ? `Photo ${i + 1} : échec du traitement` : `Photo ${i + 1} : traitement en cours`
-                                    }>
-                                    {status === 'failed' ? (
-                                        <>
-                                            <Ionicons name="alert-circle-outline" size={24} color={t.colors.danger} />
-                                            <AppText variant="caption" color="danger" align="center">
-                                                Échec du traitement
-                                            </AppText>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <ActivityIndicator color={t.colors.brandStrong} />
-                                            <AppText variant="caption" color="inkMuted" align="center">
-                                                Traitement…
-                                            </AppText>
-                                        </>
-                                    )}
-                                </View>
-                            )}
-                            {i === 0 && status === 'ready' && <Badge label="Couverture" tone="overlay" style={styles.coverBadge} />}
-                            <IconButton
-                                icon="close"
-                                label="Supprimer la photo"
-                                variant="overlay"
-                                size={18}
-                                onPress={() => handleRemoveExisting(img)}
-                                style={styles.photoRemove}
-                            />
-                        </View>
-                    );
-                })}
-                {form.images.map((uri, i) => {
-                    const isCover = existingImages.length === 0 && i === 0 && !isEdit;
-                    const up = uploads[uri];
-                    const uploading = !up || up.status === 'uploading';
-                    const failed = up?.status === 'error';
-                    return (
-                        <View key={`new-${uri}-${i}`} style={styles.photoCell}>
-                            <Pressable
-                                accessibilityRole="button"
-                                accessibilityLabel={isCover ? `Photo ${i + 1}, couverture` : `Photo ${i + 1}, définir comme couverture`}
-                                disabled={isEdit}
-                                onPress={() => makeCover(i)}>
-                                <AppImage uri={uri} style={styles.photo} />
-                            </Pressable>
-                            {uploading && (
-                                <View
-                                    style={[StyleSheet.absoluteFill, styles.uploadOverlay]}
-                                    accessibilityLiveRegion="polite"
-                                    accessibilityLabel={`Envoi de la photo ${i + 1} : ${Math.round((up?.progress ?? 0) * 100)} %`}>
-                                    <ActivityIndicator color={t.colors.onOverlay} />
-                                    <AppText variant="captionStrong" style={{ color: t.colors.onOverlay }}>
-                                        {Math.round((up?.progress ?? 0) * 100)} %
-                                    </AppText>
-                                    <View style={styles.uploadTrack}>
-                                        <View style={[styles.uploadFill, { width: `${Math.round((up?.progress ?? 0) * 100)}%` }]} />
+            {photoCount === 0 ? (
+                <View style={styles.addRow}>{renderAddTiles(true)}</View>
+            ) : (
+                <View style={styles.photoGrid} onLayout={(e) => setGridW(Math.round(e.nativeEvent.layout.width))}>
+                    {existingImages.map((img, i) => {
+                        const status = img.status ?? 'ready';
+                        const src = img.variants?.thumb || img.url;
+                        return (
+                            <Animated.View
+                                key={`ex-${img.id}`}
+                                entering={enterFade()}
+                                style={[styles.photoCell, cellStyle]}>
+                                {status === 'ready' && !!src ? (
+                                    <AppImage uri={src} style={styles.photo} accessibilityLabel={`Photo ${i + 1}`} />
+                                ) : (
+                                    <View
+                                        style={[styles.photo, styles.photoState]}
+                                        accessibilityLabel={
+                                            status === 'failed' ? `Photo ${i + 1} : échec du traitement` : `Photo ${i + 1} : traitement en cours`
+                                        }>
+                                        {status === 'failed' ? (
+                                            <>
+                                                <Ionicons name="alert-circle-outline" size={24} color={t.colors.danger} />
+                                                <AppText variant="caption" color="danger" align="center">
+                                                    Échec du traitement
+                                                </AppText>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <ActivityIndicator color={t.colors.brandStrong} />
+                                                <AppText variant="caption" color="inkMuted" align="center">
+                                                    Traitement…
+                                                </AppText>
+                                            </>
+                                        )}
                                     </View>
-                                </View>
-                            )}
-                            {failed && (
+                                )}
+                                {i === 0 && status === 'ready' && <Badge label="Couverture" tone="overlay" icon="star" style={styles.coverBadge} />}
+                                <IconButton
+                                    icon="close"
+                                    label="Supprimer la photo"
+                                    variant="overlay"
+                                    size={18}
+                                    onPress={() => handleRemoveExisting(img)}
+                                    style={styles.photoRemove}
+                                />
+                            </Animated.View>
+                        );
+                    })}
+                    {form.images.map((uri, i) => {
+                        const isCover = existingImages.length === 0 && i === 0 && !isEdit;
+                        const up = uploads[uri];
+                        const uploading = !up || up.status === 'uploading';
+                        const failed = up?.status === 'error';
+                        const pct = Math.round((up?.progress ?? 0) * 100);
+                        return (
+                            <SellPhotoTile
+                                key={`new-${uri}`}
+                                index={i}
+                                count={form.images.length}
+                                cols={GRID_COLS}
+                                stepX={cellW + gap}
+                                stepY={cellW + gap}
+                                draggable={!isEdit && existingImages.length === 0}
+                                onMove={movePhoto}
+                                style={[styles.photoCell, cellStyle]}
+                                accessibilityLabel={isCover ? `Photo ${i + 1}, couverture` : `Photo ${i + 1}`}>
                                 <Pressable
                                     accessibilityRole="button"
-                                    accessibilityLabel={`Photo ${i + 1} non envoyée : ${up?.error ?? ''}. Réessayer`}
-                                    onPress={() => startUpload(uri)}
-                                    style={[StyleSheet.absoluteFill, styles.uploadOverlay]}>
-                                    <Ionicons name="refresh" size={22} color={t.colors.onOverlay} />
-                                    <AppText variant="captionStrong" style={{ color: t.colors.onOverlay }} align="center">
-                                        Réessayer
-                                    </AppText>
-                                    {!!up?.error && (
-                                        <AppText variant="caption" style={{ color: t.colors.onOverlay }} align="center" numberOfLines={2}>
-                                            {up.error}
-                                        </AppText>
-                                    )}
+                                    accessibilityLabel={isCover ? `Photo ${i + 1}, couverture` : `Photo ${i + 1}, définir comme couverture`}
+                                    disabled={isEdit}
+                                    onPress={() => makeCover(i)}
+                                    onLongPress={() => {}}
+                                    delayLongPress={280}
+                                    style={styles.photo}>
+                                    <AppImage uri={uri} style={styles.photo} recyclingKey={uri} />
                                 </Pressable>
-                            )}
-                            {up?.status === 'done' && !isEdit && (
-                                <View style={styles.uploadDone} accessibilityLabel="Photo envoyée">
-                                    <Ionicons name="checkmark" size={12} color={t.colors.onOverlay} />
-                                </View>
-                            )}
-                            {isCover && <Badge label="Couverture" tone="overlay" style={styles.coverBadge} />}
-                            <IconButton
-                                icon="close"
-                                label="Retirer la photo"
-                                variant="overlay"
-                                size={18}
-                                onPress={() => handleRemoveImage(i)}
-                                style={styles.photoRemove}
-                            />
-                        </View>
-                    );
-                })}
-                {photoCount < MAX_PHOTOS && (
-                    <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Ajouter une photo"
-                        onPress={handleAddImage}
-                        style={({ pressed }) => [
-                            styles.photoCell,
-                            styles.addPhoto,
-                            photoCount === 0 && styles.addPhotoLarge,
-                            pressed && { opacity: 0.8 },
-                        ]}>
-                        <Ionicons name="camera-outline" size={photoCount === 0 ? 36 : 26} color={t.colors.brandStrong} />
-                        <AppText variant="labelStrong" color="brandStrong">
-                            {photoCount === 0 ? 'Ajouter une photo' : 'Ajouter'}
-                        </AppText>
-                        <AppText variant="caption" color="inkMuted">
-                            {photoCount}/{MAX_PHOTOS}
-                        </AppText>
-                    </Pressable>
-                )}
-            </View>
+                                {uploading && (
+                                    <View
+                                        pointerEvents="none"
+                                        style={[StyleSheet.absoluteFill, styles.uploadOverlay]}
+                                        accessibilityLiveRegion="polite"
+                                        accessibilityLabel={`Envoi de la photo ${i + 1} : ${pct} %`}>
+                                        <ProgressRing progress={up?.progress ?? 0} size={52} stroke={4}>
+                                            <AppText variant="captionStrong" style={{ color: t.colors.onOverlay }}>
+                                                {pct} %
+                                            </AppText>
+                                        </ProgressRing>
+                                    </View>
+                                )}
+                                {failed && (
+                                    <Pressable
+                                        accessibilityRole="button"
+                                        accessibilityLabel={`Photo ${i + 1} non envoyée : ${up?.error ?? ''}. Réessayer`}
+                                        onPress={() => startUpload(uri)}
+                                        style={[StyleSheet.absoluteFill, styles.uploadOverlay]}>
+                                        <Ionicons name="refresh" size={22} color={t.colors.onOverlay} />
+                                        <AppText variant="captionStrong" style={{ color: t.colors.onOverlay }} align="center">
+                                            Réessayer
+                                        </AppText>
+                                        {!!up?.error && (
+                                            <AppText variant="caption" style={{ color: t.colors.onOverlay }} align="center" numberOfLines={2}>
+                                                {up.error}
+                                            </AppText>
+                                        )}
+                                    </Pressable>
+                                )}
+                                {up?.status === 'done' && !isEdit && (
+                                    <Animated.View entering={enterFade()} style={styles.uploadDone} accessibilityLabel="Photo envoyée">
+                                        <Ionicons name="checkmark" size={12} color={t.isDark ? t.colors.onBrand : '#FFFFFF'} />
+                                    </Animated.View>
+                                )}
+                                {isCover && <Badge label="Couverture" tone="overlay" icon="star" style={styles.coverBadge} />}
+                                <IconButton
+                                    icon="close"
+                                    label="Retirer la photo"
+                                    variant="overlay"
+                                    size={18}
+                                    onPress={() => handleRemoveImage(i)}
+                                    style={styles.photoRemove}
+                                />
+                            </SellPhotoTile>
+                        );
+                    })}
+                    {canAdd && renderAddTiles(false)}
+                </View>
+            )}
             {!!errors.images && (
                 <AppText variant="caption" color="danger" style={styles.errorText}>
                     {errors.images}
@@ -1067,6 +1157,21 @@ export default function PostItemScreen() {
                 <AppText variant="captionStrong" color="inkMuted" style={styles.chunkTitle}>
                     L’ESSENTIEL
                 </AppText>
+                {aiDraftMut.isPending ? (
+                    <View accessibilityLabel="L’IA rédige le titre et la description">
+                        <AppText variant="labelStrong" style={styles.fieldLabel}>
+                            Titre
+                        </AppText>
+                        <Shimmer height={48} />
+                        <AppText variant="labelStrong" style={[styles.fieldLabel, styles.fieldGapLg]}>
+                            Description
+                        </AppText>
+                        <Shimmer height={18} width="92%" />
+                        <Shimmer height={18} width="80%" style={styles.fieldGap} />
+                        <Shimmer height={18} width="55%" style={styles.fieldGap} />
+                    </View>
+                ) : (
+                <Animated.View entering={aiResult ? enterFade(duration.medium) : undefined}>
                 <TextField
                     label="Titre"
                     value={form.title}
@@ -1087,19 +1192,35 @@ export default function PostItemScreen() {
                     editable={!aiDraftMut.isPending}
                     containerStyle={styles.fieldGap}
                 />
+                </Animated.View>
+                )}
             </Card>
 
             <Card style={styles.block}>
                 <AppText variant="captionStrong" color="inkMuted" style={styles.chunkTitle}>
                     CARACTÉRISTIQUES
                 </AppText>
-                <PickerField
-                    label="Catégorie"
-                    value={form.category ? categoryLabel(form.category) : ''}
-                    placeholder="Choisir une catégorie"
-                    onPress={() => setSheet('category')}
-                    error={errors.category}
-                />
+                <View style={styles.field}>
+                    <AppText variant="labelStrong" style={styles.fieldLabel}>
+                        Catégorie{form.category ? ` · ${categoryLabel(form.category)}` : ''}
+                    </AppText>
+                    {aiDraftMut.isPending ? (
+                        <Shimmer height={40} radius={20} />
+                    ) : (
+                        <CategoryRow
+                            items={CATEGORIES.map((c) => ({ value: c.value }))}
+                            selected={form.category || null}
+                            onSelect={(v) => v && updateForm('category', v)}
+                            style={styles.catRow}
+                            accessibilityLabel="Catégorie de l’article"
+                        />
+                    )}
+                    {!!errors.category && (
+                        <AppText variant="caption" color="danger" style={styles.errorText}>
+                            {errors.category}
+                        </AppText>
+                    )}
+                </View>
                 <PickerField
                     label="État"
                     value={form.condition ? conditionLabel(form.condition) ?? '' : ''}
@@ -1119,6 +1240,9 @@ export default function PostItemScreen() {
 
     const sug = priceSug;
     const hasRange = !!sug && sug.source !== 'no_data' && sug.range_min != null && sug.range_max != null;
+
+    const presets = hasRange ? pricePresets(sug!.range_min, sug!.suggested, sug!.range_max) : [];
+    const sugRounded = sug?.suggested ? pricePresets(null, sug.suggested, null)[0] ?? null : null;
 
     const renderPrice = () => (
         <>
@@ -1155,7 +1279,8 @@ export default function PostItemScreen() {
                     {priceSugMut.isPending ? (
                         <Card tone="brand" style={styles.block}>
                             <AppText variant="labelStrong">Recherche d’articles similaires…</AppText>
-                            <Skeleton height={14} width="70%" style={styles.fieldGap} />
+                            <Shimmer height={22} width="60%" style={styles.fieldGap} />
+                            <Shimmer height={8} radius={4} style={styles.fieldGapLg} />
                         </Card>
                     ) : hasRange ? (
                         <Card tone="brand" style={styles.block} accessibilityLabel="Prix conseillé">
@@ -1173,17 +1298,19 @@ export default function PostItemScreen() {
                                     ? `D’après ${sug!.comparable_count} annonce${sug!.comparable_count > 1 ? 's' : ''} similaire${sug!.comparable_count > 1 ? 's' : ''} près de chez vous.`
                                     : 'Estimation selon l’âge et l’état de l’article.'}
                             </AppText>
+                            <SellPriceRange
+                                min={sug!.range_min!}
+                                max={sug!.range_max!}
+                                suggested={sug!.suggested}
+                                current={parsePrice(form.price)}
+                            />
                             {sug!.suggested != null && (
-                                <Button
-                                    label={`Utiliser ${formatAmount(sug!.suggested)}`}
-                                    variant="secondary"
-                                    size="sm"
-                                    onPress={() => {
-                                        haptics.selection();
-                                        updateForm('price', String(sug!.suggested));
-                                    }}
-                                    style={styles.aiButton}
-                                />
+                                <View style={styles.sugRow}>
+                                    <View style={[styles.sugDot, { borderColor: t.colors.brandStrong }]} />
+                                    <AppText variant="caption" color="inkMuted">
+                                        Prix conseillé : {formatAmount(sug!.suggested)}
+                                    </AppText>
+                                </View>
                             )}
                         </Card>
                     ) : sug ? (
@@ -1202,6 +1329,7 @@ export default function PostItemScreen() {
                     )}
 
                     <TextField
+                        style={styles.priceInput}
                         label={form.listingType === 'exchange' ? 'Prix (optionnel)' : 'Prix'}
                         value={form.price}
                         onChangeText={(v) => updateForm('price', v.replace(/[^\d]/g, ''))}
@@ -1210,8 +1338,20 @@ export default function PostItemScreen() {
                         error={errors.price}
                         helper={parsePrice(form.price) != null ? formatAmount(parsePrice(form.price)) : undefined}
                         right={<AppText variant="labelStrong" color="inkMuted">FCFA</AppText>}
-                        containerStyle={styles.block}
+                        containerStyle={styles.blockTight}
                     />
+                    {presets.length > 0 && (
+                        <View style={styles.presets} accessibilityLabel="Prix suggérés">
+                            {presets.map((n) => (
+                                <Chip
+                                    key={n}
+                                    label={`${n === sugRounded ? 'Conseillé · ' : ''}${formatAmount(n)}`}
+                                    selected={parsePrice(form.price) === n}
+                                    onPress={() => updateForm('price', String(n))}
+                                />
+                            ))}
+                        </View>
+                    )}
 
                     {form.listingType === 'exchange' && (
                         <TextField
@@ -1265,9 +1405,9 @@ export default function PostItemScreen() {
                 title="Dernière vérification"
                 subtitle="Voici comment les acheteurs verront votre annonce."
             />
-            <View style={styles.previewWrap}>
-                <ListingCard post={previewPost} onPress={() => {}} width={220} />
-            </View>
+            <Animated.View entering={FLIP_IN} style={styles.previewWrap}>
+                <ListingCard post={previewPost} onPress={() => {}} width={Math.min(260, Math.round(winW * 0.62))} />
+            </Animated.View>
             <ListGroup title="Récapitulatif">
                 <ListRow icon="images-outline" title="Photos" value={String(photoCount)} onPress={() => setStep(0)} />
                 <ListRow
@@ -1334,6 +1474,7 @@ export default function PostItemScreen() {
                 style={styles.flex}
                 behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
                 <ScrollView
+                    ref={scrollRef}
                     style={styles.flex}
                     contentContainerStyle={styles.scroll}
                     keyboardShouldPersistTaps="handled"
@@ -1349,10 +1490,12 @@ export default function PostItemScreen() {
                             </View>
                         </Card>
                     )}
-                    {step === 0 && renderPhotos()}
-                    {step === 1 && renderDetails()}
-                    {step === 2 && renderPrice()}
-                    {step === 3 && renderPreview()}
+                    <Animated.View key={step} entering={stepEnter(stepDir.current)}>
+                        {step === 0 && renderPhotos()}
+                        {step === 1 && renderDetails()}
+                        {step === 2 && renderPrice()}
+                        {step === 3 && renderPreview()}
+                    </Animated.View>
                 </ScrollView>
 
                 {/* Sticky bottom action bar (thumb zone, Fitts) */}
@@ -1388,14 +1531,6 @@ export default function PostItemScreen() {
             </KeyboardAvoidingView>
 
             <SellOptionSheet
-                visible={sheet === 'category'}
-                title="Catégorie"
-                options={CATEGORIES}
-                selectedValue={form.category}
-                onClose={() => setSheet(null)}
-                onSelect={(v) => updateForm('category', v)}
-            />
-            <SellOptionSheet
                 visible={sheet === 'condition'}
                 title="État de l’article"
                 options={CONDITIONS}
@@ -1427,19 +1562,6 @@ export default function PostItemScreen() {
                 onClose={() => setSheet(null)}
                 onSelect={(v) => updateForm('pickupQuartier', v)}
             />
-            <Sheet visible={sheet === 'photo'} onClose={() => setSheet(null)} title="Ajouter une photo">
-                <View style={styles.photoSheet}>
-                    <Button label="Prendre une photo" icon="camera-outline" onPress={() => pickImage(true)} fullWidth />
-                    <Button
-                        label="Choisir dans la galerie"
-                        icon="images-outline"
-                        variant="secondary"
-                        onPress={() => pickImage(false)}
-                        fullWidth
-                    />
-                </View>
-            </Sheet>
-
             <SellCelebration
                 visible={!!published}
                 title={published?.title ?? ''}
@@ -1490,20 +1612,39 @@ const makeStyles = createStyles((t: Theme) => ({
     errorText: { marginTop: 4 },
     hint: { marginTop: t.spacing.sm },
     photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.xs },
-    photoCell: { width: '31.5%', aspectRatio: 1, borderRadius: t.radius.md, overflow: 'hidden' },
+    photoCell: { borderRadius: t.radius.md, overflow: 'hidden', backgroundColor: t.colors.surfaceAlt },
+    photoCellFallback: { width: '31.5%', aspectRatio: 1 },
+    addRow: { flexDirection: 'row', gap: t.spacing.sm },
+    addLarge: {
+        flex: 1,
+        minHeight: 200,
+        borderRadius: t.radius.lg,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+        padding: t.spacing.md,
+    },
+    addCamera: { backgroundColor: t.colors.brand, alignItems: 'center', justifyContent: 'center', gap: 4 },
+    addGallery: {
+        backgroundColor: t.colors.surface,
+        borderWidth: 1,
+        borderColor: t.colors.line,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 4,
+    },
+    addIcon: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+    addIconLarge: { width: 64, height: 64, borderRadius: 32, marginBottom: 4 },
+    catRow: { paddingHorizontal: 0 },
+    fieldGapLg: { marginTop: t.spacing.md },
+    blockTight: { marginBottom: t.spacing.xs },
+    priceInput: { ...t.type.priceLarge, minHeight: 60 },
+    presets: { flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.xs, marginBottom: t.spacing.md },
+    sugRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
+    sugDot: { width: 12, height: 12, borderRadius: 6, borderWidth: 3 },
     photo: { width: '100%', height: '100%' },
     coverBadge: { position: 'absolute', left: 6, bottom: 6 },
     photoRemove: { position: 'absolute', top: 0, right: 0, width: 36, height: 36 },
-    addPhoto: {
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 2,
-        borderWidth: 1.5,
-        borderStyle: 'dashed',
-        borderColor: t.colors.brandStrong,
-        backgroundColor: t.colors.brandTint,
-    },
-    addPhotoLarge: { width: '100%', aspectRatio: 4 / 3 },
     photoState: {
         alignItems: 'center',
         justifyContent: 'center',
@@ -1518,14 +1659,6 @@ const makeStyles = createStyles((t: Theme) => ({
         padding: 6,
         backgroundColor: t.colors.overlay,
     },
-    uploadTrack: {
-        width: '70%',
-        height: 4,
-        borderRadius: 2,
-        backgroundColor: 'rgba(255,255,255,0.35)',
-        overflow: 'hidden',
-    },
-    uploadFill: { height: 4, borderRadius: 2, backgroundColor: t.colors.brand },
     uploadDone: {
         position: 'absolute',
         left: 6,

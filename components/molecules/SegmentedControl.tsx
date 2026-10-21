@@ -1,8 +1,11 @@
-import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import { useTheme } from '@/theme';
-import { haptics } from '@/lib/haptics';
+import { slotOffset } from '@/theme/motion';
 import AppText from '../atoms/AppText';
+import { spring } from '../motion/anim';
+import PressableScale from '../motion/PressableScale';
 
 export interface Segment<T extends string> {
   value: T;
@@ -16,6 +19,9 @@ export interface SegmentedControlProps<T extends string> {
   accessibilityLabel?: string;
 }
 
+const PAD = 3;
+
+/** Segmented control whose thumb slides between segments (spring.default). */
 export default function SegmentedControl<T extends string>({
   segments,
   value,
@@ -23,33 +29,56 @@ export default function SegmentedControl<T extends string>({
   accessibilityLabel,
 }: SegmentedControlProps<T>) {
   const t = useTheme();
+  const [w, setW] = useState(0);
+  const n = Math.max(segments.length, 1);
+  const segW = w ? (w - PAD * 2) / n : 0;
+  const index = Math.max(0, segments.findIndex((s) => s.value === value));
+  const x = useSharedValue(-1);
+
+  useEffect(() => {
+    if (!segW) return;
+    const to = slotOffset(index, segW, PAD);
+    x.value = x.value < 0 ? to : spring(to, 'default');
+  }, [index, segW, x]);
+
+  const thumb = useAnimatedStyle(() => ({
+    opacity: x.value < 0 ? 0 : 1,
+    transform: [{ translateX: Math.max(x.value, 0) }],
+  }));
+
   return (
     <View
       accessibilityRole="tablist"
       accessibilityLabel={accessibilityLabel}
+      onLayout={(e) => setW(e.nativeEvent.layout.width)}
       style={[styles.wrap, { backgroundColor: t.colors.surfaceAlt, borderRadius: t.radius.full }]}>
+      {!!segW && (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.thumb,
+            { width: segW, backgroundColor: t.colors.surface, borderRadius: t.radius.full },
+            t.elevation.card as object,
+            thumb,
+          ]}
+        />
+      )}
       {segments.map((s) => {
         const active = s.value === value;
         return (
-          <Pressable
+          <PressableScale
             key={s.value}
             accessibilityRole="tab"
             accessibilityState={{ selected: active }}
+            haptic={active ? false : 'selection'}
             onPress={() => {
-              if (!active) {
-                haptics.selection();
-                onChange(s.value);
-              }
+              if (!active) onChange(s.value);
             }}
-            style={[
-              styles.seg,
-              { borderRadius: t.radius.full },
-              active && { backgroundColor: t.colors.surface, ...(t.elevation.card as object) },
-            ]}>
+            style={[styles.seg, { borderRadius: t.radius.full }]}>
             <AppText variant="labelStrong" color={active ? 'ink' : 'inkMuted'} numberOfLines={1}>
               {s.label}
             </AppText>
-          </Pressable>
+          </PressableScale>
         );
       })}
     </View>
@@ -57,6 +86,7 @@ export default function SegmentedControl<T extends string>({
 }
 
 const styles = StyleSheet.create({
-  wrap: { flexDirection: 'row', padding: 3 },
-  seg: { flex: 1, minHeight: 40, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
+  wrap: { flexDirection: 'row', padding: PAD },
+  thumb: { position: 'absolute', top: PAD, bottom: PAD, left: 0 },
+  seg: { flex: 1, minHeight: 42, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
 });

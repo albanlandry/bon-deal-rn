@@ -33,7 +33,34 @@ export interface ColorTokens {
   onOverlay: string;
   skeleton: string;
   skeletonHighlight: string;
+  /**
+   * Category mnemonic hues (docs/09 §5). Used for icons on a ~12 % tint of
+   * themselves (`categoryColors()` in theme/category.ts) with ink text; every
+   * hue is ≥ 4.5:1 on its own tint and on the canvas, in both schemes.
+   */
+  catBlue: string;
+  catPink: string;
+  catBrown: string;
+  catTeal: string;
+  catIndigo: string;
+  catYellow: string;
+  catGreen: string;
+  catPurple: string;
+  catOrange: string;
+  catGrey: string;
 }
+
+export type CategoryHue =
+  | 'catBlue'
+  | 'catPink'
+  | 'catBrown'
+  | 'catTeal'
+  | 'catIndigo'
+  | 'catYellow'
+  | 'catGreen'
+  | 'catPurple'
+  | 'catOrange'
+  | 'catGrey';
 
 export const lightColors: ColorTokens = {
   brand: '#FF6B6B',
@@ -61,6 +88,16 @@ export const lightColors: ColorTokens = {
   onOverlay: '#FFFFFF',
   skeleton: '#EFEDEB',
   skeletonHighlight: '#F7F6F5',
+  catBlue: '#1D4ED8',
+  catPink: '#BE185D',
+  catBrown: '#8A4B1C',
+  catTeal: '#0F766E',
+  catIndigo: '#4338CA',
+  catYellow: '#8A5A00',
+  catGreen: '#166534',
+  catPurple: '#7E22CE',
+  catOrange: '#A93A0B',
+  catGrey: '#57534E',
 };
 
 export const darkColors: ColorTokens = {
@@ -89,6 +126,16 @@ export const darkColors: ColorTokens = {
   onOverlay: '#F5F5F4',
   skeleton: '#262220',
   skeletonHighlight: '#302B28',
+  catBlue: '#60A5FA',
+  catPink: '#F472B6',
+  catBrown: '#D9A06B',
+  catTeal: '#2DD4BF',
+  catIndigo: '#A5B4FC',
+  catYellow: '#FACC15',
+  catGreen: '#4ADE80',
+  catPurple: '#C084FC',
+  catOrange: '#FB923C',
+  catGrey: '#A8A29E',
 };
 
 /** 4-point grid. */
@@ -137,6 +184,7 @@ export const type = {
   priceLarge: t(28, '700', true),
 } as const;
 
+/** Legacy short-hand kept for existing call sites; see theme/motion.ts. */
 export const motion = {
   micro: 150,
   enter: 250,

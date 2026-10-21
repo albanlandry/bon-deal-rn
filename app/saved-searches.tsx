@@ -5,7 +5,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Alert, FlatList, Pressable, RefreshControl, StyleSheet, Switch, View } from 'react-native';
+import { Alert, FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import CategoryTag from '@/components/molecules/CategoryTag';
+import SpringSwitch from '@/components/molecules/SpringSwitch';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   AppText,
@@ -108,9 +110,14 @@ export default function SavedSearchesScreen() {
         accessibilityLabel={`Ouvrir la recherche ${item.name}`}
         onPress={() => open(item)}
         style={styles.main}>
-        <View style={[styles.icon, { backgroundColor: t.colors.brandTint, borderRadius: t.radius.sm }]}>
-          <Ionicons name="search" size={20} color={t.colors.brandStrong} />
-        </View>
+        {item.filters?.categories?.length === 1 ? (
+          // Category mnemonic: same icon + hue as everywhere else (docs/09 §5).
+          <CategoryTag value={item.filters.categories[0]} iconOnly size={40} />
+        ) : (
+          <View style={[styles.icon, { backgroundColor: t.colors.brandTint, borderRadius: t.radius.sm }]}>
+            <Ionicons name="search" size={20} color={t.colors.brandStrong} />
+          </View>
+        )}
         <View style={styles.flex}>
           <AppText variant="bodyStrong" numberOfLines={1}>
             {item.name}
@@ -141,14 +148,7 @@ export default function SavedSearchesScreen() {
           <AppText variant="label" color={item.alerts_enabled ? 'ink' : 'inkMuted'} style={styles.flex}>
             {item.alerts_enabled ? 'Alertes activées' : 'Alertes désactivées'}
           </AppText>
-          <Switch
-            value={item.alerts_enabled}
-            onValueChange={(v) => alertsMut.mutate({ id: item.id, value: v })}
-            trackColor={{ true: t.colors.brand, false: t.colors.line }}
-            thumbColor={item.alerts_enabled ? t.colors.brandStrong : t.colors.surface}
-            accessibilityElementsHidden
-            importantForAccessibility="no"
-          />
+          <SpringSwitch value={item.alerts_enabled} />
         </Pressable>
         <IconButton icon="create-outline" label={`Renommer ${item.name}`} size={20} onPress={() => startRename(item)} />
         <IconButton

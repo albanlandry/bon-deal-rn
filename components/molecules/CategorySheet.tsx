@@ -1,27 +1,21 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
-import { CATEGORIES } from '@/constants/catalog';
-import { useTheme } from '@/theme';
+import { StyleSheet, View } from 'react-native';
+import { CATEGORIES, categoryIcon, TOP_CATEGORIES } from '@/constants/catalog';
+import { categoryColors, useTheme } from '@/theme';
+import PressableScale from '../motion/PressableScale';
 import AppText from '../atoms/AppText';
 import Sheet from '../organisms/Sheet';
 
-export const CATEGORY_ICONS: Record<string, React.ComponentProps<typeof Ionicons>['name']> = {
-  all: 'grid-outline',
-  electronics: 'phone-portrait-outline',
-  furniture: 'bed-outline',
-  appliances: 'tv-outline',
-  vehicles: 'car-outline',
-  fashion: 'shirt-outline',
-  baby_kids: 'happy-outline',
-  sports: 'football-outline',
-  books: 'book-outline',
-  tools: 'construct-outline',
-  other: 'ellipsis-horizontal-outline',
-};
+/**
+ * @deprecated use `categoryIcon()` from constants/catalog (single source of
+ * the category mnemonics). Kept for older call sites: outline variants.
+ */
+export const CATEGORY_ICONS: Record<string, React.ComponentProps<typeof Ionicons>['name']> = Object.fromEntries(
+  ['all', ...CATEGORIES.map((c) => c.value)].map((v) => [v, categoryIcon(v, false) as any]),
+);
 
-/** The 6 categories shown inline on Home (Hick: the rest live behind "Plus"). */
-export const TOP_CATEGORIES = ['electronics', 'fashion', 'furniture', 'vehicles', 'appliances', 'baby_kids'];
+export { TOP_CATEGORIES };
 
 export interface CategorySheetProps {
   visible: boolean;
@@ -35,37 +29,39 @@ export default function CategorySheet({ visible, onClose, selected, onSelect }: 
   const t = useTheme();
   const items = [{ value: null as string | null, label: 'Toutes' }, ...CATEGORIES];
   return (
-    <Sheet visible={visible} onClose={onClose} title="Catégories">
+    <Sheet visible={visible} onClose={onClose} title="Catégories" snapPoints={[0.6, 0.9]}>
       <View style={styles.grid}>
         {items.map((c) => {
           const active = selected === c.value;
+          const cc = categoryColors(t.colors, c.value ?? 'all');
           return (
-            <Pressable
+            <PressableScale
               key={c.value ?? 'all'}
               accessibilityRole="radio"
               accessibilityState={{ checked: active }}
               accessibilityLabel={c.label}
+              haptic="selection"
               onPress={() => {
                 onSelect(c.value);
                 onClose();
               }}
-              style={({ pressed }) => [
+              style={[
                 styles.cell,
                 {
                   borderRadius: t.radius.md,
-                  borderColor: active ? t.colors.brandStrong : t.colors.line,
-                  backgroundColor: active ? t.colors.brandTint : pressed ? t.colors.surfaceAlt : t.colors.surface,
+                  borderColor: active ? t.colors.ink : t.colors.line,
+                  borderWidth: active ? 2 : 1,
+                  backgroundColor: t.colors.surface,
                 },
               ]}>
-              <Ionicons
-                name={CATEGORY_ICONS[c.value ?? 'all'] ?? 'pricetag-outline'}
-                size={22}
-                color={active ? t.colors.brandStrong : t.colors.inkMuted}
-              />
-              <AppText variant="labelStrong" style={{ color: active ? t.colors.brandStrong : t.colors.ink, flex: 1 }} numberOfLines={1}>
+              <View style={[styles.icon, { backgroundColor: cc.tint }]}>
+                <Ionicons name={categoryIcon(c.value ?? 'all', active) as any} size={20} color={cc.hue} />
+              </View>
+              <AppText variant="labelStrong" style={{ color: t.colors.ink, flex: 1 }} numberOfLines={1}>
                 {c.label}
               </AppText>
-            </Pressable>
+              {active && <Ionicons name="checkmark-circle" size={20} color={t.colors.ink} />}
+            </PressableScale>
           );
         })}
       </View>
@@ -83,6 +79,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     paddingHorizontal: 14,
-    borderWidth: 1,
   },
+  icon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
 });

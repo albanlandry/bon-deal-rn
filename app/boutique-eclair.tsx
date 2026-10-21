@@ -16,14 +16,17 @@ import {
   AppText,
   Button,
   Card,
-  Chip,
+  CategoryTag,
   IconButton,
+  PressableScale,
   ScreenHeader,
   TextField,
   showToast,
 } from '@/components/ui';
 import SellLaborSteps from '@/components/molecules/SellLaborSteps';
 import SellOptionSheet from '@/components/molecules/SellOptionSheet';
+import Animated from 'react-native-reanimated';
+import { enterUp, layoutSpring } from '@/components/motion/anim';
 import { ApiError } from '@/lib/api';
 import { uploadImages, bulkDraft } from '@/lib/api/ai';
 import { createPost } from '@/lib/api/posts';
@@ -212,17 +215,18 @@ export default function BoutiqueEclairScreen() {
             </View>
           ))}
           {photos.length < 3 && !reviewing && (
-            <Pressable
+            <PressableScale
               accessibilityRole="button"
               accessibilityLabel="Choisir des photos"
+              haptic="light"
               onPress={pickPhotos}
               disabled={analyzeMut.isPending}
-              style={({ pressed }) => [styles.photoCell, styles.addPhoto, pressed && { opacity: 0.8 }]}>
+              style={[styles.photoCell, styles.addPhoto]}>
               <Ionicons name="images-outline" size={26} color={t.colors.brandStrong} />
               <AppText variant="caption" color="brandStrong">
                 {photos.length}/3
               </AppText>
-            </Pressable>
+            </PressableScale>
           )}
         </View>
 
@@ -256,10 +260,11 @@ export default function BoutiqueEclairScreen() {
                 Suggestions de l’IA : décochez ce que vous ne vendez pas, ajustez le reste.
               </AppText>
             </View>
-            {items.map((it) => {
+            {items.map((it, idx) => {
               const price = parsePrice(it.price);
               return (
-                <Card key={it.key} style={[styles.block, !it.include && styles.excluded]}>
+                <Animated.View key={it.key} entering={enterUp(idx)} layout={layoutSpring()}>
+                <Card style={[styles.block, !it.include && styles.excluded]}>
                   <Pressable
                     accessibilityRole="checkbox"
                     accessibilityState={{ checked: it.include }}
@@ -289,12 +294,16 @@ export default function BoutiqueEclairScreen() {
                         error={!it.title.trim() ? 'Ajoutez un titre' : null}
                       />
                       <View style={styles.cardRow}>
-                        <Chip
-                          kind="action"
-                          label={categoryLabel(it.category)}
-                          trailingIcon="chevron-down"
+                        <PressableScale
+                          accessibilityRole="button"
+                          accessibilityLabel={`Catégorie : ${categoryLabel(it.category)}. Changer`}
+                          haptic="selection"
+                          hitSlop={{ top: 10, bottom: 10 }}
                           onPress={() => setCatModalFor(it.key)}
-                        />
+                          style={styles.catChip}>
+                          <CategoryTag value={it.category} />
+                          <Ionicons name="chevron-down" size={16} color={t.colors.inkMuted} />
+                        </PressableScale>
                       </View>
                       {it.rangeMin != null && it.rangeMax != null && (
                         <AppText variant="caption" color="inkMuted" style={styles.gapTop}>
@@ -321,6 +330,7 @@ export default function BoutiqueEclairScreen() {
                     </>
                   )}
                 </Card>
+                </Animated.View>
               );
             })}
             <Button
@@ -354,6 +364,7 @@ export default function BoutiqueEclairScreen() {
         visible={!!catModalFor}
         title="Catégorie"
         options={CATEGORIES}
+        categoryIcons
         selectedValue={catTarget?.category ?? ''}
         onClose={() => setCatModalFor(null)}
         onSelect={(v) => catModalFor && patchItem(catModalFor, { category: v })}
@@ -386,6 +397,7 @@ const makeStyles = createStyles((t: Theme) => ({
   excluded: { opacity: 0.6 },
   includeRow: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs, minHeight: 44, marginBottom: 4 },
   cardRow: { flexDirection: 'row', marginTop: t.spacing.xs },
+  catChip: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 32 },
   bottomBar: {
     paddingHorizontal: t.spacing.md,
     paddingVertical: t.spacing.sm,

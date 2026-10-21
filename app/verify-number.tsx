@@ -25,6 +25,8 @@ export default function VerifyNumberScreen() {
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Bumped on a wrong code: the OTP boxes shake 6 px × 3 (docs/09 §4).
+  const [shakeKey, setShakeKey] = useState(0);
   const [cooldown, setCooldown] = useState(RESEND_COOLDOWN_S);
   const otpRef = useRef<OTPInputHandle>(null);
   const phoneToShow = phone || phoneNumber || '';
@@ -55,6 +57,7 @@ export default function VerifyNumberScreen() {
     } catch (e) {
       setLoading(false);
       haptics.error();
+      setShakeKey((k) => k + 1);
       setError(
         e instanceof ApiError && e.status === 401
           ? `Code incorrect. En mode test, le code est ${DEV_OTP_CODE}.`
@@ -83,6 +86,7 @@ export default function VerifyNumberScreen() {
       setLoading(false);
       console.error('Firebase verification error:', e);
       haptics.error();
+      setShakeKey((k) => k + 1);
       let msg = 'Code incorrect. Vérifiez le SMS et réessayez.';
       if (e?.code === 'auth/code-expired') {
         msg = 'Ce code a expiré. Demandez-en un nouveau.';
@@ -144,6 +148,7 @@ export default function VerifyNumberScreen() {
         ref={otpRef}
         length={6}
         error={!!error}
+        shakeKey={shakeKey}
         onChange={(v) => {
           setOtp(v);
           if (error) setError(null);

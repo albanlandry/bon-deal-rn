@@ -1,10 +1,15 @@
-/** Shared layout for auth screens: brand mark, title, subtitle, content. */
+/**
+ * Shared layout for auth screens: brand mark, title, subtitle, content.
+ * First paint staggers in (fade + small rise, 30 ms steps — docs/09 §3);
+ * content is capped at a readable width on tablets.
+ */
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AppText from '@/components/atoms/AppText';
 import IconButton from '@/components/atoms/IconButton';
+import FadeInView from '@/components/motion/FadeInView';
 import { useTheme } from '@/theme';
 
 export interface AuthScaffoldProps {
@@ -40,21 +45,29 @@ export default function AuthScaffold({
           contentContainerStyle={[styles.scroll, { paddingHorizontal: t.spacing.xl }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
-          {hero ?? (
-            <View style={[styles.mark, { backgroundColor: t.colors.brand, borderRadius: t.radius.lg }]}>
-              <Ionicons name={icon} size={28} color={t.colors.onBrand} />
-            </View>
-          )}
-          <AppText variant="h1" accessibilityRole="header" style={styles.title}>
-            {title}
-          </AppText>
-          {!!subtitle && (
-            <AppText variant="body" color="inkMuted" style={styles.subtitle}>
-              {subtitle}
-            </AppText>
-          )}
-          <View style={styles.content}>{children}</View>
-          {footer && <View style={styles.footer}>{footer}</View>}
+          <View style={styles.column}>
+            <FadeInView index={0}>
+              {hero ?? (
+                <View style={[styles.mark, { backgroundColor: t.colors.brand, borderRadius: t.radius.lg }]}>
+                  <Ionicons name={icon} size={28} color={t.colors.onBrand} />
+                </View>
+              )}
+            </FadeInView>
+            <FadeInView index={1}>
+              <AppText variant="h1" accessibilityRole="header" style={styles.title}>
+                {title}
+              </AppText>
+              {!!subtitle && (
+                <AppText variant="body" color="inkMuted" style={styles.subtitle}>
+                  {subtitle}
+                </AppText>
+              )}
+            </FadeInView>
+            <FadeInView index={2} style={styles.content}>
+              {children}
+            </FadeInView>
+          </View>
+          {footer && <View style={[styles.footer, styles.column]}>{footer}</View>}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -70,5 +83,6 @@ const styles = StyleSheet.create({
   title: { marginBottom: 8 },
   subtitle: { marginBottom: 8 },
   content: { marginTop: 24 },
+  column: { width: '100%', maxWidth: 520, alignSelf: 'center' },
   footer: { marginTop: 'auto', paddingTop: 32, alignItems: 'center' },
 });

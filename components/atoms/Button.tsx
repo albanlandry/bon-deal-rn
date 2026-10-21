@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
+import PressableScale from '../motion/PressableScale';
 import {
   ActivityIndicator,
-  Pressable,
   StyleProp,
   StyleSheet,
   View,
@@ -69,7 +69,7 @@ export default function Button({
 
   return (
     <View style={[fullWidth && styles.full, style]}>
-      <Pressable
+      <PressableScale
         testID={testID}
         accessibilityRole="button"
         accessibilityLabel={label}
@@ -81,7 +81,7 @@ export default function Button({
           if (haptic) haptics.light();
           onPress?.();
         }}
-        style={({ pressed }) => [
+        style={[
           styles.base,
           {
             minHeight: height,
@@ -89,7 +89,7 @@ export default function Button({
             backgroundColor: p.bg,
             borderColor: p.border,
             paddingHorizontal: size === 'sm' ? t.spacing.sm : t.spacing.xl,
-            opacity: disabled ? 0.45 : pressed ? 0.85 : 1,
+            opacity: disabled ? 0.45 : 1,
           },
         ]}>
         {loading ? (
@@ -105,7 +105,7 @@ export default function Button({
             )}
           </>
         )}
-      </Pressable>
+      </PressableScale>
       {disabled && !!disabledReason && (
         <AppText variant="caption" color="inkSubtle" align="center" style={styles.reason}>
           {disabledReason}

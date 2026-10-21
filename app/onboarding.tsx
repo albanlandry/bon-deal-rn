@@ -1,4 +1,7 @@
 // app/onboarding.tsx — 3-slide first-launch tour (MB-AUTH-07)
+// Motion (docs/09 §4): the illustration moves slightly with the swipe
+// (parallax from the scroll offset) and the page indicator morphs (active dot
+// widens via scaleX). Transforms/opacity only; reduce motion → static.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -11,7 +14,13 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, {
+  interpolate,
+  type SharedValue,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+} from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AppText from '@/components/atoms/AppText';
 import Button from '@/components/atoms/Button';
@@ -68,6 +77,83 @@ const SLIDES: Slide[] = [
   },
 ];
 
+function SlideView({ item, i, width, x }: { item: Slide; i: number; width: number; x: SharedValue<number> }) {
+  const t = useTheme();
+  const tint = item.tone === 'trust' ? t.colors.trustTint : t.colors.brandTint;
+  const fg = item.tone === 'trust' ? t.colors.trust : t.colors.brandStrong;
+  const range = [(i - 1) * width, i * width, (i + 1) * width];
+  const illo = useAnimatedStyle(() => {
+    if (t.reduceMotion) return {};
+    return {
+      transform: [
+        // Parallax: the illustration lags behind the page (moves at ~0.7×).
+        { translateX: interpolate(x.value, range, [width * 0.3, 0, -width * 0.3], 'clamp') },
+        { scale: interpolate(x.value, range, [0.86, 1, 0.86], 'clamp') },
+      ],
+    };
+  });
+  const inner = useAnimatedStyle(() => {
+    if (t.reduceMotion) return {};
+    return { transform: [{ translateX: interpolate(x.value, range, [width * 0.12, 0, -width * 0.12], 'clamp') }] };
+  });
+  const text = useAnimatedStyle(() => ({
+    opacity: interpolate(x.value, range, [0, 1, 0], 'clamp'),
+  }));
+  return (
+    <View style={[styles.slide, { width }]} accessibilityLabel={`Étape ${i + 1} sur ${SLIDES.length}`}>
+      <View style={styles.slideInner}>
+        <Animated.View style={[styles.illustration, { backgroundColor: tint }, illo]}>
+          <Animated.View style={[styles.illustrationInner, { backgroundColor: t.colors.surface }, inner]}>
+            <Ionicons name={item.icon} size={72} color={fg} />
+          </Animated.View>
+        </Animated.View>
+        <Animated.View style={[styles.textBlock, text]}>
+          <AppText variant="h1" align="center" accessibilityRole="header" style={styles.title}>
+            {item.title}
+          </AppText>
+          <AppText variant="body" color="inkMuted" align="center" style={styles.body}>
+            {item.body}
+          </AppText>
+          <View style={styles.points}>
+            {item.points.map((p) => (
+              <View key={p.text} style={styles.point}>
+                <View style={[styles.pointIcon, { backgroundColor: tint }]}>
+                  <Ionicons name={p.icon} size={18} color={fg} />
+                </View>
+                <AppText variant="label" style={styles.flex}>
+                  {p.text}
+                </AppText>
+              </View>
+            ))}
+          </View>
+        </Animated.View>
+      </View>
+    </View>
+  );
+}
+
+/** Page dot that morphs: widens (scaleX 1 → 3) and fills as its page arrives. */
+function Dot({ i, width, x }: { i: number; width: number; x: SharedValue<number> }) {
+  const t = useTheme();
+  const st = useAnimatedStyle(() => {
+    const p = x.value / Math.max(width, 1);
+    return { transform: [{ scaleX: interpolate(p, [i - 1, i, i + 1], [1, 3, 1], 'clamp') }] };
+  });
+  const fill = useAnimatedStyle(() => {
+    const p = x.value / Math.max(width, 1);
+    return { opacity: interpolate(p, [i - 1, i, i + 1], [0, 1, 0], 'clamp') };
+  });
+  return (
+    <View style={styles.dotSlot}>
+      <Animated.View style={[styles.dot, { backgroundColor: t.colors.inkSubtle }, st]}>
+        <Animated.View style={[StyleSheet.absoluteFill, styles.dotFill, { backgroundColor: t.colors.brandStrong }, fill]} />
+      </Animated.View>
+    </View>
+  );
+}
+
+const AnimatedSlides = Animated.createAnimatedComponent(FlatList<Slide>);
+
 export default function OnboardingScreen() {
   const t = useTheme();
   const router = useRouter();
@@ -75,6 +161,10 @@ export default function OnboardingScreen() {
   const listRef = useRef<FlatList<Slide>>(null);
   const [index, setIndex] = useState(0);
   const last = index === SLIDES.length - 1;
+  const x = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler((e) => {
+    x.value = e.contentOffset.x;
+  });
 
   const finish = async () => {
     haptics.success();
@@ -102,40 +192,9 @@ export default function OnboardingScreen() {
     if (i !== index) setIndex(i);
   };
 
-  const renderSlide = ({ item, index: i }: { item: Slide; index: number }) => {
-    const tint = item.tone === 'trust' ? t.colors.trustTint : t.colors.brandTint;
-    const fg = item.tone === 'trust' ? t.colors.trust : t.colors.brandStrong;
-    const entering = t.reduceMotion ? undefined : FadeInDown.duration(t.motion.enter);
-    return (
-      <View style={[styles.slide, { width }]} accessibilityLabel={`Étape ${i + 1} sur ${SLIDES.length}`}>
-        {i === index && (
-          <Animated.View entering={entering} style={styles.slideInner}>
-            <View style={[styles.illustration, { backgroundColor: tint }]}>
-              <View style={[styles.illustrationInner, { backgroundColor: t.colors.surface }]}>
-                <Ionicons name={item.icon} size={72} color={fg} />
-              </View>
-            </View>
-            <AppText variant="h1" align="center" accessibilityRole="header" style={styles.title}>
-              {item.title}
-            </AppText>
-            <AppText variant="body" color="inkMuted" align="center" style={styles.body}>
-              {item.body}
-            </AppText>
-            <View style={styles.points}>
-              {item.points.map((p) => (
-                <View key={p.text} style={styles.point}>
-                  <Ionicons name={p.icon} size={20} color={fg} />
-                  <AppText variant="label" style={styles.flex}>
-                    {p.text}
-                  </AppText>
-                </View>
-              ))}
-            </View>
-          </Animated.View>
-        )}
-      </View>
-    );
-  };
+  const renderSlide = ({ item, index: i }: { item: Slide; index: number }) => (
+    <SlideView item={item} i={i} width={width} x={x} />
+  );
 
   return (
     <SafeAreaView style={[styles.fill, { backgroundColor: t.colors.canvas }]}>
@@ -147,8 +206,10 @@ export default function OnboardingScreen() {
         )}
       </View>
 
-      <FlatList
-        ref={listRef}
+      <AnimatedSlides
+        ref={listRef as any}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         data={SLIDES}
         keyExtractor={(s) => s.key}
         renderItem={renderSlide}
@@ -158,7 +219,7 @@ export default function OnboardingScreen() {
         bounces={false}
         showsHorizontalScrollIndicator={false}
         onMomentumScrollEnd={onScrollEnd}
-        getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
+        getItemLayout={(_: unknown, i: number) => ({ length: width, offset: width * i, index: i })}
         style={styles.fill}
       />
 
@@ -167,17 +228,8 @@ export default function OnboardingScreen() {
           style={styles.dots}
           accessibilityRole="progressbar"
           accessibilityLabel={`Diapositive ${index + 1} sur ${SLIDES.length}`}>
-          {SLIDES.map((s, i) => (
-            <View
-              key={s.key}
-              style={[
-                styles.dot,
-                {
-                  width: i === index ? 24 : 8,
-                  backgroundColor: i === index ? t.colors.brand : t.colors.line,
-                },
-              ]}
-            />
+          {SLIDES.map((sl, i) => (
+            <Dot key={sl.key} i={i} width={width} x={x} />
           ))}
         </View>
         <Button
@@ -198,7 +250,9 @@ const styles = StyleSheet.create({
   top: { minHeight: 52, alignItems: 'flex-end', justifyContent: 'center', paddingHorizontal: 12 },
   topSpacer: { height: 40 },
   slide: { flex: 1, justifyContent: 'center' },
-  slideInner: { alignItems: 'center', paddingHorizontal: 28 },
+  slideInner: { alignItems: 'center', paddingHorizontal: 28, maxWidth: 560, alignSelf: 'center' },
+  textBlock: { alignItems: 'center', alignSelf: 'stretch' },
+  pointIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   illustration: { width: 200, height: 200, borderRadius: 100, alignItems: 'center', justifyContent: 'center', marginBottom: 32 },
   illustrationInner: { width: 136, height: 136, borderRadius: 68, alignItems: 'center', justifyContent: 'center' },
   title: { marginBottom: 12 },
@@ -206,6 +260,8 @@ const styles = StyleSheet.create({
   points: { marginTop: 24, gap: 12, alignSelf: 'stretch', paddingHorizontal: 12 },
   point: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   bottom: { paddingHorizontal: 24, paddingBottom: 16, gap: 20 },
-  dots: { flexDirection: 'row', justifyContent: 'center', gap: 6 },
-  dot: { height: 8, borderRadius: 4 },
+  dots: { flexDirection: 'row', justifyContent: 'center', gap: 4 },
+  dotSlot: { width: 28, height: 8, alignItems: 'center', justifyContent: 'center' },
+  dot: { width: 8, height: 8, borderRadius: 4, overflow: 'hidden' },
+  dotFill: { borderRadius: 4 },
 });

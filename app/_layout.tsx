@@ -77,6 +77,9 @@ function RootLayoutNav() {
   const t = useTheme();
   useForegroundMessageHandler();
 
+  type StackAnim = 'slide_from_right' | 'slide_from_bottom' | 'fade' | 'fade_from_bottom';
+  const anim = (a: StackAnim) => (t.reduceMotion ? ('none' as const) : a);
+
   const navTheme = useMemo<NavTheme>(() => {
     const base = t.isDark ? DarkTheme : DefaultTheme;
     return {
@@ -99,22 +102,38 @@ function RootLayoutNav() {
         <RealtimeProvider>
           <ThemeProvider value={navTheme}>
             <StatusBar style={t.isDark ? 'light' : 'dark'} />
+            {/*
+              Transitions (docs/09 §1/§4): pushes slide from the right, sheets
+              rise from the bottom, a listing card "expands" into the item page
+              (fade here + scale-in inside the screen), search grows in place.
+              Everything is 'none' with reduce motion.
+            */}
             <Stack
               screenOptions={{
                 headerShown: false,
                 contentStyle: { backgroundColor: t.colors.canvas },
-                animation: t.reduceMotion ? 'none' : 'default',
+                animation: anim('slide_from_right'),
+                animationDuration: 300,
+                gestureEnabled: true,
+                fullScreenGestureEnabled: true,
               }}>
-              <Stack.Screen name="index" />
-              <Stack.Screen name="onboarding" options={{ animation: t.reduceMotion ? 'none' : 'fade' }} />
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen name="consent" options={{ gestureEnabled: false }} />
-              <Stack.Screen name="make-offer" options={{ presentation: 'modal' }} />
-              <Stack.Screen name="post-item" options={{ presentation: 'fullScreenModal' }} />
+              <Stack.Screen name="index" options={{ animation: anim('fade') }} />
+              <Stack.Screen name="onboarding" options={{ animation: anim('fade') }} />
+              <Stack.Screen name="(tabs)" options={{ animation: anim('fade') }} />
+              <Stack.Screen name="consent" options={{ gestureEnabled: false, animation: anim('fade_from_bottom') }} />
+              <Stack.Screen name="item-details" options={{ animation: anim('fade'), animationDuration: 250 }} />
               <Stack.Screen
-                name="search"
-                options={{ animation: t.reduceMotion ? 'none' : 'fade', animationDuration: 200 }}
+                name="make-offer"
+                options={{ presentation: 'modal', animation: anim('slide_from_bottom') }}
               />
+              <Stack.Screen
+                name="post-item"
+                options={{ presentation: 'fullScreenModal', animation: anim('slide_from_bottom'), gestureEnabled: false }}
+              />
+              <Stack.Screen name="boutique-eclair" options={{ presentation: 'modal', animation: anim('slide_from_bottom') }} />
+              <Stack.Screen name="search" options={{ animation: anim('fade'), animationDuration: 250 }} />
+              <Stack.Screen name="search-results" options={{ animation: anim('fade_from_bottom') }} />
+              <Stack.Screen name="notifications" options={{ animation: anim('slide_from_right') }} />
             </Stack>
             {/* Maintenance / update-required pages and the soft update banner. */}
             <AppGate />

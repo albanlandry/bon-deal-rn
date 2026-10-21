@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { Pressable, StyleProp, StyleSheet, ViewStyle } from 'react-native';
+import { StyleProp, StyleSheet, ViewStyle } from 'react-native';
+import PressableScale from '../motion/PressableScale';
 import { useTheme } from '@/theme';
 import { haptics } from '@/lib/haptics';
 import AppText from './AppText';
@@ -30,7 +31,7 @@ export default function Chip({
   const t = useTheme();
   const fg = selected ? t.colors.brandStrong : t.colors.inkMuted;
   return (
-    <Pressable
+    <PressableScale
       accessibilityRole={kind === 'filter' ? 'checkbox' : kind === 'choice' ? 'radio' : 'button'}
       accessibilityState={{ checked: kind !== 'action' ? selected : undefined, disabled }}
       accessibilityLabel={label}
@@ -40,13 +41,13 @@ export default function Chip({
         onPress?.();
       }}
       hitSlop={{ top: 6, bottom: 6 }}
-      style={({ pressed }) => [
+      style={[
         styles.base,
         {
           borderRadius: t.radius.full,
           backgroundColor: selected ? t.colors.brandTint : t.colors.surface,
           borderColor: selected ? t.colors.brandStrong : t.colors.line,
-          opacity: disabled ? 0.45 : pressed ? 0.8 : 1,
+          opacity: disabled ? 0.45 : 1,
         },
         style,
       ]}>
@@ -58,7 +59,7 @@ export default function Chip({
         {label}
       </AppText>
       {trailingIcon && <Ionicons name={trailingIcon} size={16} color={fg} />}
-    </Pressable>
+    </PressableScale>
   );
 }
 

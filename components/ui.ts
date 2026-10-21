@@ -28,3 +28,26 @@ export { default as Stepper } from './molecules/Stepper';
 export { default as QuartierPickerSheet } from './organisms/QuartierPickerSheet';
 export { default as SellerCard } from './organisms/SellerCard';
 export { default as Sheet } from './organisms/Sheet';
+export { default as CategoryRow } from './molecules/CategoryRow';
+export { default as CategoryTag } from './molecules/CategoryTag';
+export { default as CategorySheet } from './molecules/CategorySheet';
+
+/* Motion primitives (docs/09 §3) */
+export {
+  AnimatedHeader,
+  Breathe,
+  Celebrate,
+  CountUp,
+  FadeInView,
+  HeartBurst,
+  PressableScale,
+  ProgressBar,
+  Shimmer,
+  Stagger,
+  SwipeRow,
+  useDelayedFlag,
+  useFirstPaint,
+  useScrollChrome,
+  useShowTabBarOnFocus,
+  useTabBarInset,
+} from './motion';
