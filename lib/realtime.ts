@@ -19,6 +19,7 @@
  *     (the server pings every 25 s).
  *   - Reconnects with the new token whenever the access token changes.
  */
+import { APP_VERSION } from '@/lib/appVersion';
 import { AppState } from 'react-native';
 import type { AppStateStatus, NativeEventSubscription } from 'react-native';
 import { getAuthToken, refreshAuthToken, subscribeAuthToken } from '@/lib/api';
@@ -208,7 +209,8 @@ class RealtimeClient {
 
     let ws: WebSocket;
     try {
-      ws = new WebSocket(getWsUrl());
+      // RN's WebSocket takes extra handshake headers (non-standard 3rd arg).
+      ws = new (WebSocket as any)(getWsUrl(), null, { headers: { 'X-App-Version': APP_VERSION } }) as WebSocket;
     } catch (e) {
       log('constructor failed', e);
       this.scheduleReconnect();

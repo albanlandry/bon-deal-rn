@@ -115,7 +115,7 @@ export default function MyListingsScreen() {
     },
     onError: (e, post) => {
       // 409: the listing has a transaction — it must stay for the other party.
-      if (e instanceof ApiError && e.status === 409) {
+      if (e instanceof ApiError && (e.code === 'post_has_transactions' || (e.status === 409 && !e.code))) {
         Alert.alert(
           'Suppression impossible',
           `« ${post.title} » est liée à une vente (transaction en cours ou passée) : elle doit rester consultable par l’autre partie. Vous pouvez la masquer pour qu’elle n’apparaisse plus dans les recherches.`,
@@ -143,7 +143,7 @@ export default function MyListingsScreen() {
     onError: (e) =>
       showToast.error(
         'Échec',
-        e instanceof ApiError && e.status === 409
+        e instanceof ApiError && (e.code === 'post_not_renewable' || (e.status === 409 && !e.code))
           ? 'Seules les annonces en ligne ou expirées peuvent être renouvelées.'
           : errMessage(e),
       ),

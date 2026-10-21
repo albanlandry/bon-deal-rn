@@ -11,7 +11,9 @@ import ProgressRing from '@/components/atoms/ProgressRing';
 import TextField from '@/components/atoms/TextField';
 import { showToast } from '@/components/atoms/Toast';
 import AuthScaffold from '@/components/organisms/AuthScaffold';
-import { apiFetch } from '@/lib/api';
+import LocationPickerSheet from '@/components/organisms/LocationPickerSheet';
+import { ApiError, apiErrorMessage, apiFetch } from '@/lib/api';
+import { locationSaveErrorMessage } from '@/lib/locationErrors';
 import { uploadAvatar } from '@/lib/api/me';
 import { acceptConsents } from '@/lib/api/account';
 import { useAuth } from '@/contexts/AuthContext';
@@ -31,12 +33,15 @@ export default function SetupProfileScreen() {
   const t = useTheme();
   const router = useRouter();
   const { phone } = useLocalSearchParams<{ phone?: string }>();
-  const { refreshUser } = useAuth();
+  const { user, refreshUser } = useAuth();
 
   const [nickname, setNickname] = useState('');
   const [touched, setTouched] = useState(false);
   const [profileImage, setProfileImage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [city, setCity] = useState<string | null>(user?.city ?? null);
+  const [quartier, setQuartier] = useState<string | null>(user?.quartier ?? null);
+  const [showLocation, setShowLocation] = useState(false);
 
   // Endowed progress: account created + phone verified are real, completed
   // steps by the time the user lands here (OTP succeeded). Nickname and photo
@@ -44,6 +49,7 @@ export default function SetupProfileScreen() {
   const nicknameOk = nicknameError(nickname) === null;
   const done = 2 + (nicknameOk ? 1 : 0) + (profileImage ? 1 : 0);
   const error = touched ? nicknameError(nickname) : null;
+  const canContinue = nicknameOk && !!city;
 
   const pick = async (source: 'camera' | 'library') => {
     try {
@@ -89,7 +95,7 @@ export default function SetupProfileScreen() {
 
   const handleContinue = async () => {
     setTouched(true);
-    if (!nicknameOk) return;
+    if (!canContinue) return;
 
     // Persist the nickname as the backend username. The Firebase→JWT exchange
     // may still be in flight; a 401 is transparently retried by the API
@@ -107,11 +113,19 @@ export default function SetupProfileScreen() {
     try {
       await apiFetch('/auth/me', {
         method: 'PATCH',
-        body: { username: nickname.trim(), first_name: nickname.trim() },
+        body: { username: nickname.trim(), first_name: nickname.trim(), city, quartier },
       });
     } catch (e: any) {
       console.warn('[setup-profile] profile save failed:', e);
-      showToast.error('Profil non enregistré', e?.message || 'Réessayez plus tard.');
+      if (e instanceof ApiError && e.status === 400) {
+        // Unknown or disabled city: let the user pick another one.
+        showToast.error('Ville indisponible', locationSaveErrorMessage(e));
+        setCity(null);
+        setQuartier(null);
+        setSaving(false);
+        return;
+      }
+      showToast.error('Profil non enregistré', apiErrorMessage(e, 'Réessayez plus tard.'));
     }
     if (profileImage) {
       try {
@@ -196,15 +210,62 @@ export default function SetupProfileScreen() {
         helper="Visible par les autres membres."
       />
 
+      <View style={styles.locationBlock}>
+        <AppText variant="labelStrong" style={styles.locationLabel}>
+          Votre ville
+        </AppText>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={city ? `Ville : ${[quartier, city].filter(Boolean).join(', ')}. Modifier` : 'Choisir votre ville'}
+          onPress={() => setShowLocation(true)}
+          style={({ pressed }) => [
+            styles.locationField,
+            {
+              borderColor: t.colors.line,
+              borderRadius: t.radius.sm,
+              backgroundColor: pressed ? t.colors.surfaceAlt : t.colors.surface,
+            },
+          ]}>
+          <Ionicons name="location-outline" size={18} color={t.colors.brandStrong} />
+          <View style={styles.flex}>
+            <AppText variant="body" color={city ? 'ink' : 'inkSubtle'} numberOfLines={1}>
+              {city || 'Choisir ma ville'}
+            </AppText>
+            {!!city && (
+              <AppText variant="caption" color="inkMuted" numberOfLines={1}>
+                {quartier || 'Quartier facultatif'}
+              </AppText>
+            )}
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={t.colors.inkSubtle} />
+        </Pressable>
+        <AppText variant="caption" color="inkMuted" style={styles.locationHelper}>
+          Pour voir les annonces près de chez vous.
+        </AppText>
+      </View>
+
       <Button
         label="Continuer"
         onPress={handleContinue}
         loading={saving}
-        disabled={!nicknameOk}
-        disabledReason={!nicknameOk ? 'Choisissez un pseudonyme (2 caractères min.)' : undefined}
+        disabled={!canContinue}
+        disabledReason={
+          !nicknameOk ? 'Choisissez un pseudonyme (2 caractères min.)' : !city ? 'Choisissez votre ville' : undefined
+        }
         fullWidth
         size="lg"
         style={styles.cta}
+      />
+      <LocationPickerSheet
+        visible={showLocation}
+        onClose={() => setShowLocation(false)}
+        city={city}
+        quartier={quartier}
+        onConfirm={(c) => {
+          setCity(c.city);
+          setQuartier(c.quartier);
+          setShowLocation(false);
+        }}
       />
     </AuthScaffold>
   );
@@ -230,4 +291,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cta: { marginTop: 8 },
+  flex: { flex: 1 },
+  locationBlock: { marginTop: 8, marginBottom: 12 },
+  locationLabel: { marginBottom: 6 },
+  locationHelper: { marginTop: 6 },
+  locationField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minHeight: 52,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+  },
 });

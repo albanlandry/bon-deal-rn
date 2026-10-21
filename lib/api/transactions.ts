@@ -1,6 +1,6 @@
 /** Transactions (created when an offer is accepted), disputes and reviews. */
 import { queryOptions } from '@tanstack/react-query';
-import { ApiError, apiFetch } from '@/lib/api';
+import { ApiError, apiErrorMessage, apiFetch } from '@/lib/api';
 import type { BdReview, BdTransaction } from '@/constants/types';
 
 interface TxnResponse {
@@ -58,20 +58,20 @@ export async function createReview(id: number, rating: number, comment?: string)
   return res.review;
 }
 
-/** French message for transaction / review failures (server details are English). */
+/** Message for transaction / review failures: the server's detail, by status otherwise. */
 export function transactionErrorMessage(e: unknown): string {
   if (e instanceof ApiError) {
-    if (e.status === 409) {
-      if (/already reviewed/i.test(e.message)) return 'Vous avez déjà laissé un avis.';
-      if (/window expired/i.test(e.message)) return 'Le délai pour laisser un avis est dépassé.';
-      if (/completed before/i.test(e.message)) return 'La vente doit être conclue avant de laisser un avis.';
-      return 'Cette transaction a changé entre-temps. Actualisez.';
-    }
-    if (e.status === 403) return 'Vous ne participez pas à cette transaction.';
+    // 409 covers "already reviewed", "review window expired", "not completed
+    // yet" and concurrent changes: the server's French detail says which.
+    if (e.code === 'already_reviewed') return apiErrorMessage(e, 'Vous avez déjà laissé un avis.');
+    if (e.code === 'review_window_expired') return apiErrorMessage(e, 'Le délai pour laisser un avis est dépassé.');
+    if (e.code === 'transaction_not_completed') return apiErrorMessage(e, 'La vente doit être conclue avant de laisser un avis.');
+    if (e.status === 409) return apiErrorMessage(e, 'Cette transaction a changé entre-temps. Actualisez.');
+    if (e.status === 403) return apiErrorMessage(e, 'Vous ne participez pas à cette transaction.');
     if (e.status === 404) return 'Transaction introuvable.';
     if (e.status === 422) return 'Vérifiez les informations saisies.';
   }
-  return 'Action impossible. Réessayez.';
+  return apiErrorMessage(e, 'Action impossible. Réessayez.');
 }
 
 export const TXN_STATUS_LABEL: Record<string, string> = {

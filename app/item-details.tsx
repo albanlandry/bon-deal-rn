@@ -40,6 +40,7 @@ import { haptics } from '@/lib/haptics';
 import { AGE_LABELS, categoryLabel, conditionLabel } from '@/constants/catalog';
 import type { BdPost, BdPriceCheck } from '@/constants/types';
 import { createStyles, useStyles, useTheme } from '@/theme';
+import { track } from '@/lib/analytics';
 
 function priceCheckErrorMessage(e: unknown): string {
   const status = e instanceof ApiError ? e.status : 0;
@@ -82,6 +83,14 @@ export default function ItemDetailsScreen() {
   const [bonPrix, setBonPrix] = useState<BdPriceCheck | null>(null);
   const [reportOpen, setReportOpen] = useState(false);
   const { data: post, isLoading, error, refetch } = useQuery(postByIdQuery(postId));
+
+  // Analytics (opt-in): one view_item per opened listing.
+  const viewedId = React.useRef<number | null>(null);
+  React.useEffect(() => {
+    if (!post || viewedId.current === post.id) return;
+    viewedId.current = post.id;
+    track('view_item', { post_id: post.id, category: post.categories?.[0] ?? null });
+  }, [post]);
 
   // Similar items: same first category, current post excluded.
   const firstCat = post?.categories?.[0];
@@ -152,7 +161,10 @@ export default function ItemDetailsScreen() {
       const res = await Share.share({
         message: `${post.title}${priceText ? ` — ${priceText}` : ''} sur BonDeal`,
       });
-      if (res.action === Share.sharedAction) sharePost(post.id).catch(() => {});
+      if (res.action === Share.sharedAction) {
+        sharePost(post.id).catch(() => {});
+        track('share_item', { post_id: post.id, category: post.categories?.[0] ?? null });
+      }
     } catch {
       // user cancelled / share unavailable
     }

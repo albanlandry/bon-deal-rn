@@ -16,33 +16,33 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '@/theme';
 import {
   AppText,
   Avatar,
   Button,
-  Chip,
   ScreenHeader,
   TextField,
   showToast,
 } from '@/components/ui';
-import { ApiError } from '@/lib/api';
+import LocationPickerSheet from '@/components/organisms/LocationPickerSheet';
+import { ApiError, apiErrorMessage } from '@/lib/api';
 import { updateMe, uploadAvatar } from '@/lib/api/me';
-import { quartiersQuery } from '@/lib/api/quartiers';
+import { locationSaveErrorMessage } from '@/lib/locationErrors';
 import { useAuth } from '@/contexts/AuthContext';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function saveErrorMessage(e: unknown): string {
   if (e instanceof ApiError) {
-    if (e.status === 409) return "Email, téléphone ou nom d'utilisateur déjà utilisé.";
-    if (e.status === 422) return 'Certaines valeurs sont invalides.';
+    if (e.status === 400) return locationSaveErrorMessage(e);
     if (e.status === 401) return 'Session expirée. Reconnectez-vous.';
+    if (e.status === 409) return apiErrorMessage(e, "Email, téléphone ou nom d'utilisateur déjà utilisé.");
+    if (e.status === 422) return 'Certaines valeurs sont invalides.';
     if (e.status >= 500) return 'Erreur serveur. Réessayez.';
-    return e.message;
   }
-  return 'Impossible de mettre à jour le profil. Réessayez.';
+  return apiErrorMessage(e, 'Impossible de mettre à jour le profil. Réessayez.');
 }
 
 export default function EditProfileScreen() {
@@ -53,12 +53,11 @@ export default function EditProfileScreen() {
   const [firstName, setFirstName] = useState(user?.first_name ?? '');
   const [lastName, setLastName] = useState(user?.last_name ?? '');
   const [email, setEmail] = useState(user?.email ?? '');
+  const [city, setCity] = useState(user?.city ?? '');
   const [quartier, setQuartier] = useState(user?.quartier ?? '');
+  const [showLocation, setShowLocation] = useState(false);
   const [avatarUri, setAvatarUri] = useState(user?.avatar_url ?? '');
   const [emailError, setEmailError] = useState('');
-
-  const quartiersData = useQuery(quartiersQuery(user?.city));
-  const quartiers = quartiersData.data?.quartiers ?? [];
 
   const upload = useMutation({
     mutationFn: (uri: string) => uploadAvatar(uri),
@@ -73,10 +72,12 @@ export default function EditProfileScreen() {
     },
   });
 
+  const qc = useQueryClient();
   const save = useMutation({
     mutationFn: (patch: Record<string, unknown>) => updateMe(patch),
-    onSuccess: async () => {
+    onSuccess: async (_d, patch) => {
       await refreshUser();
+      if ('city' in patch) qc.invalidateQueries({ queryKey: ['posts'] });
       showToast.success('Profil mis à jour', 'Vos modifications ont été enregistrées.');
       router.back();
     },
@@ -130,6 +131,7 @@ export default function EditProfileScreen() {
     firstName !== (user?.first_name ?? '') ||
     lastName !== (user?.last_name ?? '') ||
     email !== (user?.email ?? '') ||
+    city !== (user?.city ?? '') ||
     quartier !== (user?.quartier ?? '');
 
   const handleSave = () => {
@@ -141,7 +143,11 @@ export default function EditProfileScreen() {
     if (firstName !== (user?.first_name ?? '')) patch.first_name = firstName.trim() || null;
     if (lastName !== (user?.last_name ?? '')) patch.last_name = lastName.trim() || null;
     if (email !== (user?.email ?? '')) patch.email = email.trim() || null;
-    if (quartier !== (user?.quartier ?? '')) patch.quartier = quartier || null;
+    if (city !== (user?.city ?? '')) {
+      // A new city: send its quartier too (possibly none), never the old one.
+      patch.city = city;
+      patch.quartier = quartier || null;
+    } else if (quartier !== (user?.quartier ?? '')) patch.quartier = quartier || null;
 
     if (Object.keys(patch).length === 0) {
       showToast.info('Aucune modification', 'Rien à enregistrer.');
@@ -246,39 +252,37 @@ export default function EditProfileScreen() {
                 ) : undefined
               }
             />
-            <TextField
-              label="Ville"
-              value={user?.city ?? ''}
-              editable={false}
-              placeholder="Ville non définie"
-              helper="Votre ville détermine votre fil d’annonces ; non modifiable ici."
-            />
-
             <View>
               <AppText variant="labelStrong" style={styles.label}>
-                Quartier
+                Ville et quartier
               </AppText>
-              {!user?.city ? (
-                <AppText variant="caption" color="inkMuted">
-                  Définissez d’abord votre ville.
-                </AppText>
-              ) : quartiersData.isLoading ? (
-                <ActivityIndicator color={t.colors.brandStrong} style={styles.quartierLoading} />
-              ) : (
-                <View style={styles.chips} accessibilityRole="radiogroup">
-                  <Chip label="Aucun" selected={!quartier} onPress={() => setQuartier('')} />
-                  {quartiers.map((q) => (
-                    <Chip
-                      key={q.id}
-                      label={q.name}
-                      selected={quartier === q.name}
-                      onPress={() => setQuartier(q.name)}
-                    />
-                  ))}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Ville et quartier : ${city ? [quartier, city].filter(Boolean).join(', ') : 'non définis'}. Modifier`}
+                onPress={() => setShowLocation(true)}
+                style={({ pressed }) => [
+                  styles.locationField,
+                  {
+                    borderColor: t.colors.line,
+                    borderRadius: t.radius.sm,
+                    backgroundColor: pressed ? t.colors.surfaceAlt : t.colors.surface,
+                  },
+                ]}>
+                <Ionicons name="location-outline" size={18} color={t.colors.brandStrong} />
+                <View style={styles.flex}>
+                  <AppText variant="body" color={city ? 'ink' : 'inkSubtle'} numberOfLines={1}>
+                    {city || 'Choisir ma ville'}
+                  </AppText>
+                  {!!city && (
+                    <AppText variant="caption" color="inkMuted" numberOfLines={1}>
+                      {quartier || 'Aucun quartier choisi'}
+                    </AppText>
+                  )}
                 </View>
-              )}
+                <Ionicons name="chevron-forward" size={18} color={t.colors.inkSubtle} />
+              </Pressable>
               <AppText variant="caption" color="inkMuted" style={styles.helper}>
-                Sert de lieu de retrait par défaut pour vos annonces.
+                Votre ville détermine votre fil d’annonces ; le quartier sert de lieu de retrait par défaut.
               </AppText>
             </View>
           </View>
@@ -296,6 +300,18 @@ export default function EditProfileScreen() {
           />
         </View>
       </KeyboardAvoidingView>
+      <LocationPickerSheet
+        visible={showLocation}
+        onClose={() => setShowLocation(false)}
+        city={city || null}
+        quartier={quartier || null}
+        initialStep={city ? 'quartier' : 'city'}
+        onConfirm={(c) => {
+          setCity(c.city);
+          setQuartier(c.quartier ?? '');
+          setShowLocation(false);
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -324,8 +340,15 @@ const styles = StyleSheet.create({
   },
   form: { gap: 8 },
   label: { marginBottom: 8 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   helper: { marginTop: 6 },
-  quartierLoading: { alignSelf: 'flex-start' },
+  locationField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minHeight: 52,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+  },
   footer: { padding: 16, borderTopWidth: StyleSheet.hairlineWidth },
 });

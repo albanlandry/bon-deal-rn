@@ -16,6 +16,7 @@ import {
   SegmentedControl,
   Sheet,
   showToast,
+  TextField,
 } from '@/components/ui';
 import { CATEGORY_ICONS } from '@/components/molecules/CategorySheet';
 import ListingGrid from '@/components/organisms/ListingGrid';
@@ -25,10 +26,12 @@ import type { BdPost } from '@/constants/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToggleLike } from '@/lib/api/likeToggle';
 import { postsInfiniteQuery, type FeedParams, type NearParams, type PostSort } from '@/lib/api/posts';
-import { quartiersQuery } from '@/lib/api/quartiers';
+import { useCityQuartiers } from '@/lib/api/geo';
+import { searchByName } from '@/lib/textSearch';
 import { describeFilters, feedToFilters } from '@/lib/api/savedSearches';
 import { getCurrentCoords, LOCATION_MESSAGES } from '@/lib/location';
 import { createStyles, useStyles, useTheme } from '@/theme';
+import { track } from '@/lib/analytics';
 
 type PriceBucket = 'under50' | '50to100' | 'over100';
 type ConditionMode = 'all' | 'like_new' | 'used';
@@ -54,6 +57,8 @@ const DISTANCE_SEGMENT: { value: PostSort; label: string } = { value: 'distance'
 const ALL_SORTS: PostSort[] = ['date_new', 'date_old', 'price_low', 'price_high', 'distance'];
 const RADII = [2, 5, 10, 25];
 const DEFAULT_RADIUS = 5;
+/** Quartier chips shown at once in the filter sheet (Hick); search for the rest. */
+const QUARTIER_CHIPS = 12;
 
 function parseNear(lat?: string, lng?: string, radius?: string): NearParams | null {
   const la = Number(lat);
@@ -111,7 +116,8 @@ export default function SearchResultsScreen() {
   }>();
   const query = params.query ?? '';
   const { user } = useAuth();
-  const quartiers = useQuery(quartiersQuery(user?.city));
+  const quartiers = useCityQuartiers(user?.city);
+  const [quartierFilter, setQuartierFilter] = useState('');
 
   const [filters, setFilters] = useState<Filters>(() => ({
     category: params.category ?? params.categories?.split(',')[0] ?? null,
@@ -177,6 +183,17 @@ export default function SearchResultsScreen() {
     (filters.quartier ? 1 : 0) +
     (filters.near ? 1 : 0);
 
+  // Analytics (opt-in): one `search` per distinct query + filters, once the
+  // first page answered. Never the typed text: only whether there was one.
+  const searchKey = JSON.stringify(feedParams);
+  const trackedSearch = React.useRef<string | null>(null);
+  useEffect(() => {
+    if (!feed.isSuccess || feed.isFetching || trackedSearch.current === searchKey) return;
+    trackedSearch.current = searchKey;
+    track('search', { has_query: !!query.trim(), count: activeCount, result_count: total, sort });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feed.isSuccess, feed.isFetching, searchKey]);
+
   const emptyFilters: Filters = {
     category: null,
     minPrice: undefined,
@@ -210,8 +227,15 @@ export default function SearchResultsScreen() {
 
   const openSheet = () => {
     setDraft(filters);
+    setQuartierFilter('');
     setShowSheet(true);
   };
+
+  const quartierMatches = useMemo(
+    () =>
+      searchByName(quartiers.quartiers, quartierFilter, (q) => q.name).filter((q) => q.name !== draft.quartier),
+    [quartiers.quartiers, quartierFilter, draft.quartier],
+  );
 
   const draftBucket = bucketFromRange(draft.minPrice, draft.maxPrice);
   const setDraftBucket = (b: PriceBucket) =>
@@ -345,6 +369,10 @@ export default function SearchResultsScreen() {
             <Button
               label="Appliquer"
               onPress={() => {
+                const changed = (Object.keys(draft) as (keyof Filters)[]).filter(
+                  (k) => JSON.stringify(draft[k] ?? null) !== JSON.stringify(filters[k] ?? null),
+                );
+                if (changed.length) track('filter_used', { filter: changed.join(',').slice(0, 40), count: changed.length });
                 setFilters(draft);
                 // Turning "Près de moi" on implies "nearest first".
                 if (draft.near && !filters.near) setSort('distance');
@@ -400,25 +428,48 @@ export default function SearchResultsScreen() {
           <AppText variant="small" color="inkMuted">
             Renseignez votre ville dans votre profil pour filtrer par quartier.
           </AppText>
-        ) : (quartiers.data?.quartiers ?? []).length === 0 && !draft.quartier ? (
+        ) : quartiers.quartiers.length === 0 && !draft.quartier ? (
           <AppText variant="small" color="inkMuted">
             {quartiers.isLoading ? 'Chargement des quartiers…' : `Aucun quartier référencé à ${user.city}.`}
           </AppText>
         ) : (
-          <View style={s.wrap}>
-            <Chip label="Tous" selected={!draft.quartier} onPress={() => setDraft((d) => ({ ...d, quartier: null }))} />
-            {draft.quartier && !(quartiers.data?.quartiers ?? []).some((x) => x.name === draft.quartier) && (
-              <Chip label={draft.quartier} selected onPress={() => setDraft((d) => ({ ...d, quartier: null }))} />
-            )}
-            {(quartiers.data?.quartiers ?? []).map((x) => (
-              <Chip
-                key={x.id}
-                label={x.name}
-                selected={draft.quartier === x.name}
-                onPress={() => setDraft((d) => ({ ...d, quartier: d.quartier === x.name ? null : x.name }))}
+          <>
+            {quartiers.quartiers.length > QUARTIER_CHIPS && (
+              <TextField
+                placeholder={`Rechercher parmi ${quartiers.quartiers.length} quartiers`}
+                accessibilityLabel="Rechercher un quartier"
+                value={quartierFilter}
+                onChangeText={setQuartierFilter}
+                left={<Ionicons name="search" size={18} color={t.colors.inkSubtle} />}
+                autoCorrect={false}
+                autoCapitalize="none"
+                containerStyle={s.quartierSearch}
               />
-            ))}
-          </View>
+            )}
+            <View style={s.wrap}>
+              <Chip label="Tous" selected={!draft.quartier} onPress={() => setDraft((d) => ({ ...d, quartier: null }))} />
+              {draft.quartier && (
+                <Chip label={draft.quartier} selected onPress={() => setDraft((d) => ({ ...d, quartier: null }))} />
+              )}
+              {quartierMatches.slice(0, QUARTIER_CHIPS).map((x) => (
+                <Chip
+                  key={x.id}
+                  label={x.name}
+                  selected={false}
+                  onPress={() => setDraft((d) => ({ ...d, quartier: x.name }))}
+                />
+              ))}
+            </View>
+            {quartierMatches.length > QUARTIER_CHIPS ? (
+              <AppText variant="caption" color="inkMuted" style={s.quartierMore}>
+                {`+ ${quartierMatches.length - QUARTIER_CHIPS} autres : précisez la recherche.`}
+              </AppText>
+            ) : quartierFilter && quartierMatches.length === 0 ? (
+              <AppText variant="caption" color="inkMuted" style={s.quartierMore}>
+                Aucun quartier ne correspond.
+              </AppText>
+            ) : null}
+          </>
         )}
 
         <AppText variant="labelStrong" style={s.groupTitle}>
@@ -489,6 +540,8 @@ const makeStyles = createStyles((t) => ({
   hint: { marginTop: t.spacing.xs },
   groupTitle: { marginTop: t.spacing.md, marginBottom: t.spacing.xs },
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.xs },
+  quartierSearch: { marginBottom: t.spacing.xs },
+  quartierMore: { marginTop: t.spacing.xs },
   sheetActions: { flexDirection: 'row', gap: t.spacing.sm },
 }));
 

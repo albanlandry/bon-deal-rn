@@ -1,9 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 import { useTheme } from '@/theme';
 import { haptics } from '@/lib/haptics';
+import { searchByName } from '@/lib/textSearch';
 import AppText from '../atoms/AppText';
+import TextField from '../atoms/TextField';
 import Sheet from '../organisms/Sheet';
 
 export interface SellOption {
@@ -19,6 +21,8 @@ export interface SellOptionSheetProps {
   emptyText?: string;
   onClose: () => void;
   onSelect: (value: string) => void;
+  /** Show a search field (accent-insensitive), e.g. for long quartier lists. */
+  searchPlaceholder?: string;
 }
 
 /** Single-select bottom sheet over {value,label} options (thumb zone). */
@@ -30,16 +34,36 @@ export default function SellOptionSheet({
   emptyText,
   onClose,
   onSelect,
+  searchPlaceholder,
 }: SellOptionSheetProps) {
   const t = useTheme();
+  const [filter, setFilter] = useState('');
+  useEffect(() => {
+    if (visible) setFilter('');
+  }, [visible]);
+  const shown = useMemo(
+    () => (searchPlaceholder ? searchByName(options, filter, (o) => o.label) : options),
+    [options, filter, searchPlaceholder],
+  );
   return (
     <Sheet visible={visible} onClose={onClose} title={title}>
-      {options.length === 0 && (
+      {!!searchPlaceholder && options.length > 0 && (
+        <TextField
+          placeholder={searchPlaceholder}
+          accessibilityLabel={searchPlaceholder}
+          value={filter}
+          onChangeText={setFilter}
+          left={<Ionicons name="search" size={18} color={t.colors.inkSubtle} />}
+          autoCorrect={false}
+          autoCapitalize="none"
+        />
+      )}
+      {shown.length === 0 && (
         <AppText variant="small" color="inkMuted" style={styles.empty}>
-          {emptyText || 'Aucune option.'}
+          {options.length && filter ? 'Aucun résultat.' : emptyText || 'Aucune option.'}
         </AppText>
       )}
-      {options.map((opt) => {
+      {shown.map((opt) => {
         const selected = opt.value === selectedValue;
         return (
           <Pressable

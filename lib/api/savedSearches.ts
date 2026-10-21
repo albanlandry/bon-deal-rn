@@ -1,6 +1,6 @@
 /** Saved searches with new-listing alerts (Phase 4). */
 import { queryOptions } from '@tanstack/react-query';
-import { ApiError, apiFetch } from '@/lib/api';
+import { ApiError, apiErrorMessage, apiFetch } from '@/lib/api';
 import type { BdSavedSearch, BdSavedSearchFilters } from '@/constants/types';
 import type { FeedParams } from '@/lib/api/posts';
 import { formatAmount, formatNumber } from '@/lib/format';
@@ -42,15 +42,13 @@ export async function deleteSavedSearch(id: number): Promise<void> {
 
 export function savedSearchErrorMessage(e: unknown): string {
   if (e instanceof ApiError) {
-    if (e.status === 400 || e.status === 409) {
-      return /20|max|limit/i.test(e.message)
-        ? 'Vous avez atteint 20 recherches enregistrées. Supprimez-en une.'
-        : e.message;
-    }
+    if (e.code === 'saved_search_limit') return apiErrorMessage(e, 'Vous avez atteint le nombre maximal de recherches enregistrées. Supprimez-en une.');
+    if (e.status === 400 || e.status === 409) return apiErrorMessage(e, 'Recherche impossible à enregistrer.');
     if (e.status === 404) return 'Cette recherche n’existe plus.';
     if (e.status === 422) return 'Vérifiez le nom de la recherche.';
+    if (e.code === 'rate_limited' || e.status === 429) return 'Trop de demandes. Réessayez plus tard.';
   }
-  return 'Action impossible. Réessayez.';
+  return apiErrorMessage(e, 'Action impossible. Réessayez.');
 }
 
 /** Feed params → saved-search filters (API field names). */

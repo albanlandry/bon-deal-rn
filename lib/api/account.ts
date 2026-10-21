@@ -42,14 +42,7 @@ export async function acceptConsents(documents?: LegalDocument[]): Promise<Legal
 
 /** Public, current legal versions (GET /legal, no auth). */
 /** Server limits the app needs up front (public GET /app-config). */
-export function appConfigQuery() {
-  return queryOptions({
-    queryKey: ['app-config'],
-    queryFn: () =>
-      apiFetch<{ max_images: number; listing_expiry_days: number; maintenance_mode: boolean }>('/app-config'),
-    staleTime: 60 * 60_000,
-  });
-}
+export { appConfigQuery } from './appConfig';
 
 export function legalVersionsQuery() {
   return queryOptions({
