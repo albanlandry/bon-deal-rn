@@ -1,14 +1,21 @@
-// app/item-details.tsx — Item details (doc 06 §4.1, docs/09 §4): immersive
-// parallax gallery with the price pill on the photo, trust card high up,
-// smooth-height sections, snapping "Annonces similaires" carousel, a sticky
-// action bar that slides up after 120 px, and the offer Sheet in place.
+// app/item-details.tsx — "Annonce" (docs/12 layout, docs/09 motion): the photo
+// gallery full bleed (~55 % of the screen, parallax 0.5× + stretch on
+// pull-down), a content sheet that overlaps it by 28 dp and scrolls over it
+// (price, title, fact tiles, seller on one line, description, place,
+// similar listings), and a floating dark action dock visible from the start
+// with the payment safety line on top. The offer Sheet opens in place.
 import { Ionicons } from '@expo/vector-icons';
+import * as Linking from 'expo-linking';
 import { Href, useLocalSearchParams, useRouter } from 'expo-router';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, LayoutChangeEvent, Share, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import Animated, {
   interpolate,
+  runOnJS,
+  useAnimatedReaction,
+  useAnimatedRef,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
@@ -21,9 +28,9 @@ import {
   CategoryTag,
   ErrorState,
   HeartBurst,
-  IconButton,
   ListingCard,
   Price,
+  PressableScale,
   SafetyBanner,
   SellerCard,
   Skeleton,
@@ -33,6 +40,7 @@ import ItemGallery from '@/components/organisms/ItemGallery';
 import ItemPriceCheckCard from '@/components/molecules/ItemPriceCheckCard';
 import ReportSheet from '@/components/organisms/ReportSheet';
 import OfferSheet from '@/components/organisms/OfferSheet';
+import ActionDock, { dockBottom, DockButton, useDockColors } from '@/components/organisms/ActionDock';
 import { enterFade, layoutSpring, timing } from '@/components/motion/anim';
 import { useToggleLike } from '@/lib/api/likeToggle';
 import { duration } from '@/theme/motion';
@@ -48,23 +56,23 @@ import {
 } from '@/lib/api/posts';
 import { getOrCreateConversation } from '@/lib/api/conversations';
 import { ApiError } from '@/lib/api';
-import { formatRelativeTime } from '@/lib/format';
+import { formatAmount, formatRelativeTime } from '@/lib/format';
 import { isReady, largeUrl } from '@/lib/images';
-import { AGE_LABELS, categoryLabel, conditionLabel } from '@/constants/catalog';
+import { AGE_LABELS, conditionLabel } from '@/constants/catalog';
 
-/** The action bar appears after this much scroll (photo unobstructed first). */
-const BAR_REVEAL_Y = 120;
 const SIMILAR_W = 168;
 const DESC_CLAMP = 260;
+/** How far the content sheet overlaps the photo. */
+const SHEET_OVERLAP = 28;
 import type { BdPost, BdPriceCheck } from '@/constants/types';
 import { createStyles, useStyles, useTheme } from '@/theme';
 import { track } from '@/lib/analytics';
 
 function priceCheckErrorMessage(e: unknown): string {
   const status = e instanceof ApiError ? e.status : 0;
-  if (status === 503) return "L'assistant prix n'est pas disponible pour le moment.";
+  if (status === 503) return 'L’assistant prix n’est pas disponible pour le moment.';
   if (status === 429) return 'Trop de vérifications — réessayez plus tard.';
-  if (status === 409) return "Cette annonce n'a pas de prix à vérifier.";
+  if (status === 409) return 'Cette annonce n’a pas de prix à vérifier.';
   return 'Impossible de vérifier le prix. Réessayez.';
 }
 
@@ -74,17 +82,29 @@ function plural(n: number, word: string) {
 
 function DetailsSkeleton() {
   const t = useTheme();
+  const { height } = useWindowDimensions();
   return (
-    <SafeAreaView edges={['bottom']} style={{ flex: 1, backgroundColor: t.colors.canvas }}>
-      <Skeleton height={340} radius={0} />
-      <View style={{ padding: 16, gap: 12 }}>
-        <Skeleton width="40%" height={28} />
+    <View style={{ flex: 1, backgroundColor: t.colors.surface }} accessibilityLabel="Chargement de l’annonce">
+      <Skeleton height={Math.round(height * 0.55)} radius={0} />
+      <View
+        style={{
+          marginTop: -SHEET_OVERLAP,
+          padding: 16,
+          gap: 12,
+          backgroundColor: t.colors.surface,
+          borderTopLeftRadius: t.radius.lg,
+          borderTopRightRadius: t.radius.lg,
+        }}>
+        <Skeleton width="45%" height={28} />
         <Skeleton width="85%" height={20} />
-        <Skeleton width="60%" height={14} />
-        <Skeleton height={80} style={{ marginTop: 12 }} />
-        <Skeleton height={120} />
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Skeleton height={48} radius={t.radius.sm} style={{ flex: 1 }} />
+          <Skeleton height={48} radius={t.radius.sm} style={{ flex: 1 }} />
+          <Skeleton height={48} radius={t.radius.sm} style={{ flex: 1 }} />
+        </View>
+        <Skeleton height={56} radius={t.radius.sm} />
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -102,27 +122,28 @@ export default function ItemDetailsScreen() {
   const [reportOpen, setReportOpen] = useState(false);
   const [offerOpen, setOfferOpen] = useState(false);
   const [descOpen, setDescOpen] = useState(false);
-  const { height: winH } = useWindowDimensions();
 
-  // Scroll-driven chrome: parallax (gallery), compact top bar, action bar.
+  // Scroll-driven chrome: parallax (gallery) and compact top bar. The action
+  // bar is always shown (docs/11 §4.6 reverses docs/09's reveal after 120 px).
   const scrollY = useSharedValue(0);
-  const barShown = useSharedValue(0);
-  const shortPage = useSharedValue(0);
-  const barTarget = useSharedValue(0);
-  const [barH, setBarH] = useState(88);
-  const [galleryH, setGalleryH] = useState(320);
+  const dock = useDockColors();
+  const [dockH, setDockH] = useState(112);
+  const [galleryH, setGalleryH] = useState(420);
+  // Light status bar over the photo, back to the scheme's once the bar shows.
+  const [lightStatus, setLightStatus] = useState(true);
+  // "Voir des annonces similaires" (unavailable listing) scrolls to the carousel.
+  const scrollRef = useAnimatedRef<Animated.ScrollView>();
+  const similarY = useRef(0);
   const onScroll = useAnimatedScrollHandler((e) => {
     scrollY.value = e.contentOffset.y;
-    const want = shortPage.value === 1 || e.contentOffset.y > BAR_REVEAL_Y ? 1 : 0;
-    if (want !== barTarget.value) {
-      // Target flips once per crossing; the timing runs on the UI thread.
-      barTarget.value = want;
-      barShown.value = timing(want, want ? duration.medium : duration.exit, want ? 'enter' : 'exit');
-    }
   });
-  const barStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: (1 - barShown.value) * (barH + 24) }],
-  }));
+  useAnimatedReaction(
+    () => scrollY.value < galleryH - 100,
+    (over, prev) => {
+      if (over !== prev) runOnJS(setLightStatus)(over);
+    },
+    [galleryH],
+  );
   const topBarStyle = useAnimatedStyle(() => ({
     opacity: interpolate(scrollY.value, [galleryH - 140, galleryH - 60], [0, 1], 'clamp'),
   }));
@@ -206,7 +227,7 @@ export default function ItemDetailsScreen() {
     onError: (e: any) => {
       // 403 between blocked users carries a French server message.
       const blocked = blockedMessage(e);
-      showToast.error(blocked ? 'Contact impossible' : 'Échec', blocked ?? (e?.message || "Impossible d'ouvrir la conversation."));
+      showToast.error(blocked ? 'Contact impossible' : 'Échec', blocked ?? (e?.message || 'Impossible d’ouvrir la conversation.'));
     },
   });
 
@@ -225,9 +246,10 @@ export default function ItemDetailsScreen() {
   const handleShare = async () => {
     if (!post) return;
     try {
-      const priceText = post.is_free ? 'Gratuit' : post.price != null ? `${post.price} FCFA` : '';
+      const priceText = post.is_free ? 'Gratuit' : post.price != null ? formatAmount(post.price) : '';
+      const url = Linking.createURL('/item-details', { queryParams: { id: String(post.id) } });
       const res = await Share.share({
-        message: `${post.title}${priceText ? ` — ${priceText}` : ''} sur BonDeal`,
+        message: `${post.title}${priceText ? ` — ${priceText}` : ''} sur BonDeal\n${url}`,
       });
       if (res.action === Share.sharedAction) {
         sharePost(post.id).catch(() => {});
@@ -276,64 +298,93 @@ export default function ItemDetailsScreen() {
             ? { label: 'Masquée', tone: 'neutral' as const }
             : null;
 
+  // Not available to buyers: the action bar explains why instead of "Contacter".
+  const unavailableReason =
+    post.state === 'sold'
+      ? 'Cette annonce est vendue.'
+      : post.state === 'reserved'
+        ? 'Cette annonce est réservée.'
+        : 'Cette annonce n’est plus disponible.';
+
+  // Three fact tiles (docs/12): État, Retrait, Publié — Âge fills a gap.
+  const published = formatRelativeTime(post.created_at).replace("'", '’');
   const facts = [
-    { icon: 'pricetags-outline' as const, label: 'Catégorie', value: categoryLabel(post.categories[0]) },
-    condition ? { icon: 'sparkles-outline' as const, label: 'État', value: condition } : null,
-    age ? { icon: 'time-outline' as const, label: 'Âge', value: age } : null,
-  ].filter(Boolean) as { icon: React.ComponentProps<typeof Ionicons>['name']; label: string; value: string }[];
+    condition ? { label: 'État', value: condition } : null,
+    post.pickup_quartier || post.city ? { label: 'Retrait', value: (post.pickup_quartier || post.city)! } : null,
+    published ? { label: 'Publié', value: published.replace(/^./, (c) => c.toUpperCase()) } : null,
+    age ? { label: 'Âge', value: age } : null,
+  ]
+    .filter(Boolean)
+    .slice(0, 3) as { label: string; value: string }[];
 
   const goBack = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/home'));
+
+  // Round translucent buttons over the photo (icons only, so round is fine).
+  const glassBg = t.isDark ? t.colors.overlay : 'rgba(255,255,255,0.92)';
+  const glassFg = t.isDark ? t.colors.onOverlay : '#0F1B2D';
   const headerButtons = (
-    <View style={[styles.galleryHeader, { top: insets.top + 4 }]} pointerEvents="box-none">
-      <IconButton icon="arrow-back" label="Retour" variant="overlay" onPress={goBack} />
-      <View style={styles.row}>
-        <IconButton icon="share-social-outline" label="Partager l'annonce" variant="overlay" onPress={handleShare} />
-        {!isOwner && (
-          <IconButton icon="flag-outline" label="Signaler l'annonce" variant="overlay" onPress={() => setReportOpen(true)} />
+    <View style={[styles.galleryHeader, { top: insets.top + 8 }]} pointerEvents="box-none">
+      <GlassButton icon="arrow-back" label="Retour" onPress={goBack} bg={glassBg} fg={glassFg} />
+      <View style={styles.headerRight}>
+        <GlassButton icon="share-social-outline" label="Partager l’annonce" onPress={handleShare} bg={glassBg} fg={glassFg} />
+        {!isOwner && available && (
+          <HeartBurst
+            liked={post.liked_by_me}
+            onToggle={() => {
+              if (!likeMutation.isPending) likeMutation.mutate(post.liked_by_me);
+            }}
+            box={40}
+            size={20}
+            background={glassBg}
+            color={glassFg}
+          />
         )}
       </View>
     </View>
   );
 
-  // Price pill pinned to the photo, state + condition beside it.
-  const pricePill = (
+  // State on the photo (sold / reserved…); the condition is a fact tile.
+  const photoBadges = stateBadge ? (
     <View style={styles.pillRow}>
-      <View style={[styles.pricePill, t.elevation.card as object]}>
-        <Price amount={post.price} isFree={post.is_free} isExchange={!!post.exchange_items} size="md" />
-      </View>
-      {stateBadge && <Badge label={stateBadge.label} tone={stateBadge.tone === 'neutral' ? 'overlay' : stateBadge.tone} style={styles.pillBadge} />}
-      {condition && <Badge label={condition} tone="overlay" icon="sparkles-outline" style={styles.pillBadge} />}
+      <Badge label={stateBadge.label} tone={stateBadge.tone === 'neutral' ? 'overlay' : stateBadge.tone} />
     </View>
-  );
+  ) : undefined;
 
   const longDesc = (post.description?.length ?? 0) > DESC_CLAMP;
+  const contentBottom = dockH + dockBottom(insets.bottom) + t.spacing.md;
 
   return (
     <View style={styles.screen}>
+      <StatusBar style={lightStatus ? 'light' : t.isDark ? 'light' : 'dark'} />
       <Animated.View style={[styles.flex, enterStyle]}>
         <Animated.ScrollView
+          ref={scrollRef}
           onScroll={onScroll}
           scrollEventThrottle={16}
-          onContentSizeChange={(_, h) => {
-            shortPage.value = h <= winH + BAR_REVEAL_Y ? 1 : 0;
-            if (shortPage.value === 1 && barTarget.value !== 1) {
-              barTarget.value = 1;
-              barShown.value = timing(1, duration.medium, 'enter');
-            }
-          }}
-          contentContainerStyle={{ paddingBottom: barH + 16 }}
+          contentContainerStyle={{ paddingBottom: contentBottom }}
           showsVerticalScrollIndicator={false}>
           <View onLayout={(e: LayoutChangeEvent) => setGalleryH(e.nativeEvent.layout.height)}>
             <ItemGallery
               images={imageUrls}
               title={post.title}
               scrollY={scrollY}
-              bottomOverlay={pricePill}
+              ratio={2}
+              bottomInset={SHEET_OVERLAP}
+              bottomOverlay={photoBadges}
             />
           </View>
 
-          <View style={styles.body}>
-            <AppText variant="h2" accessibilityRole="header">
+          {/* The content sheet slides over the photo */}
+          <View style={styles.sheet}>
+            <View style={styles.handle} />
+
+            <View style={styles.priceRow}>
+              <View style={styles.flex}>
+                <Price amount={post.price} isFree={post.is_free} isExchange={!!post.exchange_items} size="lg" />
+              </View>
+              {post.allow_negotiation && !post.is_free && <Badge label="Négociable" tone="brand" />}
+            </View>
+            <AppText variant="h3" accessibilityRole="header" style={styles.title}>
               {post.title}
             </AppText>
             {post.is_free && (
@@ -341,19 +392,38 @@ export default function ItemDetailsScreen() {
                 Donnez une seconde vie à cet objet.
               </AppText>
             )}
-            <View style={styles.badges}>
-              {!!post.categories?.[0] && <CategoryTag value={post.categories[0]} />}
-              {post.is_free && <Badge label="Gratuit" tone="success" icon="gift-outline" />}
-              {!!post.exchange_items && <Badge label="Échange possible" tone="trust" icon="swap-horizontal" />}
-              {post.allow_negotiation && !post.is_free && <Badge label="Négociable" tone="brand" icon="chatbubbles-outline" />}
-            </View>
-            <AppText variant="caption" color="inkMuted">
-              Publié {formatRelativeTime(post.created_at).toLowerCase()}
-              {` · ${plural(post.views_count, 'vue')} · ${plural(post.likes_count, 'favori')}`}
+            {(!!post.categories?.[0] || post.is_free || !!post.exchange_items) && (
+              <View style={styles.badges}>
+                {!!post.categories?.[0] && <CategoryTag value={post.categories[0]} />}
+                {post.is_free && <Badge label="Gratuit" tone="success" icon="gift-outline" />}
+                {!!post.exchange_items && <Badge label="Échange possible" tone="trust" icon="swap-horizontal" />}
+              </View>
+            )}
+
+            {facts.length > 0 && (
+              <View style={styles.facts}>
+                {facts.map((f) => (
+                  <View
+                    key={f.label}
+                    style={styles.fact}
+                    accessible
+                    accessibilityLabel={`${f.label} : ${f.value}`}>
+                    <AppText variant="caption" color="inkSubtle" numberOfLines={1}>
+                      {f.label}
+                    </AppText>
+                    <AppText variant="labelStrong" numberOfLines={1}>
+                      {f.value}
+                    </AppText>
+                  </View>
+                ))}
+              </View>
+            )}
+            <AppText variant="caption" color="inkSubtle" style={styles.counts}>
+              {`${plural(post.views_count, 'vue')} · ${plural(post.likes_count, 'favori')}`}
             </AppText>
 
-            {/* Trust card, high up (social proof before the details) */}
-            <View style={styles.section}>
+            {/* Seller on one line, before the details (social proof) */}
+            <View style={styles.sellerBlock}>
               <SellerCard
                 userId={post.owner_id}
                 username={post.owner_username}
@@ -368,33 +438,11 @@ export default function ItemDetailsScreen() {
               />
             </View>
 
-            {facts.length > 0 && (
-              <View style={styles.facts}>
-                {facts.map((f) => (
-                  <View key={f.label} style={styles.fact}>
-                    {f.label === 'Catégorie' && post.categories?.[0] ? (
-                      <CategoryTag value={post.categories[0]} iconOnly size={32} />
-                    ) : (
-                      <View style={styles.factIcon}>
-                        <Ionicons name={f.icon} size={18} color={t.colors.inkMuted} />
-                      </View>
-                    )}
-                    <View>
-                      <AppText variant="caption" color="inkMuted">
-                        {f.label}
-                      </AppText>
-                      <AppText variant="labelStrong">{f.value}</AppText>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            )}
-
             {/* Bon prix ? (buyer-facing price check) */}
             <Animated.View layout={layoutSpring()}>
               {!post.is_free && !!post.price && !bonPrix && (
                 <Button
-                  label={bonPrixMutation.isPending ? 'Analyse du marché…' : "C'est un bon prix ?"}
+                  label={bonPrixMutation.isPending ? 'Analyse du marché…' : 'C’est un bon prix ?'}
                   icon="analytics-outline"
                   variant="secondary"
                   size="sm"
@@ -442,7 +490,9 @@ export default function ItemDetailsScreen() {
               <Animated.View layout={layoutSpring()} style={styles.section}>
                 <AppText variant="h3">Lieu de remise</AppText>
                 <View style={styles.location}>
-                  <Ionicons name="location" size={20} color={t.colors.brandStrong} />
+                  <View style={styles.locationIcon}>
+                    <Ionicons name="location" size={20} color={t.colors.brandStrong} />
+                  </View>
                   <View style={styles.flex}>
                     {!!locationText && <AppText variant="bodyStrong">{locationText}</AppText>}
                     {!!post.pickup_location_note && (
@@ -468,33 +518,36 @@ export default function ItemDetailsScreen() {
                 />
               </Animated.View>
             )}
-          </View>
 
-          {similar.length > 0 && (
-            <Animated.View layout={layoutSpring()} style={styles.similar}>
-              <AppText variant="h3" style={styles.similarTitle}>
-                Annonces similaires
-              </AppText>
-              <FlatList
-                data={similar}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                snapToInterval={SIMILAR_W + t.spacing.sm}
-                snapToAlignment="start"
-                decelerationRate="fast"
-                keyExtractor={(p) => String(p.id)}
-                contentContainerStyle={styles.similarList}
-                renderItem={({ item }) => (
-                  <ListingCard
-                    post={item}
-                    width={SIMILAR_W}
-                    onPress={() => router.push({ pathname: '/item-details', params: { id: String(item.id) } })}
-                    onToggleLike={() => toggleSimilarLike.mutate({ id: item.id, like: !item.liked_by_me })}
-                  />
-                )}
-              />
-            </Animated.View>
-          )}
+            {similar.length > 0 && (
+              <Animated.View
+                layout={layoutSpring()}
+                onLayout={(e: LayoutChangeEvent) => (similarY.current = galleryH - SHEET_OVERLAP + e.nativeEvent.layout.y)}
+                style={styles.similar}>
+                <AppText variant="h3" style={styles.similarTitle}>
+                  Annonces similaires
+                </AppText>
+                <FlatList
+                  data={similar}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  snapToInterval={SIMILAR_W + t.spacing.sm}
+                  snapToAlignment="start"
+                  decelerationRate="fast"
+                  keyExtractor={(p) => String(p.id)}
+                  contentContainerStyle={styles.similarList}
+                  renderItem={({ item }) => (
+                    <ListingCard
+                      post={item}
+                      width={SIMILAR_W}
+                      onPress={() => router.push({ pathname: '/item-details', params: { id: String(item.id) } })}
+                      onToggleLike={() => toggleSimilarLike.mutate({ id: item.id, like: !item.liked_by_me })}
+                    />
+                  )}
+                />
+              </Animated.View>
+            )}
+          </View>
         </Animated.ScrollView>
 
         {/* Compact top bar fades in once the photo has scrolled away */}
@@ -507,50 +560,50 @@ export default function ItemDetailsScreen() {
         </Animated.View>
         {headerButtons}
 
-        {/* Sticky action bar — thumb zone (Fitts); slides up after 120 px */}
-        <Animated.View
-          onLayout={(e: LayoutChangeEvent) => setBarH(Math.round(e.nativeEvent.layout.height))}
-          style={[styles.ctaBar, { paddingBottom: Math.max(insets.bottom, 12) }, barStyle]}>
+        {/* Floating action dock — thumb zone (Fitts), visible from the start,
+            with the payment safety line on top (never hidden). */}
+        <ActionDock safety={!isOwner && available} onHeight={setDockH}>
           {isOwner ? (
             <>
-              <Button
-                label="Mes annonces"
-                variant="secondary"
-                onPress={() => router.push('/my-listings')}
-                style={styles.flex}
-              />
-              <Button
+              <DockButton label="Mes annonces" variant="glass" onPress={() => router.push('/my-listings')} />
+              <DockButton
                 label="Modifier"
                 icon="create-outline"
                 onPress={() => router.push({ pathname: '/post-item', params: { id: String(post.id), mode: 'edit' } })}
-                style={styles.flex}
               />
+            </>
+          ) : !available ? (
+            <>
+              <View style={[styles.flex, styles.unavailable]} accessibilityRole="text">
+                <Ionicons name="lock-closed-outline" size={18} color={dock.fgMuted} />
+                <AppText variant="labelStrong" style={[styles.flex, { color: dock.fg }]}>
+                  {unavailableReason}
+                </AppText>
+              </View>
+              {similar.length > 0 && (
+                <DockButton
+                  label="Annonces similaires"
+                  variant="glass"
+                  grow={false}
+                  accessibilityHint="Fait défiler jusqu’aux annonces similaires"
+                  onPress={() => scrollRef.current?.scrollTo({ y: similarY.current, animated: true })}
+                />
+              )}
             </>
           ) : (
             <>
-              <HeartBurst
-                liked={post.liked_by_me}
-                onToggle={() => {
-                  if (!likeMutation.isPending) likeMutation.mutate(post.liked_by_me);
-                }}
-                box={48}
-                size={22}
-                style={styles.heart}
-              />
-              <Button
+              {canOffer && (
+                <DockButton label="Faire une offre" variant="glass" haptic onPress={() => setOfferOpen(true)} />
+              )}
+              <DockButton
                 label="Contacter"
                 icon="chatbubble-outline"
-                variant={canOffer ? 'secondary' : 'primary'}
                 loading={contactMutation.isPending}
                 onPress={() => contactMutation.mutate()}
-                style={styles.flex}
               />
-              {canOffer && (
-                <Button label="Faire une offre" haptic onPress={() => setOfferOpen(true)} style={styles.flex} />
-              )}
             </>
           )}
-        </Animated.View>
+        </ActionDock>
       </Animated.View>
 
       {canOffer && (
@@ -574,30 +627,87 @@ export default function ItemDetailsScreen() {
   );
 }
 
+/** 40 dp round translucent icon button over the photo (48 dp with hit slop). */
+function GlassButton({
+  icon,
+  label,
+  onPress,
+  bg,
+  fg,
+}: {
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  label: string;
+  onPress: () => void;
+  bg: string;
+  fg: string;
+}) {
+  return (
+    <PressableScale
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      hitSlop={4}
+      scaleTo={0.9}
+      style={[glass.btn, { backgroundColor: bg }]}>
+      <Ionicons name={icon} size={20} color={fg} />
+    </PressableScale>
+  );
+}
+
+const glass = StyleSheet.create({
+  btn: { width: 40, height: 40, borderRadius: 999, alignItems: 'center', justifyContent: 'center' },
+});
+
 const makeStyles = createStyles((t) => ({
-  screen: { flex: 1, backgroundColor: t.colors.canvas },
+  screen: { flex: 1, backgroundColor: t.colors.surface },
   backBtn: { margin: t.spacing.md },
-  row: { flexDirection: 'row' },
   flex: { flex: 1 },
   alignStart: { alignSelf: 'flex-start' },
   galleryHeader: {
     position: 'absolute',
-    left: t.spacing.xs,
-    right: t.spacing.xs,
+    left: t.spacing.md,
+    right: t.spacing.md,
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  body: { padding: t.spacing.md, gap: t.spacing.xs },
-  pillRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 },
-  pricePill: {
+  headerRight: { flexDirection: 'row', gap: t.spacing.xs },
+  sheet: {
+    marginTop: -SHEET_OVERLAP,
+    paddingTop: t.spacing.xs,
     paddingHorizontal: t.spacing.md,
-    paddingVertical: 6,
-    borderRadius: t.radius.full,
     backgroundColor: t.colors.surface,
+    borderTopLeftRadius: t.radius.lg,
+    borderTopRightRadius: t.radius.lg,
   },
-  pillBadge: { paddingVertical: 5 },
-  heart: { borderWidth: 1, borderColor: t.colors.line, backgroundColor: t.colors.surface },
-  factIcon: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: t.colors.surfaceAlt },
+  handle: {
+    alignSelf: 'center',
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: t.colors.line,
+    marginBottom: t.spacing.sm,
+  },
+  pillRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: t.spacing.xs },
+  priceRow: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs },
+  title: { marginTop: 2 },
+  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.xs, marginTop: t.spacing.xs },
+  facts: { flexDirection: 'row', gap: t.spacing.xs, marginTop: t.spacing.md },
+  fact: {
+    flex: 1,
+    minWidth: 0,
+    paddingVertical: t.spacing.xs,
+    paddingHorizontal: 10,
+    borderRadius: t.radius.sm,
+    backgroundColor: t.colors.canvas,
+  },
+  counts: { marginTop: t.spacing.xs },
+  sellerBlock: {
+    marginTop: t.spacing.md,
+    paddingVertical: t.spacing.xxs,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: t.colors.line,
+  },
   topBar: {
     position: 'absolute',
     top: 0,
@@ -609,45 +719,25 @@ const makeStyles = createStyles((t) => ({
     borderBottomColor: t.colors.line,
   },
   topBarTitle: { marginHorizontal: 64 },
-  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginVertical: 4 },
-  facts: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: t.spacing.md,
-    marginTop: t.spacing.sm,
-    padding: t.spacing.sm,
-    backgroundColor: t.colors.surface,
-    borderColor: t.colors.line,
-    borderWidth: 1,
-    borderRadius: t.radius.md,
-  },
-  fact: { flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: '40%' },
   section: { marginTop: t.spacing.lg, gap: t.spacing.xs },
   location: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: t.spacing.sm,
     padding: t.spacing.sm,
-    backgroundColor: t.colors.surface,
-    borderColor: t.colors.line,
-    borderWidth: 1,
+    backgroundColor: t.colors.canvas,
     borderRadius: t.radius.md,
   },
-  similar: { marginTop: t.spacing.sm },
+  locationIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: t.radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: t.colors.brandTint,
+  },
+  similar: { marginTop: t.spacing.xl, marginHorizontal: -t.spacing.md },
   similarTitle: { paddingHorizontal: t.spacing.md, marginBottom: t.spacing.xs },
   similarList: { paddingHorizontal: t.spacing.md, gap: t.spacing.sm },
-  ctaBar: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: t.spacing.xs,
-    paddingHorizontal: t.spacing.md,
-    paddingTop: t.spacing.sm,
-    backgroundColor: t.colors.surface,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: t.colors.line,
-    ...(t.elevation.sheet as object),
-  },
+  unavailable: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs, minHeight: t.touch.min, paddingHorizontal: 4 },
 }));

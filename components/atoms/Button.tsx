@@ -8,7 +8,7 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
-import { useTheme } from '@/theme';
+import { buttonRadius, useTheme } from '@/theme';
 import { haptics } from '@/lib/haptics';
 import AppText from './AppText';
 
@@ -34,8 +34,10 @@ export interface ButtonProps {
 }
 
 /**
- * Primary = coral fill with INK text (6.3:1). One primary per screen
- * (von Restorff). Min height 48 dp (Fitts).
+ * Direction B "Confiance" (docs/11): 10 px rounded rectangle, flat.
+ * Primary = brand fill + onBrand text, secondary = brandTint fill + brand
+ * text, ghost = brand text. One primary per screen (von Restorff). Min
+ * height 48 dp for md (Fitts).
  */
 export default function Button({
   label,
@@ -57,10 +59,12 @@ export default function Button({
   const c = t.colors;
   const palette: Record<ButtonVariant, { bg: string; fg: string; border: string }> = {
     primary: { bg: c.brand, fg: c.onBrand, border: c.brand },
-    secondary: { bg: c.surface, fg: c.ink, border: c.line },
+    secondary: { bg: c.brandTint, fg: c.brandStrong, border: c.brandTint },
     ghost: { bg: 'transparent', fg: c.brandStrong, border: 'transparent' },
     danger: { bg: c.danger, fg: c.onDanger, border: c.danger },
-    trust: { bg: c.trust, fg: t.isDark ? c.onBrand : '#FFFFFF', border: c.trust },
+    // trust (teal) carries white text in light mode, dark ink in dark mode,
+    // exactly like `onDanger` does on `danger`.
+    trust: { bg: c.trust, fg: c.onDanger, border: c.trust },
   };
   const p = palette[variant];
   const inactive = disabled || loading;
@@ -85,10 +89,10 @@ export default function Button({
           styles.base,
           {
             minHeight: height,
-            borderRadius: t.radius.full,
+            borderRadius: buttonRadius,
             backgroundColor: p.bg,
             borderColor: p.border,
-            paddingHorizontal: size === 'sm' ? t.spacing.sm : t.spacing.xl,
+            paddingHorizontal: size === 'sm' ? t.spacing.sm : t.spacing.lg,
             opacity: disabled ? 0.45 : 1,
           },
         ]}>
@@ -124,5 +128,5 @@ const styles = StyleSheet.create({
     gap: 8,
     borderWidth: 1,
   },
-  reason: { marginTop: 6 },
+  reason: { marginTop: 4 },
 });

@@ -21,7 +21,7 @@ const TextField = forwardRef<TextInput, TextFieldProps>(function TextField(
 ) {
   const t = useTheme();
   const [focused, setFocused] = useState(false);
-  const borderColor = error ? t.colors.danger : focused ? t.colors.brandStrong : t.colors.line;
+  const borderColor = error ? t.colors.danger : focused ? t.colors.brand : t.colors.line;
   return (
     <View style={[styles.container, containerStyle]}>
       {!!label && (
@@ -96,7 +96,7 @@ export default TextField;
 
 const styles = StyleSheet.create({
   container: { alignSelf: 'stretch' },
-  label: { marginBottom: 6 },
+  label: { marginBottom: 8 },
   field: { flexDirection: 'row', paddingHorizontal: 12, gap: 8 },
   input: { flex: 1, paddingVertical: 12 },
   below: { flexDirection: 'row', marginTop: 4, minHeight: 16, gap: 8 },

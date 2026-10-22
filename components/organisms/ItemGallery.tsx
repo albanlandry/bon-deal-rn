@@ -58,8 +58,10 @@ export interface ItemGalleryProps {
   bottomOverlay?: React.ReactNode;
   /** Vertical page scroll, for parallax + overscroll stretch. */
   scrollY?: SharedValue<number>;
-  /** Height as a fraction of the width (default 0.9). */
+  /** Height as a fraction of the width (default 0.9), capped at 55 % of the screen. */
   ratio?: number;
+  /** Space covered at the bottom by an overlapping sheet: dots and badges sit above it. */
+  bottomInset?: number;
 }
 
 function MorphDot({ i, page }: { i: number; page: SharedValue<number> }) {
@@ -73,7 +75,7 @@ function MorphDot({ i, page }: { i: number; page: SharedValue<number> }) {
   });
   return (
     <View style={styles.dotSlot}>
-      <Animated.View style={[styles.dot, { backgroundColor: '#FFFFFF' }, style]} />
+      <Animated.View style={[styles.dot, { backgroundColor: t.colors.onOverlay }, style]} />
     </View>
   );
 }
@@ -145,7 +147,15 @@ function ZoomPage({
   );
 }
 
-export default function ItemGallery({ images, title, overlay, bottomOverlay, scrollY, ratio = 0.9 }: ItemGalleryProps) {
+export default function ItemGallery({
+  images,
+  title,
+  overlay,
+  bottomOverlay,
+  scrollY,
+  ratio = 0.9,
+  bottomInset = 0,
+}: ItemGalleryProps) {
   const t = useTheme();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
@@ -228,14 +238,18 @@ export default function ItemGallery({ images, title, overlay, bottomOverlay, scr
 
       {images.length > 1 && (
         <View
-          style={[styles.dots, { backgroundColor: t.colors.overlay }]}
+          style={[
+            styles.dots,
+            { backgroundColor: t.colors.overlay, bottom: bottomInset + 12 },
+            !!bottomOverlay && styles.dotsRight,
+          ]}
           accessibilityLabel={`Photo ${index + 1} sur ${images.length}`}>
           {images.map((_, i) => (
             <MorphDot key={i} i={i} page={page} />
           ))}
         </View>
       )}
-      {bottomOverlay && <View style={styles.bottomOverlay}>{bottomOverlay}</View>}
+      {bottomOverlay && <View style={[styles.bottomOverlay, { bottom: bottomInset + 12 }]}>{bottomOverlay}</View>}
       {overlay}
 
       <Modal
@@ -284,23 +298,24 @@ export default function ItemGallery({ images, title, overlay, bottomOverlay, scr
 }
 
 const styles = StyleSheet.create({
-  empty: { alignItems: 'center', justifyContent: 'center', gap: 6 },
+  empty: { alignItems: 'center', justifyContent: 'center', gap: 8 },
   topGrad: { position: 'absolute', top: 0, left: 0, right: 0 },
+  // Centred page dots on a small translucent plate (tight corners).
   dots: {
     position: 'absolute',
-    bottom: 16,
-    right: 12,
+    alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 6,
     paddingVertical: 6,
-    borderRadius: 999,
+    borderRadius: 6,
   },
   dotSlot: { width: DOT_SLOT + 2, alignItems: 'center' },
+  dotsRight: { alignSelf: 'flex-end', right: 12 },
   dot: { width: DOT, height: DOT, borderRadius: DOT / 2 },
-  bottomOverlay: { position: 'absolute', left: 12, bottom: 12, right: 100 },
+  bottomOverlay: { position: 'absolute', left: 12, right: 110 },
   fsBg: { flex: 1, backgroundColor: '#000' },
   fsItem: { flexGrow: 1, alignItems: 'center', justifyContent: 'center' },
   fsClose: { position: 'absolute', right: 12 },
-  fsCounter: { position: 'absolute', alignSelf: 'center', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
+  fsCounter: { position: 'absolute', alignSelf: 'center', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 6 },
 });

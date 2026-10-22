@@ -24,11 +24,12 @@ export default function SignupScreen() {
             <AppText variant="small" color="inkMuted">
               Déjà un compte ?
             </AppText>
-            <Button label="Se connecter" variant="ghost" size="sm" onPress={() => router.push('/login')} />
+            <Button label="Se connecter" variant="ghost" onPress={() => router.push('/login')} />
           </View>
         </View>
       }>
       <AuthPhoneForm
+        submitAtBottom
         submitLabel="Continuer"
         onCodeSent={(confirmation, e164) => {
           setConfirmation(confirmation);
@@ -44,7 +45,16 @@ export default function SignupScreen() {
           accessibilityRole="link"
           onPress={() => router.push({ pathname: '/terms-and-conditions', params: { mode: 'read' } } as Href)}
           style={styles.link}>
-          conditions d’utilisation et la politique de confidentialité
+          conditions d’utilisation
+        </AppText>{' '}
+        et la{' '}
+        <AppText
+          variant="caption"
+          color="brandStrong"
+          accessibilityRole="link"
+          onPress={() => router.push('/privacy-policy' as Href)}
+          style={styles.link}>
+          politique de confidentialité
         </AppText>{' '}
         de BonDeal.
       </AppText>

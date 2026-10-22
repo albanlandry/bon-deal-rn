@@ -103,9 +103,23 @@ export interface BdConversation {
   role: 'buyer' | 'seller';
   counterparty: BdUserBrief;
   last_message_at: string | null;
+  /** Newest message; null for an empty conversation. Older APIs omit it. */
+  last_message?: BdLastMessage | null;
   created_at: string | null;
   unread_count: number;
   latest_negotiation: BdNegotiationSummary | null;
+}
+
+/** Preview of a conversation's newest message (body cut to 140 chars). */
+export interface BdLastMessage {
+  id: number;
+  sender_id: number | null;
+  kind: BdChatMessageKind;
+  body: string | null;
+  payload: Record<string, any> | null;
+  created_at: string | null;
+  read_at: string | null;
+  is_mine: boolean;
 }
 
 export type BdChatMessageKind =
@@ -115,7 +129,8 @@ export type BdChatMessageKind =
   | 'system_accepted'
   | 'system_rejected'
   | 'system_auto_rejected'
-  | 'system_withdrawn';
+  | 'system_withdrawn'
+  | 'system_meeting_set';
 
 export interface BdChatMessage {
   id: number;
@@ -360,6 +375,8 @@ export interface BdTransaction {
   currency: string | null;
   payment_method: string | null;
   meeting_location: string | null;
+  /** Agreed hand-over time (naive UTC ISO from the API, see `parseServerDate`). */
+  meeting_at?: string | null;
   status: BdTransactionStatus;
   cancellation_reason: string | null;
   created_at: string | null;

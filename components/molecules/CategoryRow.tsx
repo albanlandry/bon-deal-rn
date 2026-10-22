@@ -1,10 +1,11 @@
 /**
- * One sticky row of category pills (docs/09 §4 Home, §5 mnemonics): each
- * pill shows its category's fixed icon in its fixed hue; a pill-shaped
- * indicator slides between them (spring.default) with a selection haptic.
+ * One sticky row of category chips (docs/09 §4 Home, §5 mnemonics): each
+ * chip shows its category's fixed icon in its fixed hue; an ink indicator
+ * slides between them (spring.default) with a selection haptic. Direction B
+ * (docs/11): 8 px chip radius, selected = ink fill with canvas text.
  *
- * The indicator is built from two round caps + a middle bar so that only
- * transforms animate and the pill shape never distorts.
+ * The indicator is built from two rounded caps + a middle bar so that only
+ * transforms animate and the corner radius never distorts.
  */
 import { Ionicons } from '@expo/vector-icons';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -17,6 +18,8 @@ import { spring } from '../motion/anim';
 import PressableScale from '../motion/PressableScale';
 
 const H = 40;
+/** Chip corner radius (theme radius.sm). */
+const R = 8;
 const BAR_BASE = 100;
 
 export interface CategoryRowItem {
@@ -110,10 +113,10 @@ export default function CategoryRow({ items, selected, onSelect, trailing, style
                 <Ionicons
                   name={categoryIcon(it.value ?? 'all', active) as any}
                   size={16}
-                  color={active ? t.colors.surface : c.hue}
+                  color={active ? t.colors.canvas : c.hue}
                 />
               </View>
-              <AppText variant="labelStrong" numberOfLines={1} style={{ color: active ? t.colors.surface : t.colors.ink }}>
+              <AppText variant="labelStrong" numberOfLines={1} style={{ color: active ? t.colors.canvas : t.colors.ink }}>
                 {label}
               </AppText>
             </PressableScale>
@@ -126,19 +129,19 @@ export default function CategoryRow({ items, selected, onSelect, trailing, style
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: 16, paddingVertical: 6 },
+  content: { paddingHorizontal: 16, paddingVertical: 4 },
   track: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  cap: { position: 'absolute', left: 0, top: 0, width: H, height: H, borderRadius: H / 2 },
+  cap: { position: 'absolute', left: 0, top: 0, width: H, height: H, borderRadius: R },
   bar: { position: 'absolute', left: 0, top: 0, width: BAR_BASE, height: H },
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
     height: H,
     paddingLeft: 4,
-    paddingRight: 14,
-    borderRadius: H / 2,
+    paddingRight: 12,
+    borderRadius: R,
     borderWidth: 1,
   },
-  dot: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  dot: { width: 32, height: 32, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
 });

@@ -4,7 +4,7 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
@@ -12,6 +12,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 
 import AnimatedSplashScreen from '@/components/AnimatedSplashScreen';
 import AppGate from '@/components/organisms/AppGate';
+import OfflineBanner from '@/components/organisms/OfflineBanner';
 import Toast, { toastConfig } from '@/components/atoms/Toast';
 import { PhoneAuthProvider } from '@/contexts/PhoneAuthContext';
 import { AuthProvider } from '@/contexts/AuthContext';
@@ -19,6 +20,7 @@ import { RealtimeProvider } from '@/contexts/RealtimeContext';
 import { queryClient } from '@/lib/queryClient';
 import { useForegroundMessageHandler } from '@/lib/push';
 import { AppThemeProvider, useTheme } from '@/theme';
+import { fontFiles } from '@/theme/tokens';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -36,39 +38,32 @@ export default function RootLayout() {
   const [loaded, error] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
     ...FontAwesome.font,
+    ...fontFiles,
   });
 
-  const [isReady, setIsReady] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
+  const isReady = loaded;
 
   // Expo Router uses Error Boundaries to catch errors in the navigation tree.
   useEffect(() => {
     if (error) throw error;
   }, [error]);
 
-  useEffect(() => {
-    if (loaded) {
-      // Keep splash visible for animation duration
-      setIsReady(true);
-    }
-  }, [loaded]);
-
-  const handleSplashFinish = () => {
-    setShowSplash(false);
-    SplashScreen.hideAsync();
-  };
-
-  if (!isReady || showSplash) {
-    return <AnimatedSplashScreen onFinish={handleSplashFinish} />;
-  }
+  // The app mounts as soon as fonts are loaded; the animated splash is an
+  // overlay on top that fades out once the app is ready (600 ms minimum) and
+  // hides the native splash itself once its colours are known.
+  const handleSplashFinish = useCallback(() => setShowSplash(false), []);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <QueryClientProvider client={queryClient}>
-        <AppThemeProvider>
-          <RootLayoutNav />
-        </AppThemeProvider>
-      </QueryClientProvider>
+      {isReady && (
+        <QueryClientProvider client={queryClient}>
+          <AppThemeProvider>
+            <RootLayoutNav />
+          </AppThemeProvider>
+        </QueryClientProvider>
+      )}
+      {showSplash && <AnimatedSplashScreen ready={isReady} onFinish={handleSplashFinish} />}
     </GestureHandlerRootView>
   );
 }
@@ -136,6 +131,7 @@ function RootLayoutNav() {
               <Stack.Screen name="notifications" options={{ animation: anim('slide_from_right') }} />
             </Stack>
             {/* Maintenance / update-required pages and the soft update banner. */}
+            <OfflineBanner />
             <AppGate />
             <Toast config={toastConfig} />
           </ThemeProvider>

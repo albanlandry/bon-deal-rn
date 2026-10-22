@@ -206,7 +206,6 @@ function SupportLink({ email }: { email?: string | null }) {
     <Button
       label={`Contacter ${email}`}
       variant="ghost"
-      size="sm"
       icon="mail-outline"
       onPress={() => Linking.openURL(`mailto:${email}`).catch(() => {})}
     />
@@ -297,7 +296,6 @@ function UpdateRequiredScreen({
       <Button
         label="J’ai mis à jour, vérifier"
         variant="ghost"
-        size="sm"
         loading={busy}
         onPress={async () => {
           setBusy(true);
@@ -382,9 +380,9 @@ const styles = StyleSheet.create({
   gate: { flex: 1, paddingHorizontal: 24, paddingBottom: 16 },
   gateBody: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   gateMessage: { maxWidth: 360 },
-  gateActions: { gap: 10, alignItems: 'stretch' },
-  halo: { width: 168, height: 168, borderRadius: 84, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  circle: { width: 112, height: 112, borderRadius: 56, alignItems: 'center', justifyContent: 'center' },
+  gateActions: { gap: 8, alignItems: 'stretch' },
+  halo: { width: 168, height: 168, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  circle: { width: 112, height: 112, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   bannerTap: { minHeight: 48, justifyContent: 'center' },
   banner: {
     position: 'absolute',

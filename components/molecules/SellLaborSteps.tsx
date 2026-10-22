@@ -87,9 +87,9 @@ export default function SellLaborSteps({ steps, running, done, stepMs = 1300 }: 
 }
 
 const styles = StyleSheet.create({
-  wrap: { padding: 14, gap: 10 },
-  head: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 24 },
+  wrap: { padding: 16, gap: 12 },
+  head: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 24 },
   mark: { width: 24, alignItems: 'center' },
   flex: { flex: 1 },
 });

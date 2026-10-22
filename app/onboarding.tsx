@@ -25,7 +25,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import AppText from '@/components/atoms/AppText';
 import Button from '@/components/atoms/Button';
 import { haptics } from '@/lib/haptics';
-import { useTheme } from '@/theme';
+import { font, useTheme } from '@/theme';
 
 /** Same key as app/index.tsx (ONBOARDING_KEY). */
 const ONBOARDING_KEY = 'bondeal.onboarding.seen';
@@ -108,10 +108,10 @@ function SlideView({ item, i, width, x }: { item: Slide; i: number; width: numbe
           </Animated.View>
         </Animated.View>
         <Animated.View style={[styles.textBlock, text]}>
-          <AppText variant="h1" align="center" accessibilityRole="header" style={styles.title}>
+          <AppText variant="h1" accessibilityRole="header" style={styles.title}>
             {item.title}
           </AppText>
-          <AppText variant="body" color="inkMuted" align="center" style={styles.body}>
+          <AppText variant="body" color="inkMuted" style={styles.body}>
             {item.body}
           </AppText>
           <View style={styles.points}>
@@ -200,7 +200,7 @@ export default function OnboardingScreen() {
     <SafeAreaView style={[styles.fill, { backgroundColor: t.colors.canvas }]}>
       <View style={styles.top}>
         {!last ? (
-          <Button label="Passer" variant="ghost" size="sm" onPress={finish} accessibilityHint="Aller directement à la connexion" />
+          <Button label="Passer" variant="ghost" onPress={finish} accessibilityHint="Aller directement à la connexion" />
         ) : (
           <View style={styles.topSpacer} />
         )}
@@ -247,17 +247,25 @@ export default function OnboardingScreen() {
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   flex: { flex: 1 },
-  top: { minHeight: 52, alignItems: 'flex-end', justifyContent: 'center', paddingHorizontal: 12 },
-  topSpacer: { height: 40 },
+  // Same height with or without “Passer” (md button, 48 dp): no jump on the last slide.
+  top: { height: 56, alignItems: 'flex-end', justifyContent: 'center', paddingHorizontal: 12 },
+  topSpacer: { height: 48 },
   slide: { flex: 1, justifyContent: 'center' },
-  slideInner: { alignItems: 'center', paddingHorizontal: 28, maxWidth: 560, alignSelf: 'center' },
-  textBlock: { alignItems: 'center', alignSelf: 'stretch' },
-  pointIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  illustration: { width: 200, height: 200, borderRadius: 100, alignItems: 'center', justifyContent: 'center', marginBottom: 32 },
-  illustrationInner: { width: 136, height: 136, borderRadius: 68, alignItems: 'center', justifyContent: 'center' },
-  title: { marginBottom: 12 },
-  body: { maxWidth: 340 },
-  points: { marginTop: 24, gap: 12, alignSelf: 'stretch', paddingHorizontal: 12 },
+  slideInner: { paddingHorizontal: 24, width: '100%', maxWidth: 560, alignSelf: 'center' },
+  textBlock: { alignSelf: 'stretch' },
+  pointIcon: { width: 36, height: 36, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+  illustration: {
+    alignSelf: 'stretch',
+    height: 200,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 32,
+  },
+  illustrationInner: { width: 120, height: 120, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  title: { ...font('800'), fontSize: 32, lineHeight: 38, letterSpacing: -0.7, marginBottom: 12 },
+  body: { maxWidth: 420 },
+  points: { marginTop: 24, gap: 12, alignSelf: 'stretch' },
   point: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   bottom: { paddingHorizontal: 24, paddingBottom: 16, gap: 20 },
   dots: { flexDirection: 'row', justifyContent: 'center', gap: 4 },

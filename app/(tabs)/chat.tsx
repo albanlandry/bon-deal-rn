@@ -1,4 +1,6 @@
-// app/(tabs)/chat.tsx — conversation list (docs/09 §4 Messages).
+// app/(tabs)/chat.tsx — conversation list (docs/09 §4 Messages, docs/11 §4.4).
+// Filter chips Tous · Achats · Ventes · Non lus (client-side), each row shows
+// the deal state ("Offre à répondre", "Accord 75 000 FCFA").
 // Avatar + listing thumbnail stacked, offer/state chip, an unread dot that
 // pulses ONCE on arrival, swipe right → mark read / swipe left → archive
 // (local only), rows that move to the top animate with a layout spring.
@@ -7,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSequence } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -16,9 +18,11 @@ import {
   Avatar,
   Badge,
   Button,
+  Chip,
   EmptyState,
   ErrorState,
   FadeInView,
+  LargeTitle,
   PressableScale,
   showToast,
   Skeleton,
@@ -34,11 +38,46 @@ import { conversationsQuery, markConversationRead } from '@/lib/api/conversation
 import { useArchivedConversations } from '@/lib/archivedChats';
 import { clearUnread } from '@/lib/chatCache';
 import { formatAmount, formatRelativeTime } from '@/lib/format';
+import { lastMessagePreview } from '@/lib/messagePreview';
 import type { BdConversation } from '@/constants/types';
-import { createStyles, Theme, useStyles, useTheme } from '@/theme';
+import { createStyles, font, Theme, useStyles, useTheme } from '@/theme';
 import { duration } from '@/theme/motion';
 
-type ChipTone = 'brand' | 'success' | 'neutral' | 'warning';
+type ChipTone = 'brand' | 'success' | 'neutral' | 'warning' | 'trust';
+
+type Filter = 'all' | 'buying' | 'selling' | 'unread';
+
+/** Am I the buyer in this conversation? `role` is server-computed; the ids
+ *  are the fallback for older payloads. */
+function isBuying(c: BdConversation, myId?: number): boolean {
+  if (c.role) return c.role === 'buyer';
+  return myId != null && c.buyer_id === myId;
+}
+
+function matchesFilter(c: BdConversation, f: Filter, myId?: number): boolean {
+  if (f === 'buying') return isBuying(c, myId);
+  if (f === 'selling') return !isBuying(c, myId);
+  if (f === 'unread') return c.unread_count > 0;
+  return true;
+}
+
+const FILTER_EMPTY: Record<Exclude<Filter, 'all'>, { icon: any; title: string; message: string }> = {
+  buying: {
+    icon: 'bag-handle-outline',
+    title: 'Aucun achat en discussion',
+    message: 'Quand vous contactez un vendeur, la conversation apparaît ici.',
+  },
+  selling: {
+    icon: 'pricetags-outline',
+    title: 'Aucune vente en discussion',
+    message: 'Les acheteurs intéressés par vos annonces vous écriront ici.',
+  },
+  unread: {
+    icon: 'checkmark-done-outline',
+    title: 'Vous êtes à jour',
+    message: 'Aucun message non lu.',
+  },
+};
 
 function negotiationChip(c: BdConversation, myId?: number): { text: string; tone: ChipTone; icon: any } | null {
   const n = c.latest_negotiation;
@@ -47,10 +86,10 @@ function negotiationChip(c: BdConversation, myId?: number): { text: string; tone
     const mine = n.last_offer_by_id === myId;
     return mine
       ? { text: `En attente · ${formatAmount(n.current_offer_amount)}`, tone: 'neutral', icon: 'hourglass-outline' }
-      : { text: `Offre reçue · ${formatAmount(n.current_offer_amount)}`, tone: 'brand', icon: 'pricetag' };
+      : { text: `Offre à répondre · ${formatAmount(n.current_offer_amount)}`, tone: 'brand', icon: 'pricetag' };
   }
   if (n.status === 'accepted')
-    return { text: `Acceptée · ${formatAmount(n.accepted_amount)}`, tone: 'success', icon: 'checkmark-circle' };
+    return { text: `Accord · ${formatAmount(n.accepted_amount)}`, tone: 'trust', icon: 'checkmark-circle' };
   if (n.status === 'rejected') return { text: 'Offre refusée', tone: 'neutral', icon: 'close-circle-outline' };
   return null;
 }
@@ -103,6 +142,7 @@ function ConversationRow({
     : item.post?.price != null
       ? formatAmount(item.post.price)
       : null;
+  const preview = lastMessagePreview(item, myId);
 
   return (
     <SwipeRow
@@ -112,7 +152,7 @@ function ConversationRow({
               label: 'Marquer lu',
               icon: 'checkmark-done',
               color: t.colors.trust,
-              onColor: t.isDark ? t.colors.onBrand : '#FFFFFF',
+              onColor: t.colors.onDanger, // same pair as on `trust`: white (light), ink (dark)
               onAction: () => onMarkRead(item),
             }
           : undefined
@@ -128,7 +168,7 @@ function ConversationRow({
         accessibilityRole="button"
         accessibilityLabel={`Conversation avec ${name} à propos de ${item.post?.title ?? 'un article'}${
           unread ? `, ${item.unread_count} non lus` : ''
-        }`}
+        }${preview ? `. Dernier message : ${preview}` : ''}`}
         accessibilityActions={[
           { name: 'archive', label: archived ? 'Désarchiver' : 'Archiver' },
           ...(unread ? [{ name: 'read', label: 'Marquer comme lu' }] : []),
@@ -155,7 +195,7 @@ function ConversationRow({
         </View>
         <View style={styles.body}>
           <View style={styles.topLine}>
-            <AppText variant={unread ? 'bodyStrong' : 'body'} numberOfLines={1} style={styles.flex}>
+            <AppText variant="body" numberOfLines={1} style={[styles.flex, unread ? styles.nameUnread : styles.name]}>
               {name}
             </AppText>
             <AppText variant={unread ? 'captionStrong' : 'caption'} color={unread ? 'brandStrong' : 'inkSubtle'}>
@@ -163,16 +203,16 @@ function ConversationRow({
             </AppText>
           </View>
           <View style={styles.topLine}>
-            <AppText variant="small" color={unread ? 'ink' : 'inkMuted'} numberOfLines={1} style={styles.flex}>
-              {item.post?.title ?? 'Article'}
-              {price ? (
-                <AppText variant="small" style={{ fontWeight: '700', color: t.colors.ink }}>
-                  {` · ${price}`}
-                </AppText>
-              ) : null}
-            </AppText>
+            {preview ? (
+              <AppText variant="small" color={unread ? 'ink' : 'inkMuted'} numberOfLines={1} style={styles.flex}>
+                {preview}
+              </AppText>
+            ) : (
+              <ListingLine title={item.post?.title} price={price} strong={unread} />
+            )}
             {unread && <UnreadDot count={item.unread_count} />}
           </View>
+          {preview && <ListingLine title={item.post?.title} price={price} caption />}
           {(neg || postState) && (
             <View style={styles.badges}>
               {neg && <Badge label={neg.text} tone={neg.tone} icon={neg.icon} />}
@@ -184,6 +224,37 @@ function ConversationRow({
         </View>
       </PressableScale>
     </SwipeRow>
+  );
+}
+
+/** "Title · price" — the row's second line, or a caption under the preview. */
+function ListingLine({
+  title,
+  price,
+  strong,
+  caption,
+}: {
+  title?: string;
+  price?: string | null;
+  strong?: boolean;
+  caption?: boolean;
+}) {
+  const t = useTheme();
+  const styles = useStyles(makeStyles);
+  const variant = caption ? 'caption' : 'small';
+  return (
+    <AppText
+      variant={variant}
+      color={caption ? 'inkSubtle' : strong ? 'ink' : 'inkMuted'}
+      numberOfLines={1}
+      style={styles.flex}>
+      {title ?? 'Article'}
+      {price ? (
+        <AppText variant={variant} style={[font('700'), { color: caption ? t.colors.inkMuted : t.colors.ink }]}>
+          {` · ${price}`}
+        </AppText>
+      ) : null}
+    </AppText>
   );
 }
 
@@ -213,6 +284,7 @@ export default function ChatScreen() {
   const { status } = useRealtime();
   const pollMs = useFallbackInterval(15_000);
   const [showArchived, setShowArchived] = useState(false);
+  const [filter, setFilter] = useState<Filter>('all');
   const { archive, unarchive, isArchived } = useArchivedConversations();
   const { data, isLoading, error, refetch, isRefetching } = useQuery({
     ...conversationsQuery(),
@@ -278,29 +350,49 @@ export default function ChatScreen() {
     );
   }
 
-  const list = showArchived ? archivedList : inbox;
+  const list = showArchived ? archivedList : inbox.filter((c) => matchesFilter(c, filter, user?.id));
   const offline = status === 'reconnecting' || status === 'connecting';
   const unreadTotal = inbox.reduce((n, c) => n + (c.unread_count > 0 ? 1 : 0), 0);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <View style={styles.flex}>
-          <AppText variant="h1" accessibilityRole="header">
-            {showArchived ? 'Archivées' : 'Messages'}
-          </AppText>
-          {!showArchived && unreadTotal > 0 && (
-            <Animated.View entering={enterFade()} exiting={exitFade()}>
-              <AppText variant="caption" color="inkMuted">
-                {unreadTotal} conversation{unreadTotal > 1 ? 's' : ''} non lue{unreadTotal > 1 ? 's' : ''}
-              </AppText>
-            </Animated.View>
-          )}
-        </View>
+        <LargeTitle
+          style={styles.flex}
+          title={showArchived ? 'Archivées' : 'Messages'}
+          subtitle={
+            !showArchived && unreadTotal > 0 ? (
+              <Animated.View entering={enterFade()} exiting={exitFade()}>
+                <AppText variant="small" color="inkMuted">
+                  {unreadTotal} conversation{unreadTotal > 1 ? 's' : ''} non lue{unreadTotal > 1 ? 's' : ''}
+                </AppText>
+              </Animated.View>
+            ) : undefined
+          }
+        />
         {showArchived && (
           <Button label="Boîte de réception" variant="ghost" size="sm" icon="arrow-back" onPress={() => setShowArchived(false)} />
         )}
       </View>
+      {!showArchived && (data?.length ?? 0) > 0 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.filtersScroll}
+          contentContainerStyle={styles.filters}
+          accessibilityRole="tablist">
+          {(
+            [
+              ['all', 'Tous'],
+              ['buying', 'Achats'],
+              ['selling', 'Ventes'],
+              ['unread', unreadTotal > 0 ? `Non lus · ${unreadTotal}` : 'Non lus'],
+            ] as [Filter, string][]
+          ).map(([value, label]) => (
+            <Chip key={value} label={label} kind="choice" selected={filter === value} onPress={() => setFilter(value)} />
+          ))}
+        </ScrollView>
+      )}
       {offline && (
         <View style={[styles.connBanner, { backgroundColor: t.colors.warningTint }]} accessibilityLiveRegion="polite">
           <Ionicons name="cloud-offline-outline" size={14} color={t.colors.warning} />
@@ -344,6 +436,14 @@ export default function ChatScreen() {
           ListEmptyComponent={
             showArchived ? (
               <EmptyState icon="archive-outline" title="Aucune conversation archivée" />
+            ) : filter !== 'all' ? (
+              <EmptyState
+                icon={FILTER_EMPTY[filter].icon}
+                title={FILTER_EMPTY[filter].title}
+                message={FILTER_EMPTY[filter].message}
+                actionLabel="Voir toutes les conversations"
+                onAction={() => setFilter('all')}
+              />
             ) : (
               <EmptyState
                 icon="chatbubbles-outline"
@@ -380,16 +480,23 @@ const makeStyles = createStyles((t: Theme) => ({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: t.spacing.md,
-    paddingTop: t.spacing.xs,
+    paddingTop: t.spacing.sm,
     paddingBottom: t.spacing.sm,
     minHeight: 64,
+  },
+  filtersScroll: { flexGrow: 0 },
+  filters: {
+    flexDirection: 'row',
+    gap: t.spacing.xs,
+    paddingHorizontal: t.spacing.md,
+    paddingBottom: t.spacing.sm,
   },
   connBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: t.spacing.xs,
     paddingHorizontal: t.spacing.md,
-    paddingVertical: 6,
+    paddingVertical: t.spacing.xs,
   },
   row: {
     flexDirection: 'row',
@@ -405,22 +512,24 @@ const makeStyles = createStyles((t: Theme) => ({
     position: 'absolute',
     right: -4,
     bottom: -4,
-    borderRadius: t.radius.sm + 2,
+    borderRadius: t.radius.xs + 2,
     borderWidth: 2,
     borderColor: t.colors.surface,
     backgroundColor: t.colors.surface,
   },
-  thumb: { width: 30, height: 30, borderRadius: t.radius.sm },
+  thumb: { width: 28, height: 28, borderRadius: t.radius.xs },
   thumbFallback: { backgroundColor: t.colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   body: { flex: 1, gap: 2 },
   topLine: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   flex: { flex: 1 },
-  badges: { flexDirection: 'row', gap: 6, marginTop: 4, flexWrap: 'wrap' },
+  name: font('500'),
+  nameUnread: font('700'),
+  badges: { flexDirection: 'row', gap: t.spacing.xs, marginTop: 4, flexWrap: 'wrap' },
   unread: {
     minWidth: 22,
     height: 22,
     borderRadius: 11,
-    paddingHorizontal: 6,
+    paddingHorizontal: 4,
     backgroundColor: t.colors.brand,
     alignItems: 'center',
     justifyContent: 'center',

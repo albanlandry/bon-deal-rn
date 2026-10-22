@@ -1,11 +1,11 @@
 // app/saved-searches.tsx — Mes recherches (MB-DSC saved searches + alerts).
-// Tap to replay, switch alerts (optimistic), rename, delete with undo-free
-// confirm (deleting loses the alert history, so we state it).
+// Tap to replay, switch alerts (optimistic), rename, delete optimistically
+// with an "Annuler" toast (Doherty: undo instead of a confirm dialog).
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
-import { Alert, FlatList, Pressable, RefreshControl, StyleSheet, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 import CategoryTag from '@/components/molecules/CategoryTag';
 import SpringSwitch from '@/components/molecules/SpringSwitch';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -16,6 +16,7 @@ import {
   EmptyState,
   ErrorState,
   IconButton,
+  PressableScale,
   ScreenHeader,
   Sheet,
   showToast,
@@ -37,13 +38,24 @@ import { haptics } from '@/lib/haptics';
 import { useTheme } from '@/theme';
 
 const KEY = ['saved-searches'];
+/** The delete is sent once the undo toast (5 s) has gone. */
+const UNDO_MS = 5000;
 
 export default function SavedSearchesScreen() {
   const t = useTheme();
   const router = useRouter();
   const qc = useQueryClient();
   const q = useQuery(savedSearchesQuery());
-  const list = q.data ?? [];
+  // Rows deleted but still undoable: hidden here, the request waits for the toast.
+  const [hidden, setHidden] = useState<Set<number>>(() => new Set());
+  const list = (q.data ?? []).filter((x) => !hidden.has(x.id));
+  const pending = useRef(new Map<number, ReturnType<typeof setTimeout>>());
+  const unhide = (id: number) =>
+    setHidden((h) => {
+      const next = new Set(h);
+      next.delete(id);
+      return next;
+    });
   const [renaming, setRenaming] = useState<BdSavedSearch | null>(null);
   const [newName, setNewName] = useState('');
 
@@ -76,27 +88,48 @@ export default function SavedSearchesScreen() {
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => deleteSavedSearch(id),
-    onMutate: (id) => {
-      const prev = qc.getQueryData<BdSavedSearch[]>(KEY);
+    onSuccess: (_r, id) => {
       qc.setQueryData<BdSavedSearch[]>(KEY, (old) => old?.filter((x) => x.id !== id));
-      return { prev };
+      unhide(id);
     },
-    onSuccess: () => showToast.success('Recherche supprimée'),
-    onError: (e, _id, ctx) => {
-      if (ctx?.prev) qc.setQueryData(KEY, ctx.prev);
+    onError: (e, id) => {
+      unhide(id);
       showToast.error('Échec', savedSearchErrorMessage(e));
     },
     onSettled: () => qc.invalidateQueries({ queryKey: KEY }),
   });
 
+  const removeWithUndo = (s: BdSavedSearch) => {
+    haptics.selection();
+    setHidden((h) => new Set(h).add(s.id));
+    const timer = setTimeout(() => {
+      pending.current.delete(s.id);
+      deleteMut.mutate(s.id);
+    }, UNDO_MS);
+    pending.current.set(s.id, timer);
+    showToast.undo('Recherche supprimée', () => {
+      clearTimeout(timer);
+      pending.current.delete(s.id);
+      unhide(s.id);
+    }, `« ${s.name} » et ses alertes.`);
+  };
+
+  // Leaving the screen commits the deletes still waiting on their toast.
+  useEffect(() => {
+    const timers = pending.current;
+    return () => {
+      timers.forEach((timer, id) => {
+        clearTimeout(timer);
+        deleteSavedSearch(id)
+          .catch(() => {})
+          .finally(() => qc.invalidateQueries({ queryKey: KEY }));
+      });
+      timers.clear();
+    };
+  }, [qc]);
+
   const open = (s: BdSavedSearch) =>
     router.push({ pathname: '/search-results', params: filtersToRouteParams(s.filters) });
-
-  const confirmDelete = (s: BdSavedSearch) =>
-    Alert.alert('Supprimer cette recherche ?', `« ${s.name} » et ses alertes seront supprimées.`, [
-      { text: 'Annuler', style: 'cancel' },
-      { text: 'Supprimer', style: 'destructive', onPress: () => deleteMut.mutate(s.id) },
-    ]);
 
   const startRename = (s: BdSavedSearch) => {
     setNewName(s.name);
@@ -105,7 +138,7 @@ export default function SavedSearchesScreen() {
 
   const renderItem = ({ item }: { item: BdSavedSearch }) => (
     <Card style={styles.card}>
-      <Pressable
+      <PressableScale
         accessibilityRole="button"
         accessibilityLabel={`Ouvrir la recherche ${item.name}`}
         onPress={() => open(item)}
@@ -132,12 +165,16 @@ export default function SavedSearchesScreen() {
           )}
         </View>
         <Ionicons name="chevron-forward" size={18} color={t.colors.inkSubtle} />
-      </Pressable>
+      </PressableScale>
       <View style={[styles.actions, { borderTopColor: t.colors.line }]}>
-        <Pressable
+        {/* One switch announcement: the label names the search, the state
+            comes from `checked`; the visible text and the thumb are hidden. */}
+        <PressableScale
           accessibilityRole="switch"
           accessibilityState={{ checked: item.alerts_enabled }}
-          accessibilityLabel="Alertes pour cette recherche"
+          accessibilityLabel={`Alertes pour ${item.name}`}
+          haptic={false}
+          scaleTo={0.98}
           onPress={() => alertsMut.mutate({ id: item.id, value: !item.alerts_enabled })}
           style={styles.alerts}>
           <Ionicons
@@ -145,18 +182,23 @@ export default function SavedSearchesScreen() {
             size={18}
             color={item.alerts_enabled ? t.colors.brandStrong : t.colors.inkMuted}
           />
-          <AppText variant="label" color={item.alerts_enabled ? 'ink' : 'inkMuted'} style={styles.flex}>
+          <AppText
+            variant="label"
+            color={item.alerts_enabled ? 'ink' : 'inkMuted'}
+            style={styles.flex}
+            importantForAccessibility="no"
+            accessibilityElementsHidden>
             {item.alerts_enabled ? 'Alertes activées' : 'Alertes désactivées'}
           </AppText>
           <SpringSwitch value={item.alerts_enabled} />
-        </Pressable>
+        </PressableScale>
         <IconButton icon="create-outline" label={`Renommer ${item.name}`} size={20} onPress={() => startRename(item)} />
         <IconButton
           icon="trash-outline"
           label={`Supprimer ${item.name}`}
           color="danger"
           size={20}
-          onPress={() => confirmDelete(item)}
+          onPress={() => removeWithUndo(item)}
         />
       </View>
     </Card>
@@ -165,6 +207,7 @@ export default function SavedSearchesScreen() {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: t.colors.canvas }]}>
       <ScreenHeader
+        large
         title="Mes recherches"
         subtitle={q.data ? `${list.length} recherche${list.length > 1 ? 's' : ''} sur 20` : undefined}
       />

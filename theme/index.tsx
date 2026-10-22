@@ -35,7 +35,7 @@ export * from './tokens';
 export * from './color';
 export { categoryColors, type CategoryColors } from './category';
 
-const PREF_KEY = 'bondeal.theme.preference';
+export const PREF_KEY = 'bondeal.theme.preference';
 
 export interface Theme {
   scheme: ColorSchemeName;

@@ -107,7 +107,7 @@ export function ListGroup({ title, children }: { title?: string; children: React
       <View
         style={{
           backgroundColor: t.colors.surface,
-          borderRadius: t.radius.lg,
+          borderRadius: t.radius.md,
           borderWidth: 1,
           borderColor: t.colors.line,
           overflow: 'hidden',
@@ -123,6 +123,6 @@ const styles = StyleSheet.create({
   icon: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   text: { flex: 1 },
   value: { maxWidth: '40%' },
-  group: { marginBottom: 20 },
+  group: { marginBottom: 24 },
   groupTitle: { marginLeft: 4, marginBottom: 8, letterSpacing: 0.5 },
 });

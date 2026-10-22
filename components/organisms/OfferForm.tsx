@@ -20,6 +20,7 @@ import type { BdCoachVerdict, BdNegotiation } from '@/constants/types';
 import { createStyles, useStyles, useTheme } from '@/theme';
 import AppText from '../atoms/AppText';
 import Button from '../atoms/Button';
+import ActionDock, { DockButton } from './ActionDock';
 import Card from '../atoms/Card';
 import Chip from '../atoms/Chip';
 import Price from '../atoms/Price';
@@ -29,6 +30,9 @@ import { showToast } from '../atoms/Toast';
 import { enterFade, layoutSpring } from '../motion/anim';
 
 const roundTo500 = (n: number) => Math.max(500, Math.round(n / 500) * 500);
+
+/** Below this share of the asking price, the form warns (never blocks). */
+export const LOW_OFFER_RATIO = 0.5;
 
 /** 3 one-tap amounts: near the asking price, or between offer and asking. */
 export function offerSuggestions(asking: number | null, currentOffer: number | null, isCounter: boolean): number[] {
@@ -45,9 +49,9 @@ export function offerSuggestions(asking: number | null, currentOffer: number | n
 
 function coachErrorMessage(e: unknown): string {
   const status = e instanceof ApiError ? e.status : 0;
-  if (status === 503) return "Le coach n'est pas disponible pour le moment.";
+  if (status === 503) return 'Le coach n’est pas disponible pour le moment.';
   if (status === 429) return 'Trop de demandes au coach — réessayez plus tard.';
-  if (status === 409) return "L'offre a changé entre-temps.";
+  if (status === 409) return 'L’offre a changé entre-temps.';
   return 'Impossible de contacter le coach. Réessayez.';
 }
 
@@ -81,6 +85,7 @@ export function useOfferForm({ postId, negotiationId, conversationId, enabled = 
   const amount = parseInt(amountText.replace(/[^0-9]/g, ''), 10);
   const canSubmit = Number.isFinite(amount) && amount > 0;
   const pct = canSubmit && asking ? Math.round(((amount - asking) / asking) * 100) : null;
+  const lowOffer = canSubmit && !!asking && asking > 0 && amount < asking * LOW_OFFER_RATIO;
 
   const mutation = useMutation({
     mutationFn: async (): Promise<BdNegotiation> => {
@@ -130,6 +135,7 @@ export function useOfferForm({ postId, negotiationId, conversationId, enabled = 
     amount,
     canSubmit,
     pct,
+    lowOffer,
     mutation,
     coachMutation,
     pick: (n: number) => setAmountText(String(n)),
@@ -142,12 +148,13 @@ export type OfferFormState = ReturnType<typeof useOfferForm>;
 export function OfferFormBody({ form }: { form: OfferFormState }) {
   const t = useTheme();
   const styles = useStyles(makeStyles);
-  const { isCounter, anchorLoading, title, asking, currentOffer, suggestions, amount, canSubmit, pct, coach, coachMutation } = form;
+  const { isCounter, anchorLoading, title, asking, currentOffer, suggestions, amount, canSubmit, pct, lowOffer, coach, coachMutation } =
+    form;
 
   return (
     <View style={styles.content}>
       {/* Anchor: the asking price comes first */}
-      <Card tone="muted" style={styles.anchor}>
+      <Card style={styles.anchor}>
         {anchorLoading ? (
           <>
             <Skeleton width="40%" height={14} />
@@ -184,30 +191,40 @@ export function OfferFormBody({ form }: { form: OfferFormState }) {
         </View>
       )}
 
-      <TextField
-        label="Votre proposition"
-        value={canSubmit ? formatNumber(amount) : ''}
-        onChangeText={(v) => form.setAmountText(v.replace(/[^0-9]/g, ''))}
-        placeholder="0"
-        keyboardType="number-pad"
-        maxLength={15}
-        right={
-          <AppText variant="bodyStrong" color="inkMuted">
-            FCFA
-          </AppText>
-        }
-        helper={
-          pct != null
-            ? pct < 0
-              ? `${Math.abs(pct)} % sous le prix demandé`
-              : pct > 0
-                ? `${pct} % au-dessus du prix demandé`
-                : 'Le prix demandé'
-            : undefined
-        }
-        containerStyle={styles.section}
-        style={styles.amountInput}
-      />
+      <View style={styles.section}>
+        <TextField
+          label="Votre proposition"
+          value={canSubmit ? formatNumber(amount) : ''}
+          onChangeText={(v) => form.setAmountText(v.replace(/[^0-9]/g, ''))}
+          placeholder="0"
+          keyboardType="number-pad"
+          maxLength={15}
+          right={
+            <AppText variant="bodyStrong" color="inkMuted">
+              FCFA
+            </AppText>
+          }
+          helper={
+            pct != null
+              ? pct < 0
+                ? `${Math.abs(pct)} % sous le prix demandé`
+                : pct > 0
+                  ? `${pct} % au-dessus du prix demandé`
+                  : 'Le prix demandé'
+              : undefined
+          }
+          style={styles.amountInput}
+        />
+        {/* Soft warning only: a low offer can still be sent. */}
+        {lowOffer && (
+          <Animated.View entering={enterFade()} style={styles.lowOffer} accessibilityLiveRegion="polite">
+            <Ionicons name="warning-outline" size={16} color={t.colors.warning} />
+            <AppText variant="caption" color="warning" style={styles.flex}>
+              Offre très basse, moins de la moitié du prix demandé. Le vendeur risque de la refuser.
+            </AppText>
+          </Animated.View>
+        )}
+      </View>
 
       <TextField
         label="Message (optionnel)"
@@ -236,7 +253,7 @@ export function OfferFormBody({ form }: { form: OfferFormState }) {
                     ? `Proposez ${formatAmount(coach.suggested_amount)}`
                     : coach.action === 'accept'
                       ? 'Bonne affaire — vous pourriez accepter'
-                      : "Patientez — ne changez rien pour l'instant"}
+                      : 'Patientez — ne changez rien pour l’instant'}
                 </AppText>
                 <AppText variant="small" color="inkMuted">
                   {coach.rationale_fr}
@@ -293,17 +310,35 @@ export function OfferFormBody({ form }: { form: OfferFormState }) {
   );
 }
 
+function submitLabel({ isCounter, canSubmit, amount }: OfferFormState) {
+  return canSubmit
+    ? `${isCounter ? 'Envoyer la contre-offre' : 'Envoyer l’offre'} · ${formatAmount(amount)}`
+    : isCounter
+      ? 'Envoyer la contre-offre'
+      : 'Envoyer l’offre';
+}
+
+/** Submit for screens: lives in the floating ActionDock (make-offer). */
+export function OfferDock({ form }: { form: OfferFormState }) {
+  const { canSubmit, mutation } = form;
+  return (
+    <ActionDock safety="Ne payez jamais d’avance. Remise en main propre." note={canSubmit ? undefined : 'Choisissez ou saisissez un montant'}>
+      <DockButton
+        label={submitLabel(form)}
+        onPress={() => mutation.mutate()}
+        loading={mutation.isPending}
+        disabled={!canSubmit}
+        haptic
+      />
+    </ActionDock>
+  );
+}
+
 export function OfferSubmitButton({ form }: { form: OfferFormState }) {
-  const { isCounter, canSubmit, amount, mutation } = form;
+  const { canSubmit, mutation } = form;
   return (
     <Button
-      label={
-        canSubmit
-          ? `${isCounter ? 'Envoyer la contre-offre' : "Envoyer l'offre"} · ${formatAmount(amount)}`
-          : isCounter
-            ? 'Envoyer la contre-offre'
-            : "Envoyer l'offre"
-      }
+      label={submitLabel(form)}
       onPress={() => mutation.mutate()}
       loading={mutation.isPending}
       disabled={!canSubmit}
@@ -320,8 +355,11 @@ const makeStyles = createStyles((t) => ({
   section: { gap: t.spacing.xs },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.xs },
   chip: { minHeight: 44 },
-  amountInput: { fontSize: 22, fontWeight: '700' },
-  coach: { gap: 6 },
-  coachTitle: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  // The amount is the biggest text on the screen (34, Inter Bold, tabular).
+  amountInput: { ...t.type.display, fontVariant: ['tabular-nums'], minHeight: 64 },
+  coach: { gap: t.spacing.xs },
+  coachTitle: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs },
+  lowOffer: { flexDirection: 'row', alignItems: 'flex-start', gap: t.spacing.xxs },
+  flex: { flex: 1 },
   alignStart: { alignSelf: 'flex-start' },
 }));

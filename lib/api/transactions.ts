@@ -58,6 +58,83 @@ export async function createReview(id: number, rating: number, comment?: string)
   return res.review;
 }
 
+/** Body of PATCH /transactions/{id}/meeting: omitted = kept, null = cleared. */
+export interface MeetingPatch {
+  meeting_location?: string | null;
+  /** ISO datetime with an offset (we send UTC, `toISOString()`). */
+  meeting_at?: string | null;
+}
+
+/** Set or change the hand-over place and/or time (pending deals only). */
+export async function updateMeeting(id: number, patch: MeetingPatch): Promise<BdTransaction> {
+  const res = await apiFetch<TxnResponse>(`/transactions/${id}/meeting`, { method: 'PATCH', body: patch });
+  return res.transaction;
+}
+
+export function meetingErrorMessage(e: unknown): string {
+  if (e instanceof ApiError) {
+    if (e.code === 'meeting_in_past') return 'Choisissez une heure à venir.';
+    if (e.code === 'meeting_too_far') return apiErrorMessage(e, 'Le rendez-vous doit avoir lieu dans les 60 prochains jours.');
+    if (e.code === 'meeting_empty') return 'Indiquez un lieu ou une heure de rendez-vous.';
+    if (e.code === 'transaction_not_pending') return 'Le rendez-vous ne peut plus être modifié : l’affaire est terminée.';
+  }
+  return transactionErrorMessage(e);
+}
+
+// --- Meeting time helpers (pure) -----------------------------------------
+
+/** The API returns naive UTC ISO strings ("2026-10-23T17:00:00"): read them as UTC. */
+export function parseServerDate(iso: string | null | undefined): Date | null {
+  if (!iso) return null;
+  const hasZone = /([zZ]|[+-]\d{2}:?\d{2})$/.test(iso);
+  const d = new Date(hasZone ? iso : `${iso}Z`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+/** "18 h", "18 h 30" (French clock). */
+export function formatHour(d: Date): string {
+  const m = d.getMinutes();
+  return `${d.getHours()}\u00A0h${m ? `\u00A0${pad2(m)}` : ''}`;
+}
+
+const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+
+/** "aujourd’hui à 18 h", "demain à 9 h 30", "le 23/10 à 18 h" (device local time). */
+export function formatMeetingWhen(d: Date, now: Date = new Date()): string {
+  const days = Math.round((startOfDay(d) - startOfDay(now)) / 86400000);
+  const day =
+    days === 0 ? 'aujourd’hui' : days === 1 ? 'demain' : `le ${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}`;
+  return `${day} à ${formatHour(d)}`;
+}
+
+/** One line for a meeting: "le 23/10 à 18 h · Rond-point de Louis", or null when none is set. */
+export function meetingSummary(
+  m: { meeting_at?: string | null; meeting_location?: string | null },
+  now: Date = new Date(),
+): string | null {
+  const at = parseServerDate(m.meeting_at);
+  const place = m.meeting_location?.trim() || null;
+  const parts = [at ? formatMeetingWhen(at, now) : null, place].filter(Boolean);
+  return parts.length ? parts.join(' · ') : null;
+}
+
+/** Deal page headline, by status then meeting. */
+export function dealHeadline(txn: BdTransaction, iAmSeller: boolean, now: Date = new Date()): string {
+  if (txn.status === 'completed') return iAmSeller ? 'Vente conclue' : 'Achat conclu';
+  if (txn.status === 'cancelled') return iAmSeller ? 'Vente annulée' : 'Achat annulé';
+  if (txn.status === 'disputed') return 'Litige en cours d’examen';
+  const at = parseServerDate(txn.meeting_at);
+  if (at) {
+    const when = formatMeetingWhen(at, now);
+    return `Rendez-vous ${when}`;
+  }
+  const place = txn.meeting_location?.trim();
+  if (place) return `Rendez-vous : ${place}`;
+  return 'Fixez un rendez-vous';
+}
+
 /** Message for transaction / review failures: the server's detail, by status otherwise. */
 export function transactionErrorMessage(e: unknown): string {
   if (e instanceof ApiError) {

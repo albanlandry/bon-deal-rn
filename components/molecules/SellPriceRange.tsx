@@ -90,7 +90,7 @@ export default function SellPriceRange({ min, max, suggested, current }: SellPri
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: 6, marginTop: 12 },
+  wrap: { gap: 8, marginTop: 12 },
   trackBox: { height: 30, justifyContent: 'center' },
   track: { height: 8, borderRadius: 4 },
   band: { position: 'absolute', top: 11, height: 8, borderRadius: 4 },

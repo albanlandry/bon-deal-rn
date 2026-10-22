@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
-import { useTheme } from '@/theme';
+import { font, useTheme } from '@/theme';
 import AppText from '../atoms/AppText';
 import ProgressBar from '../motion/ProgressBar';
 import { enterFade } from '../motion/anim';
@@ -60,9 +60,9 @@ export default function Stepper({ steps, current }: StepperProps) {
 }
 
 const styles = StyleSheet.create({
-  wrap: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8, gap: 6 },
+  wrap: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 8, gap: 8 },
   head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   row: { flexDirection: 'row' },
-  step: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 2 },
-  activeLabel: { fontWeight: '600' },
+  step: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
+  activeLabel: font('600'),
 });

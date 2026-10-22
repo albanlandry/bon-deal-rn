@@ -4,12 +4,11 @@ import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useTheme } from '@/theme';
 import { publicProfileQuery } from '@/lib/api/account';
-import { formatMemberSince, formatResponseTime } from '@/lib/format';
+import { formatResponseTime } from '@/lib/format';
 import AppText from '../atoms/AppText';
 import Avatar from '../atoms/Avatar';
-import Card from '../atoms/Card';
-import RatingStars from '../atoms/RatingStars';
 import Skeleton from '../atoms/Skeleton';
+import PressableScale from '../motion/PressableScale';
 
 export interface SellerCardProps {
   userId: number;
@@ -20,11 +19,10 @@ export interface SellerCardProps {
 }
 
 /**
- * Trust card (docs/09 §4, social proof + uncertainty reduction): avatar with
- * the teal verified ring, rating stars, then three facts — sales, response
- * time, member since. Every field comes from GET /users/{id}/profile; a
- * missing value is simply not shown (no fake social proof). Press scales the
- * card (Card → PressableScale); tap opens the seller profile.
+ * Seller on one line (docs/12 "Annonce"): round avatar, name with the teal
+ * verified shield, then "★ 4,8 · 41 ventes · répond en ~1 h". Every fact
+ * comes from GET /users/{id}/profile; a missing value is simply left out
+ * (no invented social proof). Tap opens the seller profile.
  */
 export default function SellerCard({ userId, username, city, onPress, isMe }: SellerCardProps) {
   const t = useTheme();
@@ -33,85 +31,50 @@ export default function SellerCard({ userId, username, city, onPress, isMe }: Se
   const name = p?.display_name || p?.username || username || 'Vendeur';
   const place = p ? [p.quartier, p.city].filter(Boolean).join(', ') : city;
   const response = formatResponseTime(p?.response_time_minutes);
-  const since = formatMemberSince(p?.member_since);
   const verified = !!p?.phone_verified;
 
-  const facts: { icon: React.ComponentProps<typeof Ionicons>['name']; value: string; label: string }[] = [];
-  if (p && p.sales_count > 0)
-    facts.push({ icon: 'bag-check-outline', value: String(p.sales_count), label: p.sales_count > 1 ? 'ventes' : 'vente' });
-  if (response) facts.push({ icon: 'time-outline', value: response, label: 'pour répondre' });
-  if (since) facts.push({ icon: 'calendar-outline', value: since.replace('Membre depuis ', ''), label: 'membre depuis' });
+  const facts: string[] = [];
+  if (p && p.review_count > 0 && p.avg_rating != null)
+    facts.push(`★ ${p.avg_rating.toFixed(1).replace('.', ',')} (${p.review_count} avis)`);
+  if (p && p.sales_count > 0) facts.push(`${p.sales_count} vente${p.sales_count > 1 ? 's' : ''}`);
+  if (response) facts.push(`répond en ${response}`);
+  const line = facts.length ? facts.join(' · ') : p ? 'Pas encore d’avis' : place || '';
 
   return (
-    <Card onPress={onPress} elevated accessibilityLabel={`Vendeur ${name}${verified ? ', téléphone vérifié' : ''}, voir le profil`}>
-      <View style={styles.row}>
-        <View
-          style={[
-            styles.ring,
-            { borderColor: verified ? t.colors.trust : 'transparent' },
-          ]}>
-          <Avatar uri={p?.avatar_url} name={name} size={52} verified={verified} />
-        </View>
-        <View style={styles.text}>
-          <AppText variant="bodyStrong" numberOfLines={1}>
+    <PressableScale
+      disabled={!onPress}
+      onPress={onPress}
+      accessibilityRole={onPress ? 'button' : undefined}
+      accessibilityLabel={`Vendeur ${name}${isMe ? ' (vous)' : ''}${verified ? ', téléphone vérifié' : ''}. ${line}${onPress ? '. Voir le profil' : ''}`}
+      style={styles.row}>
+      <Avatar uri={p?.avatar_url} name={name} size={44} />
+      <View style={styles.text}>
+        <View style={styles.nameRow}>
+          <AppText variant="labelStrong" numberOfLines={1} style={styles.shrink}>
             {name}
             {isMe ? ' (vous)' : ''}
           </AppText>
-          {q.isLoading ? (
-            <Skeleton width={120} height={12} style={{ marginTop: 6 }} />
-          ) : p && p.review_count > 0 && p.avg_rating != null ? (
-            <RatingStars value={p.avg_rating} count={p.review_count} />
-          ) : (
-            <AppText variant="caption" color="inkMuted">
-              Pas encore d’avis
+          {verified && <Ionicons name="shield-checkmark" size={15} color={t.colors.trust} />}
+        </View>
+        {q.isLoading ? (
+          <Skeleton width={160} height={12} style={styles.skel} />
+        ) : (
+          !!line && (
+            <AppText variant="caption" color="inkMuted" numberOfLines={1}>
+              {line}
             </AppText>
-          )}
-          {verified && (
-            <View style={styles.meta}>
-              <Ionicons name="shield-checkmark" size={12} color={t.colors.trust} />
-              <AppText variant="captionStrong" color="trust">
-                Téléphone vérifié
-              </AppText>
-            </View>
-          )}
-          {!!place && (
-            <View style={styles.meta}>
-              <Ionicons name="location-outline" size={12} color={t.colors.inkMuted} />
-              <AppText variant="caption" color="inkMuted" numberOfLines={1}>
-                {place}
-              </AppText>
-            </View>
-          )}
-        </View>
-        {onPress && <Ionicons name="chevron-forward" size={18} color={t.colors.inkSubtle} />}
+          )
+        )}
       </View>
-      {facts.length > 0 && (
-        <View style={[styles.facts, { borderTopColor: t.colors.line }]}>
-          {facts.map((f, i) => (
-            <View key={f.label} style={[styles.fact, i > 0 && { borderLeftColor: t.colors.line, borderLeftWidth: StyleSheet.hairlineWidth }]}>
-              <View style={styles.factTop}>
-                <Ionicons name={f.icon} size={14} color={t.colors.inkMuted} />
-                <AppText variant="labelStrong" numberOfLines={1}>
-                  {f.value}
-                </AppText>
-              </View>
-              <AppText variant="caption" color="inkMuted" numberOfLines={1}>
-                {f.label}
-              </AppText>
-            </View>
-          ))}
-        </View>
-      )}
-    </Card>
+      {onPress && <Ionicons name="chevron-forward" size={18} color={t.colors.inkSubtle} />}
+    </PressableScale>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  ring: { borderWidth: 2, borderRadius: 32, padding: 2 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 56 },
   text: { flex: 1, gap: 2 },
-  meta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  facts: { flexDirection: 'row', marginTop: 12, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth },
-  fact: { flex: 1, alignItems: 'center', gap: 2, paddingHorizontal: 4 },
-  factTop: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  shrink: { flexShrink: 1 },
+  skel: { marginTop: 4 },
 });

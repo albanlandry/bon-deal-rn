@@ -161,9 +161,9 @@ const OTPInput = forwardRef<OTPInputHandle, OTPInputProps>(function OTPInput(
 export default OTPInput;
 
 const styles = StyleSheet.create({
-  container: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
+  container: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   group: { flexDirection: 'row', gap: 8 },
   box: { width: 46, height: 56, alignItems: 'center', justifyContent: 'center' },
-  dash: { width: 10, height: 2, borderRadius: 1 },
+  dash: { width: 8, height: 2, borderRadius: 1 },
   hidden: { position: 'absolute', width: 1, height: 1, opacity: 0 },
 });

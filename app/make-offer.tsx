@@ -1,17 +1,23 @@
 // app/make-offer.tsx — Offer / counter-offer route (doc §4.1, anchoring §1.5).
 // The item page opens the same form in place as a Sheet (OfferSheet); this
-// route stays for counter-offers from the chatroom and direct links.
+// route stays for counter-offers from the chatroom and direct links. The
+// submit sits in the floating ActionDock with the payment safety line.
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppText, IconButton } from '@/components/ui';
-import { OfferFormBody, OfferSubmitButton, useOfferForm } from '@/components/organisms/OfferForm';
+import { OfferDock, OfferFormBody, useOfferForm } from '@/components/organisms/OfferForm';
+import { dockBottom } from '@/components/organisms/ActionDock';
 import { createStyles, useStyles } from '@/theme';
+
+/** Room for the dock (safety line + button + note). */
+const DOCK_SPACE = 140;
 
 export default function MakeOfferScreen() {
   const router = useRouter();
   const styles = useStyles(makeStyles);
+  const insets = useSafeAreaInsets();
   const { postId, negotiationId, conversationId } = useLocalSearchParams<{
     postId?: string;
     negotiationId?: string;
@@ -30,7 +36,7 @@ export default function MakeOfferScreen() {
   });
 
   return (
-    <SafeAreaView style={styles.screen}>
+    <SafeAreaView style={styles.screen} edges={['top']}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
         <View style={styles.header}>
           <AppText variant="h3" style={styles.flex} accessibilityRole="header">
@@ -39,14 +45,12 @@ export default function MakeOfferScreen() {
           <IconButton icon="close" label="Fermer" onPress={() => router.back()} />
         </View>
         <ScrollView
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[styles.content, { paddingBottom: DOCK_SPACE + dockBottom(insets.bottom) }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled">
           <OfferFormBody form={form} />
         </ScrollView>
-        <View style={styles.footer}>
-          <OfferSubmitButton form={form} />
-        </View>
+        <OfferDock form={form} />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -55,12 +59,15 @@ export default function MakeOfferScreen() {
 const makeStyles = createStyles((t) => ({
   screen: { flex: 1, backgroundColor: t.colors.canvas },
   flex: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', paddingLeft: t.spacing.md, paddingRight: 4, minHeight: 56 },
-  content: { padding: t.spacing.md },
-  footer: {
-    padding: t.spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: t.colors.line,
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: t.spacing.md,
+    paddingRight: 4,
+    minHeight: 56,
     backgroundColor: t.colors.surface,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: t.colors.line,
   },
+  content: { padding: t.spacing.md },
 }));

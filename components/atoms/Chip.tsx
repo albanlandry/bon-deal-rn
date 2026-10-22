@@ -16,6 +16,8 @@ export interface ChipProps {
   trailingIcon?: React.ComponentProps<typeof Ionicons>['name'];
   style?: StyleProp<ViewStyle>;
   disabled?: boolean;
+  /** Overrides the spoken label (defaults to `label`). */
+  accessibilityLabel?: string;
 }
 
 export default function Chip({
@@ -27,14 +29,16 @@ export default function Chip({
   trailingIcon,
   style,
   disabled,
+  accessibilityLabel,
 }: ChipProps) {
   const t = useTheme();
-  const fg = selected ? t.colors.brandStrong : t.colors.inkMuted;
+  // Tight corners (radius.sm, never a pill); selected = ink fill with canvas text.
+  const fg = selected ? t.colors.canvas : t.colors.inkMuted;
   return (
     <PressableScale
       accessibilityRole={kind === 'filter' ? 'checkbox' : kind === 'choice' ? 'radio' : 'button'}
       accessibilityState={{ checked: kind !== 'action' ? selected : undefined, disabled }}
-      accessibilityLabel={label}
+      accessibilityLabel={accessibilityLabel ?? label}
       disabled={disabled}
       onPress={() => {
         haptics.selection();
@@ -44,9 +48,9 @@ export default function Chip({
       style={[
         styles.base,
         {
-          borderRadius: t.radius.full,
-          backgroundColor: selected ? t.colors.brandTint : t.colors.surface,
-          borderColor: selected ? t.colors.brandStrong : t.colors.line,
+          borderRadius: t.radius.sm,
+          backgroundColor: selected ? t.colors.ink : t.colors.surface,
+          borderColor: selected ? t.colors.ink : t.colors.line,
           opacity: disabled ? 0.45 : 1,
         },
         style,
@@ -55,7 +59,7 @@ export default function Chip({
       {selected && kind === 'filter' && !icon && (
         <Ionicons name="checkmark" size={16} color={fg} />
       )}
-      <AppText variant="labelStrong" style={{ color: selected ? t.colors.brandStrong : t.colors.ink }} numberOfLines={1}>
+      <AppText variant="labelStrong" style={{ color: selected ? t.colors.canvas : t.colors.ink }} numberOfLines={1}>
         {label}
       </AppText>
       {trailingIcon && <Ionicons name={trailingIcon} size={16} color={fg} />}
@@ -67,9 +71,9 @@ const styles = StyleSheet.create({
   base: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
     minHeight: 36,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     borderWidth: 1,
   },
 });

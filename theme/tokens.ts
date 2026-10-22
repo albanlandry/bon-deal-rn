@@ -1,9 +1,11 @@
 /**
- * "Marché" design tokens — see docs/06-ux-psychology-and-design.md §3.
+ * "Confiance" design tokens — direction B of docs/11-new-design-proposal.md
+ * (chosen 2026-10-22; replaces the coral "Marché" palette of docs/06 §3).
+ * Deep blue + teal on cool greys, Inter, 12 px cards, hairline borders.
  *
- * Every colour pair used for text was checked against WCAG 2.1 AA. The one
- * rule that matters most: `brand` (coral) is a FILL colour and always carries
- * `onBrand` (ink) text. White on #FF6B6B is 2.8:1 and fails AA.
+ * Every colour pair used for text was checked against WCAG 2.1 AA (light:
+ * white on brand 6.7:1, subtle text 5.1:1 on canvas; dark: dark ink on brand
+ * 7.6:1). Token names are unchanged so components only pick up new values.
  */
 import { Platform, TextStyle } from 'react-native';
 
@@ -11,7 +13,7 @@ export interface ColorTokens {
   brand: string; // brand-500 — primary fills (buttons, active tab, FAB)
   brandStrong: string; // brand-700 — brand text/icons on surfaces
   brandTint: string; // brand-50 — tinted backgrounds, selected chips
-  onBrand: string; // text/icons on `brand` fills (ink)
+  onBrand: string; // text/icons on `brand` fills (white in light, dark ink in dark)
   ink: string;
   inkMuted: string;
   inkSubtle: string;
@@ -63,31 +65,31 @@ export type CategoryHue =
   | 'catGrey';
 
 export const lightColors: ColorTokens = {
-  brand: '#FF6B6B',
-  brandStrong: '#C8363A',
-  brandTint: '#FFF1F0',
-  onBrand: '#1C1917',
-  ink: '#1C1917',
-  inkMuted: '#57534E',
-  inkSubtle: '#78716C',
+  brand: '#1D4ED8',
+  brandStrong: '#1E40AF',
+  brandTint: '#E8EEFD',
+  onBrand: '#FFFFFF',
+  ink: '#0F1B2D',
+  inkMuted: '#46546A',
+  inkSubtle: '#5D6A80',
   surface: '#FFFFFF',
-  surfaceAlt: '#F5F5F4',
-  canvas: '#FAFAF9',
-  line: '#E7E5E4',
+  surfaceAlt: '#EEF1F6',
+  canvas: '#F4F6FA',
+  line: '#E3E8F0',
   trust: '#0F766E',
   trustTint: '#E6F4F2',
   success: '#15803D',
   successTint: '#EAF6EE',
   warning: '#B45309',
   warningTint: '#FDF3E7',
-  danger: '#DC2626',
+  danger: '#B91C1C',
   dangerTint: '#FDECEC',
   onDanger: '#FFFFFF',
-  scrim: 'rgba(12,10,9,0.5)',
-  overlay: 'rgba(28,25,23,0.72)',
+  scrim: 'rgba(15,27,45,0.5)',
+  overlay: 'rgba(15,27,45,0.72)',
   onOverlay: '#FFFFFF',
-  skeleton: '#EFEDEB',
-  skeletonHighlight: '#F7F6F5',
+  skeleton: '#E9EDF3',
+  skeletonHighlight: '#F3F5F9',
   catBlue: '#1D4ED8',
   catPink: '#BE185D',
   catBrown: '#8A4B1C',
@@ -101,31 +103,31 @@ export const lightColors: ColorTokens = {
 };
 
 export const darkColors: ColorTokens = {
-  brand: '#FF8A80',
-  brandStrong: '#FFB4AB',
-  brandTint: '#3B1D1B',
-  onBrand: '#1C1917',
-  ink: '#F5F5F4',
-  inkMuted: '#A8A29E',
-  inkSubtle: '#8A847F',
-  surface: '#1C1917',
-  surfaceAlt: '#262220',
-  canvas: '#0C0A09',
-  line: '#292524',
+  brand: '#7AA2FF',
+  brandStrong: '#A8C1FF',
+  brandTint: '#17264A',
+  onBrand: '#0B1220',
+  ink: '#E8EDF5',
+  inkMuted: '#A9B4C6',
+  inkSubtle: '#8693A8',
+  surface: '#131C2B',
+  surfaceAlt: '#1B2638',
+  canvas: '#0B1220',
+  line: '#233046',
   trust: '#2DD4BF',
-  trustTint: '#10302C',
+  trustTint: '#0F2E2D',
   success: '#4ADE80',
-  successTint: '#12301D',
+  successTint: '#10291C',
   warning: '#FBBF24',
-  warningTint: '#3A2A0A',
+  warningTint: '#33270B',
   danger: '#F87171',
-  dangerTint: '#3A1414',
-  onDanger: '#1C1917',
+  dangerTint: '#3A1418',
+  onDanger: '#0B1220',
   scrim: 'rgba(0,0,0,0.6)',
-  overlay: 'rgba(12,10,9,0.78)',
-  onOverlay: '#F5F5F4',
-  skeleton: '#262220',
-  skeletonHighlight: '#302B28',
+  overlay: 'rgba(11,18,32,0.8)',
+  onOverlay: '#E8EDF5',
+  skeleton: '#1B2638',
+  skeletonHighlight: '#233046',
   catBlue: '#60A5FA',
   catPink: '#F472B6',
   catBrown: '#D9A06B',
@@ -151,21 +153,47 @@ export const spacing = {
   huge: 48,
 } as const;
 
+/**
+ * Tight corners (user decision 2026-10-23, docs/12): only avatars and dots
+ * are round; no pill-shaped buttons or chips.
+ */
 export const radius = {
-  sm: 8, // inputs, chips
-  md: 12, // cards
-  lg: 16, // sheets
-  full: 999, // pills, avatars
+  xs: 4, // badges, small tags
+  sm: 6, // chips, inputs, small tiles
+  md: 8, // cards, buttons, photos
+  lg: 12, // sheets, floating bars, hero blocks
+  full: 999, // avatars, dots only
 } as const;
 
-const fontFamily = Platform.select({ ios: 'System', default: undefined });
+/** Button corner radius. */
+export const buttonRadius = 8;
+
+/**
+ * Inter, loaded in app/_layout.tsx (3 files, ~1 MB in the bundle). Android
+ * can't pick a weight inside a custom family, so each weight is its own
+ * family and `fontWeight` is left unset; 500 maps to SemiBold, 800/900 to Bold.
+ */
+export const fontFiles = {
+  Inter_400Regular: require('@expo-google-fonts/inter/400Regular/Inter_400Regular.ttf'),
+  Inter_600SemiBold: require('@expo-google-fonts/inter/600SemiBold/Inter_600SemiBold.ttf'),
+  Inter_700Bold: require('@expo-google-fonts/inter/700Bold/Inter_700Bold.ttf'),
+} as const;
+
+/** Text style for a weight: the matching Inter family, no synthetic bold. */
+export function font(weight: TextStyle['fontWeight'] = '400'): TextStyle {
+  const w = Number(weight === 'bold' ? 700 : weight === 'normal' ? 400 : weight) || 400;
+  const fontFamily = w >= 700 ? 'Inter_700Bold' : w >= 500 ? 'Inter_600SemiBold' : 'Inter_400Regular';
+  return { fontFamily, fontWeight: Platform.OS === 'web' ? (String(w) as TextStyle['fontWeight']) : undefined };
+}
 
 const t = (size: number, weight: TextStyle['fontWeight'], heading = false): TextStyle => ({
-  fontFamily,
+  ...font(weight),
   fontSize: size,
   lineHeight: Math.round(size * (heading ? 1.2 : 1.4)),
-  fontWeight: weight,
 });
+
+/** Prices and counts line up in lists. */
+const tabular: TextStyle = { fontVariant: ['tabular-nums'] };
 
 /** Type scale 12 / 14 / 16 / 18 / 22 / 28 / 34. */
 export const type = {
@@ -180,8 +208,8 @@ export const type = {
   small: t(14, '400'),
   caption: t(12, '400'),
   captionStrong: t(12, '600'),
-  price: t(18, '700', true),
-  priceLarge: t(28, '700', true),
+  price: { ...t(18, '700', true), ...tabular },
+  priceLarge: { ...t(28, '700', true), ...tabular },
 } as const;
 
 /** Legacy short-hand kept for existing call sites; see theme/motion.ts. */
@@ -195,13 +223,15 @@ export const motion = {
 export const touch = { min: 48 } as const;
 
 export const elevation = {
+  // Direction B is flat: cards rely on a hairline border, with only a faint
+  // shadow on iOS (Android elevation shadows are grey and heavy on lists).
   card: Platform.select({
-    android: { elevation: 1 },
+    android: { elevation: 0 },
     default: {
-      shadowColor: '#000',
+      shadowColor: '#0F1B2D',
       shadowOpacity: 0.06,
-      shadowRadius: 6,
-      shadowOffset: { width: 0, height: 2 },
+      shadowRadius: 2,
+      shadowOffset: { width: 0, height: 1 },
     },
   }),
   sheet: Platform.select({

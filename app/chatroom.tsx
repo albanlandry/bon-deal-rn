@@ -14,6 +14,8 @@ import {
   Alert,
   FlatList,
   KeyboardAvoidingView,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Platform,
   Pressable,
   StyleSheet,
@@ -31,6 +33,7 @@ import {
   Button,
   Card,
   Celebrate,
+  EmptyState,
   PressableScale,
   ErrorState,
   IconButton,
@@ -55,10 +58,12 @@ import { publicProfileQuery } from '@/lib/api/account';
 import { blockedMessage } from '@/lib/api/safety';
 import { useBlockActions } from '@/lib/useBlock';
 import ReportSheet from '@/components/organisms/ReportSheet';
-import TransactionPanel from '@/components/organisms/TransactionPanel';
+import DealTimeline from '@/components/molecules/DealTimeline';
+import { transactionQuery } from '@/lib/api/transactions';
 import { ApiError } from '@/lib/api';
 import { clearUnread, mergeServerMessage, messagesKey, nextTempId } from '@/lib/chatCache';
 import { formatAmount, formatClock, formatDayLabel } from '@/lib/format';
+import { renderSystemMessage } from '@/lib/messagePreview';
 import { haptics } from '@/lib/haptics';
 import type { BdChatMessage, BdCoachVerdict, BdConversation } from '@/constants/types';
 import { createStyles, Theme, useStyles, useTheme } from '@/theme';
@@ -68,39 +73,9 @@ const SAFETY_DISMISSED_KEY = 'bondeal.chat.safety.dismissed.v1';
 
 // --- System message rendering (French, mirrors the admin dashboard) --------
 
-function renderSystemMessage(
-  msg: BdChatMessage,
-  conv: BdConversation | undefined,
-  myId: number | undefined,
-): string {
-  const p = msg.payload ?? {};
-  const amt = (v: unknown) => formatAmount(typeof v === 'number' ? v : Number(v));
-  const who = (uid: unknown) =>
-    uid === myId ? 'Vous' : (conv?.counterparty?.username ?? "L'autre partie");
-  switch (msg.kind) {
-    case 'system_offer_made':
-      return p.by_user_id === myId
-        ? `Vous avez fait une offre de ${amt(p.amount)}`
-        : `${who(p.by_user_id)} a fait une offre de ${amt(p.amount)}`;
-    case 'system_counter':
-      return p.by_user_id === myId
-        ? `Vous avez proposé ${amt(p.amount)}`
-        : `${who(p.by_user_id)} a proposé ${amt(p.amount)}`;
-    case 'system_accepted':
-      return `Offre acceptée — ${amt(p.amount)}`;
-    case 'system_rejected':
-      return p.by_user_id === myId ? "Vous avez refusé l'offre" : `${who(p.by_user_id)} a refusé l'offre`;
-    case 'system_auto_rejected':
-      return "Offre clôturée — l'article a été réservé pour un autre acheteur";
-    case 'system_withdrawn':
-      return 'Négociation annulée par un administrateur';
-    default:
-      return msg.kind;
-  }
-}
-
 function systemIcon(kind: string): React.ComponentProps<typeof Ionicons>['name'] {
   if (kind === 'system_accepted') return 'checkmark-circle';
+  if (kind === 'system_meeting_set') return 'calendar-outline';
   if (kind === 'system_rejected' || kind === 'system_auto_rejected' || kind === 'system_withdrawn')
     return 'close-circle';
   return 'pricetag';
@@ -146,8 +121,8 @@ function TextBubble({
         style={[
           styles.bubble,
           mine
-            ? { backgroundColor: t.colors.brandTint, borderBottomRightRadius: 6 }
-            : { backgroundColor: t.colors.surface, borderColor: t.colors.line, borderWidth: 1, borderBottomLeftRadius: 6 },
+            ? { backgroundColor: t.colors.brandTint, borderBottomRightRadius: t.radius.xs }
+            : { backgroundColor: t.colors.surface, borderColor: t.colors.line, borderWidth: 1, borderBottomLeftRadius: t.radius.xs },
           failed && { borderColor: t.colors.danger, borderWidth: 1 },
         ]}>
         <AppText variant="body">{msg.body}</AppText>
@@ -175,19 +150,20 @@ function SystemPill({ text, kind, animate }: { text: string; kind: string; anima
   const t = useTheme();
   const styles = useStyles(makeStyles);
   const accepted = kind === 'system_accepted';
+  const meeting = kind === 'system_meeting_set';
   return (
     <Animated.View entering={animate ? enterFromBottom() : undefined} style={styles.systemRow} accessibilityRole="text">
       <View
         style={[
           styles.systemPill,
-          { backgroundColor: accepted ? t.colors.successTint : t.colors.surfaceAlt },
+          { backgroundColor: accepted ? t.colors.successTint : meeting ? t.colors.brandTint : t.colors.surfaceAlt },
         ]}>
         <Ionicons
           name={systemIcon(kind)}
           size={14}
-          color={accepted ? t.colors.success : t.colors.inkMuted}
+          color={accepted ? t.colors.success : meeting ? t.colors.brandStrong : t.colors.inkMuted}
         />
-        <AppText variant="captionStrong" color={accepted ? 'success' : 'inkMuted'}>
+        <AppText variant="captionStrong" color={accepted ? 'success' : meeting ? 'brandStrong' : 'inkMuted'}>
           {text}
         </AppText>
       </View>
@@ -267,7 +243,7 @@ function OfferCard({
   const ln = conv?.latest_negotiation;
   const actionable = isLatest && ln?.status === 'pending' && ln.last_offer_by_id !== myId;
   const kindLabel = msg.kind === 'system_counter' ? 'Contre-offre' : 'Offre';
-  const who = mine ? 'Vous' : (conv?.counterparty?.username ?? "L'autre partie");
+  const who = mine ? 'Vous' : (conv?.counterparty?.username ?? "L’autre partie");
   const asking = conv?.post?.price;
   const superseded = status.label === 'Remplacée';
 
@@ -314,15 +290,15 @@ function OfferCard({
         {actionable && (
           <Animated.View entering={enterFade()} exiting={exitFade()} style={styles.offerActions}>
             <View style={styles.bannerActions}>
-              <Button size="sm" label="Accepter" icon="checkmark" onPress={onAccept} disabled={busy} style={styles.flex} />
-              <Button size="sm" variant="secondary" label="Contre-offre" onPress={onCounter} disabled={busy} style={styles.flex} />
+              <Button label="Accepter" icon="checkmark" onPress={onAccept} disabled={busy} style={styles.flex} />
+              <Button variant="secondary" label="Contre-offre" onPress={onCounter} disabled={busy} style={styles.flex} />
             </View>
             <View style={styles.inlineBetween}>
-              <Button size="sm" variant="ghost" label="Refuser" onPress={onReject} disabled={busy} />
+              <Button variant="ghost" label="Refuser" onPress={onReject} disabled={busy} />
               {!coachVisible && (
                 <PressableScale
                   accessibilityRole="button"
-                  accessibilityLabel="Demander l'avis du Négo-Coach"
+                  accessibilityLabel="Demander l’avis du Négo-Coach"
                   onPress={onCoach}
                   disabled={coachLoading || busy}
                   style={[styles.coachPill, { backgroundColor: t.colors.brandTint }]}>
@@ -355,9 +331,9 @@ function OfferCard({
 
 function coachErrorMessage(e: unknown): string {
   const status = e instanceof ApiError ? e.status : 0;
-  if (status === 503) return "Le coach n'est pas disponible pour le moment.";
+  if (status === 503) return "Le coach n’est pas disponible pour le moment.";
   if (status === 429) return 'Trop de demandes au coach — réessayez plus tard.';
-  if (status === 409) return "L'offre a changé, actualisation…";
+  if (status === 409) return "L’offre a changé, actualisation…";
   return 'Impossible de contacter le coach. Réessayez.';
 }
 
@@ -389,7 +365,7 @@ function CoachCard({
       ? `Proposez ${formatAmount(coach.suggested_amount)}`
       : coach.action === 'accept'
         ? 'Bonne affaire — vous pouvez accepter'
-        : "Patientez — ne changez rien pour l'instant";
+        : "Patientez — ne changez rien pour l’instant";
 
   const m = coach.market;
   const span = m ? m.range_max - m.range_min : 0;
@@ -402,7 +378,7 @@ function CoachCard({
   const trust =
     cp && cp.review_count && cp.avg_rating != null
       ? `${cpLabel} : ★ ${cp.avg_rating.toFixed(1).replace('.', ',')} · ${cp.review_count} avis`
-      : `${cpLabel} : nouveau membre, pas encore d'avis`;
+      : `${cpLabel} : nouveau membre, pas encore d’avis`;
 
   return (
     <Card tone="brand" style={styles.coachCard}>
@@ -433,7 +409,7 @@ function CoachCard({
         </>
       ) : (
         <AppText variant="caption" color="inkMuted">
-          Peu d'annonces similaires — conseil basé sur vos échanges
+          Peu d’annonces similaires — conseil basé sur vos échanges
         </AppText>
       )}
       <AppText variant="caption" color="inkMuted">
@@ -447,7 +423,6 @@ function CoachCard({
       <View style={styles.coachActions}>
         {coach.action === 'counter' && (
           <Button
-            size="sm"
             label={`Envoyer ${formatAmount(coach.suggested_amount)}`}
             onPress={onSendCounter}
             loading={sending}
@@ -455,17 +430,16 @@ function CoachCard({
           />
         )}
         {coach.action === 'accept' && (
-          <Button size="sm" label="Accepter l'offre" onPress={onAccept} disabled={!ctaEnabled} />
+          <Button label="Accepter l’offre" onPress={onAccept} disabled={!ctaEnabled} />
         )}
         <Button
-          size="sm"
           variant="ghost"
           label={coach.action === 'hold' ? 'Compris' : 'Ignorer'}
           onPress={onDismiss}
         />
       </View>
       <AppText variant="caption" color="inkSubtle">
-        Le coach utilise les mêmes données pour l'acheteur et le vendeur.
+        Le coach utilise les mêmes données pour l’acheteur et le vendeur.
       </AppText>
     </Card>
   );
@@ -514,7 +488,7 @@ function NegotiationBanner({
           <View style={styles.flex}>
             <AppText variant="labelStrong">Votre offre : {amount}</AppText>
             <AppText variant="caption" color="inkMuted">
-              En attente de la réponse de {conv.counterparty?.username ?? "l'autre partie"}…
+              En attente de la réponse de {conv.counterparty?.username ?? "l’autre partie"}…
             </AppText>
           </View>
         </View>
@@ -525,9 +499,9 @@ function NegotiationBanner({
         <View style={styles.inlineBetween}>
           <AppText variant="labelStrong">Offre reçue : {amount}</AppText>
           {!coachVisible && (
-            <Pressable
+            <PressableScale
               accessibilityRole="button"
-              accessibilityLabel="Demander l'avis du Négo-Coach"
+              accessibilityLabel="Demander l’avis du Négo-Coach"
               onPress={onCoach}
               disabled={coachLoading || busy}
               style={styles.coachPill}>
@@ -546,14 +520,14 @@ function NegotiationBanner({
                   </AppText>
                 </>
               )}
-            </Pressable>
+            </PressableScale>
           )}
         </View>
         <View style={styles.bannerActions}>
-          <Button size="sm" label="Accepter" onPress={onAccept} disabled={busy} style={styles.flex} />
-          <Button size="sm" variant="secondary" label="Contre-offre" onPress={onCounter} disabled={busy} style={styles.flex} />
-          <Button size="sm" variant="ghost" label="Refuser" onPress={onReject} disabled={busy} />
+          <Button label="Accepter" onPress={onAccept} disabled={busy} style={styles.flex} />
+          <Button variant="secondary" label="Contre-offre" onPress={onCounter} disabled={busy} style={styles.flex} />
         </View>
+        <Button variant="ghost" label="Refuser" onPress={onReject} disabled={busy} />
       </View>
     );
   }
@@ -609,6 +583,19 @@ export default function ChatroomScreen() {
   const safetyShownFull = useRef(false);
   const { confirmBlock, confirmUnblock } = useBlockActions();
   const listRef = useRef<FlatList<Row>>(null);
+  // Follow new messages only when already at the newest one (within 80 px) or
+  // after sending; reading history never jumps down.
+  const nearEnd = useRef(true);
+  const justSent = useRef(false);
+  const onThreadScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+    nearEnd.current = contentOffset.y + layoutMeasurement.height >= contentSize.height - 80;
+  };
+  const followThread = () => {
+    if (!nearEnd.current && !justSent.current) return;
+    justSent.current = false;
+    listRef.current?.scrollToEnd({ animated: !t.reduceMotion });
+  };
 
   // Live delivery comes from the realtime provider; poll only while it's down.
   const pollMs = useFallbackInterval(5000);
@@ -685,6 +672,7 @@ export default function ChatroomScreen() {
     const body = text.trim();
     if (!body) return;
     haptics.light();
+    justSent.current = true;
     sendMutation.mutate({ body, tempId: nextTempId() });
   };
 
@@ -723,6 +711,22 @@ export default function ChatroomScreen() {
 
   const negBusy = acceptMutation.isPending || rejectMutation.isPending;
   const ln = conv?.latest_negotiation;
+  // Accepted offer → the header card becomes the deal's (amount + timeline → deal page).
+  const dealId = ln?.status === 'accepted' && ln.transaction_id ? ln.transaction_id : null;
+  const dealQuery = useQuery(transactionQuery(dealId));
+  const deal = dealQuery.data;
+  // A meeting set by the other party (live message) refreshes the deal.
+  const lastMeetingMsgId = useMemo(() => {
+    const m = [...(msgsQuery.data ?? [])].reverse().find((x) => x.kind === 'system_meeting_set');
+    return m ? m.id : null;
+  }, [msgsQuery.data]);
+  useEffect(() => {
+    if (lastMeetingMsgId != null && dealId) {
+      queryClient.invalidateQueries({ queryKey: ['transaction', dealId] });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    }
+  }, [lastMeetingMsgId, dealId, queryClient]);
+  const dealReviewed = (deal?.reviews ?? []).some((r) => r.reviewer_id === myId);
 
   const ladderKey = ln
     ? `${ln.id}:${ln.status}:${ln.current_offer_amount}:${ln.last_offer_by_id}`
@@ -746,7 +750,7 @@ export default function ChatroomScreen() {
     },
     onError: () => {
       setCoach(null);
-      showToast.error('Négo-Coach', "L'offre a changé, actualisation…");
+      showToast.error('Négo-Coach', "L’offre a changé, actualisation…");
       invalidateThread();
     },
   });
@@ -774,7 +778,7 @@ export default function ChatroomScreen() {
   };
 
   const handleAccept = () => {
-    Alert.alert('Accepter cette offre ?', "L'article sera réservé et une transaction sera créée.", [
+    Alert.alert('Accepter cette offre ?', "L’article sera réservé et une transaction sera créée.", [
       { text: 'Annuler', style: 'cancel' },
       { text: 'Accepter', onPress: () => acceptMutation.mutate() },
     ]);
@@ -841,7 +845,15 @@ export default function ChatroomScreen() {
   if (!enabled) {
     return (
       <SafeAreaView style={styles.container}>
-        <ErrorState message="Connectez-vous pour voir cette conversation." onRetry={() => router.back()} />
+        <EmptyState
+          icon="chatbubbles-outline"
+          title="Connectez-vous"
+          message="Connectez-vous pour voir cette conversation."
+          actionLabel="Se connecter"
+          onAction={() => router.replace('/login')}
+          secondaryLabel="Retour"
+          onSecondary={() => router.back()}
+        />
       </SafeAreaView>
     );
   }
@@ -898,9 +910,29 @@ export default function ChatroomScreen() {
       </View>
       {post && (
         <View style={styles.listingWrap}>
+          {dealId ? (
+            <PressableScale
+              accessibilityRole="button"
+              accessibilityLabel={`Suivi de l’affaire : ${post.title}, accord à ${formatAmount(deal?.amount ?? ln?.current_offer_amount)}`}
+              accessibilityHint="Ouvre la page de l’affaire : rendez-vous, confirmation, avis"
+              onPress={() => router.push({ pathname: '/deal', params: { id: String(dealId) } } as never)}
+              style={[styles.listing, styles.dealCard, { backgroundColor: t.colors.canvas, borderColor: t.colors.line }]}>
+              <View style={styles.dealTop}>
+                <AppImage uri={post.thumbnail_url} style={styles.listingThumb} recyclingKey={`p${post.id}`} />
+                <View style={styles.flex}>
+                  <AppText variant="caption" color="inkMuted" numberOfLines={1}>
+                    {post.title}
+                  </AppText>
+                  <AppText variant="price">Accord {formatAmount(deal?.amount ?? ln?.current_offer_amount)}</AppText>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={t.colors.inkSubtle} />
+              </View>
+              {deal && <DealTimeline status={deal.status} reviewed={dealReviewed} />}
+            </PressableScale>
+          ) : (
           <PressableScale
             accessibilityRole="button"
-            accessibilityLabel={`Voir l'annonce ${post.title}, ${post.is_free ? 'Gratuit' : formatAmount(post.price)}${postBadge ? `, ${postBadge}` : ''}`}
+            accessibilityLabel={`Voir l’annonce ${post.title}, ${post.is_free ? 'Gratuit' : formatAmount(post.price)}${postBadge ? `, ${postBadge}` : ''}`}
             onPress={() => router.push({ pathname: '/item-details', params: { id: String(post.id) } })}
             style={[styles.listing, { backgroundColor: t.colors.canvas, borderColor: t.colors.line }]}>
             <AppImage uri={post.thumbnail_url} style={styles.listingThumb} recyclingKey={`p${post.id}`} />
@@ -915,6 +947,7 @@ export default function ChatroomScreen() {
             {postBadge && <Badge label={postBadge} tone={postBadge === 'Vendu' ? 'overlay' : 'warning'} />}
             <Ionicons name="chevron-forward" size={18} color={t.colors.inkSubtle} />
           </PressableScale>
+          )}
         </View>
       )}
 
@@ -931,12 +964,6 @@ export default function ChatroomScreen() {
           busy={negBusy}
           hasOfferCard={latestOfferId != null}
         />
-      )}
-
-      {ln?.status === 'accepted' && !!ln.transaction_id && (
-        <View style={styles.txn}>
-          <TransactionPanel transactionId={ln.transaction_id} myId={myId} />
-        </View>
       )}
 
       {blockedByMe && (
@@ -965,9 +992,9 @@ export default function ChatroomScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         {msgsQuery.isLoading ? (
           <View style={styles.skeletons}>
-            <Skeleton width="60%" height={44} radius={16} />
-            <Skeleton width="45%" height={44} radius={16} style={{ alignSelf: 'flex-end' }} />
-            <Skeleton width="55%" height={44} radius={16} />
+            <Skeleton width="60%" height={44} radius={t.radius.md} />
+            <Skeleton width="45%" height={44} radius={t.radius.md} style={{ alignSelf: 'flex-end' }} />
+            <Skeleton width="55%" height={44} radius={t.radius.md} />
           </View>
         ) : msgsQuery.error && !messages ? (
           <ErrorState message="Impossible de charger les messages." onRetry={() => msgsQuery.refetch()} />
@@ -1014,7 +1041,9 @@ export default function ChatroomScreen() {
             contentContainerStyle={styles.messagesContent}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
-            onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: !t.reduceMotion })}
+            onScroll={onThreadScroll}
+            scrollEventThrottle={64}
+            onContentSizeChange={followThread}
             ListHeaderComponent={
               <Animated.View layout={layoutEase()} style={styles.safety}>
                 {!safetyDismissed ? <SafetyBanner onDismiss={dismissSafety} /> : <SafetyBanner compact />}
@@ -1169,7 +1198,7 @@ const makeStyles = createStyles((t: Theme) => ({
   container: { flex: 1, backgroundColor: t.colors.canvas },
   center: { alignItems: 'center', justifyContent: 'center' },
   flex: { flex: 1 },
-  inline: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  inline: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   inlineBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   header: {
     flexDirection: 'row',
@@ -1180,7 +1209,7 @@ const makeStyles = createStyles((t: Theme) => ({
     minHeight: 60,
     backgroundColor: t.colors.surface,
   },
-  who: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 48 },
+  who: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48 },
   listingWrap: {
     paddingHorizontal: t.spacing.sm,
     paddingBottom: t.spacing.xs,
@@ -1199,20 +1228,20 @@ const makeStyles = createStyles((t: Theme) => ({
     minHeight: 64,
   },
   listingThumb: { width: 48, height: 48, borderRadius: t.radius.sm },
-  dayRow: { alignItems: 'center', paddingVertical: 6 },
+  dayRow: { alignItems: 'center', paddingVertical: 8 },
   dayPill: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: t.radius.full,
+    borderRadius: t.radius.sm,
     borderWidth: StyleSheet.hairlineWidth,
   },
-  offerWrap: { marginVertical: 6, width: '82%', maxWidth: 360 },
-  offerCard: { borderRadius: t.radius.lg, padding: t.spacing.sm, gap: 4 },
+  offerWrap: { marginVertical: 8, width: '82%', maxWidth: 360 },
+  offerCard: { borderRadius: t.radius.md, padding: t.spacing.sm, gap: 4 },
   offerActions: { gap: 4, marginTop: t.spacing.xs },
   banner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
     paddingHorizontal: t.spacing.md,
     paddingVertical: t.spacing.sm,
   },
@@ -1222,58 +1251,64 @@ const makeStyles = createStyles((t: Theme) => ({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    minHeight: 40,
-    paddingHorizontal: 10,
-    borderRadius: t.radius.full,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    borderRadius: t.radius.sm,
     backgroundColor: t.colors.surface,
   },
-  coachCard: { margin: t.spacing.sm, gap: 6 },
+  coachCard: { margin: t.spacing.sm, gap: 8 },
   coachTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  coachBarTrack: { height: 4, borderRadius: 2, marginVertical: 6 },
+  coachBarTrack: { height: 4, borderRadius: 2, marginVertical: 8 },
   coachBarDot: { position: 'absolute', top: -4, width: 12, height: 12, borderRadius: 6, marginLeft: -6 },
   coachActions: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginTop: 4 },
   skeletons: { padding: t.spacing.md, gap: t.spacing.sm },
-  txn: { paddingHorizontal: t.spacing.sm, paddingTop: t.spacing.xs },
+  dealCard: { flexDirection: 'column', alignItems: 'stretch', gap: t.spacing.xs },
+  dealTop: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.sm },
   offerRow: { flexDirection: 'row', paddingHorizontal: t.spacing.sm, paddingBottom: t.spacing.xs },
   quoted: { marginBottom: t.spacing.sm },
   messagesContent: { paddingHorizontal: t.spacing.sm, paddingBottom: t.spacing.xs, flexGrow: 1 },
   safety: { paddingVertical: t.spacing.xs },
   emptyChat: { padding: t.spacing.xl },
-  bubbleRow: { marginVertical: 3, maxWidth: '82%' },
+  bubbleRow: { marginVertical: 4, maxWidth: '82%' },
   right: { alignSelf: 'flex-end' },
   left: { alignSelf: 'flex-start' },
-  bubble: { borderRadius: 18, paddingHorizontal: 14, paddingVertical: 8 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4, marginTop: 2 },
+  bubble: { borderRadius: t.radius.md, paddingHorizontal: 12, paddingVertical: 8 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4, marginTop: 4 },
   systemRow: { alignItems: 'center', marginVertical: 8 },
   systemPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 8,
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: t.radius.full,
+    paddingVertical: 8,
+    borderRadius: t.radius.sm,
     maxWidth: '90%',
   },
+  // Floating composer bar (docs/12): inset, radius.lg, above the keyboard.
   composer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 8,
-    paddingHorizontal: t.spacing.sm,
-    paddingVertical: t.spacing.xs,
-    borderTopWidth: 1,
-    borderTopColor: t.colors.line,
+    marginHorizontal: t.spacing.sm,
+    marginTop: t.spacing.xxs,
+    marginBottom: t.spacing.xs,
+    padding: 6,
+    borderRadius: t.radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: t.colors.line,
     backgroundColor: t.colors.surface,
+    ...(t.elevation.sheet as object),
   },
   input: {
     flex: 1,
     minHeight: 44,
     maxHeight: 120,
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingTop: 10,
     paddingBottom: 10,
-    borderRadius: 22,
+    borderRadius: t.radius.md,
     backgroundColor: t.colors.surfaceAlt,
     color: t.colors.ink,
   },
-  send: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
+  send: { width: 44, height: 44, borderRadius: t.radius.md, alignItems: 'center', justifyContent: 'center' },
 }));

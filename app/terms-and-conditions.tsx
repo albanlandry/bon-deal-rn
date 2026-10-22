@@ -1,4 +1,4 @@
-// app/terms-and-conditions.tsx — Conditions d'utilisation (read-only)
+// app/terms-and-conditions.tsx — Conditions d’utilisation (read-only)
 // What BonDeal does with your data, the guarantees, and the current legal
 // versions (GET /legal). Acceptance is recorded on the server: new members
 // accept at signup, and anyone who still has to accept the current version
@@ -9,58 +9,28 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { Href, useRouter } from 'expo-router';
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/theme';
 import { AppText, Button, Card, ScreenHeader } from '@/components/ui';
 import { legalVersionsQuery } from '@/lib/api/account';
 
-interface ConsentItemProps {
-  title: string;
-  description: string;
-  isChecked: boolean;
-  onToggle: () => void;
-  disabled?: boolean;
-}
-
-function ConsentItem({ title, description, isChecked, onToggle, disabled }: ConsentItemProps) {
+/** A plain, non-interactive row: what we use and why (no checkbox — nothing to toggle here). */
+function DataUseRow({ icon, title, description }: { icon: React.ComponentProps<typeof Ionicons>['name']; title: string; description: string }) {
   const t = useTheme();
   return (
-    <Pressable
-      accessibilityRole="checkbox"
-      accessibilityState={{ checked: isChecked, disabled }}
-      accessibilityLabel={title}
-      accessibilityHint={description}
-      onPress={onToggle}
-      disabled={disabled}
-      style={({ pressed }) => [
-        styles.consentItem,
-        {
-          backgroundColor: isChecked ? t.colors.brandTint : t.colors.surface,
-          borderColor: isChecked ? t.colors.brandStrong : t.colors.line,
-          borderRadius: t.radius.md,
-          opacity: pressed ? 0.85 : 1,
-        },
-      ]}>
-      {!disabled && (
-        <View
-          style={[
-            styles.checkbox,
-            {
-              borderColor: isChecked ? t.colors.brand : t.colors.inkSubtle,
-              backgroundColor: isChecked ? t.colors.brand : 'transparent',
-            },
-          ]}>
-          {isChecked && <Ionicons name="checkmark" size={18} color={t.colors.onBrand} />}
-        </View>
-      )}
+    <View
+      accessible
+      accessibilityLabel={`${title}. ${description}`}
+      style={[styles.dataRow, { backgroundColor: t.colors.surface, borderColor: t.colors.line, borderRadius: t.radius.md }]}>
+      <Ionicons name={icon} size={20} color={t.colors.inkMuted} style={styles.dataIcon} />
       <View style={styles.flex}>
         <AppText variant="bodyStrong">{title}</AppText>
         <AppText variant="small" color="inkMuted">
           {description}
         </AppText>
       </View>
-    </Pressable>
+    </View>
   );
 }
 
@@ -80,21 +50,21 @@ export default function TermsAndConditionsScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: t.colors.canvas }]}>
-      <ScreenHeader title="Conditions d'utilisation" />
+      <ScreenHeader large title="Conditions d’utilisation" />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.welcome}>
           <View style={[styles.icon, { backgroundColor: t.colors.brandTint }]}>
-            <Ionicons name="document-text" size={40} color={t.colors.brandStrong} />
+            <Ionicons name="document-text" size={28} color={t.colors.brandStrong} />
           </View>
-          <AppText variant="h2" align="center">
+          <AppText variant="h2">
             BonDeal et vos données
           </AppText>
-          <AppText variant="small" color="inkMuted" align="center">
+          <AppText variant="small" color="inkMuted">
             Ce que nous utilisons pour faire fonctionner BonDeal, et ce que nous vous garantissons.
           </AppText>
           {legal.data && (
-            <AppText variant="caption" color="inkSubtle" align="center">
+            <AppText variant="caption" color="inkSubtle">
               Conditions v{legal.data.terms_version} · Confidentialité v{legal.data.privacy_version}
             </AppText>
           )}
@@ -104,33 +74,25 @@ export default function TermsAndConditionsScreen() {
           Utilisation de vos données
         </AppText>
         <View style={styles.consents}>
-          <ConsentItem
+          <DataUseRow
+            icon="call-outline"
             title="Numéro de téléphone"
-            description="Nous utilisons votre numéro de téléphone pour vous authentifier et sécuriser votre compte. Il n'est jamais affiché aux autres membres."
-            isChecked
-            onToggle={() => {}}
-            disabled
+            description="Nous utilisons votre numéro de téléphone pour vous authentifier et sécuriser votre compte. Il n’est jamais affiché aux autres membres."
           />
-          <ConsentItem
+          <DataUseRow
+            icon="person-outline"
             title="Données de profil"
             description="Votre pseudo, votre photo, votre ville et votre quartier construisent votre identité sur la plateforme et la confiance entre membres. Vous choisissez ce qui est visible dans Paramètres › Confidentialité."
-            isChecked
-            onToggle={() => {}}
-            disabled
           />
-          <ConsentItem
+          <DataUseRow
+            icon="chatbubbles-outline"
             title="Annonces, messages et transactions"
             description="Ils sont conservés pour faire fonctionner le service, vous protéger en cas de litige et lutter contre les arnaques (modération des signalements)."
-            isChecked
-            onToggle={() => {}}
-            disabled
           />
-          <ConsentItem
+          <DataUseRow
+            icon="megaphone-outline"
             title="Communication marketing (facultatif)"
-            description="Désactivée par défaut. Vous pouvez l'activer ou la couper à tout moment dans Paramètres › Notifications."
-            isChecked={false}
-            onToggle={() => {}}
-            disabled
+            description="Désactivée par défaut. Vous pouvez l’activer ou la couper à tout moment dans Paramètres › Notifications."
           />
         </View>
 
@@ -162,13 +124,13 @@ export default function TermsAndConditionsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: 16, paddingBottom: 32 },
-  welcome: { alignItems: 'center', gap: 8, marginBottom: 24 },
-  icon: { width: 80, height: 80, borderRadius: 40, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  welcome: { gap: 8, marginBottom: 24 },
+  icon: { width: 56, height: 56, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
   sectionTitle: { marginBottom: 12, marginTop: 8 },
-  consents: { gap: 10, marginBottom: 16 },
-  consentItem: { flexDirection: 'row', gap: 12, padding: 14, borderWidth: 1, minHeight: 56 },
-  checkbox: { width: 26, height: 26, borderRadius: 6, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginTop: 2 },
-  bullet: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 6 },
+  consents: { gap: 8, marginBottom: 16 },
+  dataRow: { flexDirection: 'row', gap: 12, padding: 16, borderWidth: 1 },
+  dataIcon: { marginTop: 2 },
+  bullet: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
   manage: { marginTop: 16 },
   flex: { flex: 1 },
 });

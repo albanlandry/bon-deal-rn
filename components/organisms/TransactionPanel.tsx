@@ -3,41 +3,36 @@
  * next step for this party — confirm the sale happened or cancel it while
  * pending; once completed, leave a review (prompted right after completion,
  * peak–end) or report a problem (dispute).
+ * A 3-step DealTimeline shows where the deal stands. In the chat it can fold
+ * to a one-line summary (`collapsible`): open while this party has something
+ * to do, folded once they've seen a settled deal.
  */
 import { Ionicons } from '@expo/vector-icons';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import type { BdTransaction } from '@/constants/types';
-import {
-  createReview,
-  openDispute,
-  TXN_STATUS_LABEL,
-  transactionErrorMessage,
-  transactionQuery,
-  updateTransactionStatus,
-} from '@/lib/api/transactions';
+import Animated from 'react-native-reanimated';
+import { TXN_STATUS_LABEL } from '@/lib/api/transactions';
 import { formatAmount, formatDayLabel } from '@/lib/format';
-import { haptics } from '@/lib/haptics';
 import { useTheme } from '@/theme';
 import AppText from '../atoms/AppText';
 import Badge, { BadgeTone } from '../atoms/Badge';
 import Button from '../atoms/Button';
 import Card from '../atoms/Card';
-import RatingStars from '../atoms/RatingStars';
 import Skeleton from '../atoms/Skeleton';
-import TextField from '../atoms/TextField';
-import { showToast } from '../atoms/Toast';
-import Sheet from './Sheet';
+import { enterFade, exitFade, layoutEase } from '../motion/anim';
+import PressableScale from '../motion/PressableScale';
+import DealTimeline from '../molecules/DealTimeline';
+import { useDealActions } from './DealActions';
 
-const STATUS_TONE: Record<string, BadgeTone> = {
+export const STATUS_TONE: Record<string, BadgeTone> = {
   pending: 'warning',
   completed: 'success',
   cancelled: 'neutral',
   disputed: 'danger',
 };
 
-const RATING_WORDS = ['', 'Très décevant', 'Décevant', 'Correct', 'Bien', 'Excellent'];
+/** Deal states already shown this session (`id:status:reviewed`): those fold. */
+const SEEN = new Set<string>();
 
 export interface TransactionPanelProps {
   transactionId: number;
@@ -45,85 +40,58 @@ export interface TransactionPanelProps {
   /** Show the listing title (lists); hidden in the chat where it's in the header. */
   showTitle?: boolean;
   onOpenListing?: (postId: number) => void;
+  /** Can fold to a one-line summary (the chat, where space is tight). */
+  collapsible?: boolean;
+  /** The sale/purchase was just confirmed: the host fires `Celebrate`. */
+  onCompleted?: () => void;
 }
 
-export default function TransactionPanel({ transactionId, myId, showTitle, onOpenListing }: TransactionPanelProps) {
+export default function TransactionPanel({
+  transactionId,
+  myId,
+  showTitle,
+  onOpenListing,
+  collapsible,
+  onCompleted,
+}: TransactionPanelProps) {
   const t = useTheme();
-  const qc = useQueryClient();
-  const q = useQuery(transactionQuery(transactionId));
-  const txn = q.data;
-  const [sheet, setSheet] = useState<null | 'cancel' | 'dispute' | 'review'>(null);
-  const [reason, setReason] = useState('');
-  const [rating, setRating] = useState(0);
-  const [comment, setComment] = useState('');
-
-  const refresh = (next?: BdTransaction) => {
-    if (next) qc.setQueryData<BdTransaction>(['transaction', transactionId], (old) => ({ ...old, ...next }));
-    qc.invalidateQueries({ queryKey: ['transaction', transactionId] });
-    qc.invalidateQueries({ queryKey: ['transactions'] });
-    qc.invalidateQueries({ queryKey: ['posts'] });
-    qc.invalidateQueries({ queryKey: ['conversations'] });
-    qc.invalidateQueries({ queryKey: ['conversation'] });
-  };
-
-  const openSheet = (s: 'cancel' | 'dispute' | 'review') => {
-    setReason('');
-    setComment('');
-    setRating(0);
-    setSheet(s);
-  };
-
-  const statusMut = useMutation({
-    mutationFn: (v: { status: 'completed' | 'cancelled'; reason?: string }) =>
-      updateTransactionStatus(transactionId, v.status, v.reason),
-    onSuccess: (next, v) => {
-      refresh(next);
-      setSheet(null);
-      if (v.status === 'completed') {
-        haptics.success();
-        showToast.success(
-          next.seller_id === myId ? 'Vente conclue' : 'Achat confirmé',
-          'Merci ! Dites-nous comment ça s’est passé.',
-        );
-        openSheet('review');
-      } else {
-        showToast.info('Transaction annulée', 'L’annonce est de nouveau disponible.');
-      }
-    },
-    onError: (e) => showToast.error('Transaction', transactionErrorMessage(e)),
+  const { q, txn, reviewed, iAmSeller, otherName, busy, confirm, confirming, openSheet, sheets } = useDealActions({
+    transactionId,
+    myId,
+    onCompleted,
   });
+  // null = automatic (open when an action is needed or not yet seen).
+  const [expanded, setExpanded] = useState<boolean | null>(null);
 
-  const disputeMut = useMutation({
-    mutationFn: () => openDispute(transactionId, reason),
-    onSuccess: (next) => {
-      refresh(next);
-      setSheet(null);
-      showToast.success('Litige ouvert', 'Notre équipe va examiner la situation et vous contacter.');
-    },
-    onError: (e) => showToast.error('Litige', transactionErrorMessage(e)),
-  });
-
-  const reviewMut = useMutation({
-    mutationFn: () => createReview(transactionId, rating, comment),
-    onSuccess: () => {
-      haptics.success();
-      refresh();
-      qc.invalidateQueries({ queryKey: ['reviews'] });
-      qc.invalidateQueries({ queryKey: ['profile'] });
-      setSheet(null);
-      showToast.success('Merci pour votre avis', 'Il aide toute la communauté.');
-    },
-    onError: (e) => showToast.error('Avis', transactionErrorMessage(e)),
-  });
+  const actionNeeded = txn?.status === 'pending' || (txn?.status === 'completed' && !reviewed);
+  const seenKey = txn ? `${txn.id}:${txn.status}:${reviewed}` : null;
+  // Captured on first sight of this state, so it stays open for this visit.
+  const seenBefore = useRef<Record<string, boolean>>({});
+  if (seenKey && !(seenKey in seenBefore.current)) seenBefore.current[seenKey] = SEEN.has(seenKey);
+  useEffect(() => {
+    if (seenKey) SEEN.add(seenKey);
+  }, [seenKey]);
+  // A new step that needs this party reopens the panel.
+  useEffect(() => setExpanded(null), [actionNeeded]);
 
   if (q.isLoading) return <Skeleton height={88} radius={t.radius.md} />;
-  if (!txn) return null;
+  if (!txn) {
+    return (
+      <Card style={styles.card}>
+        <View style={styles.header} accessibilityRole="alert">
+          <Ionicons name="alert-circle-outline" size={20} color={t.colors.danger} />
+          <AppText variant="small" color="inkMuted" style={styles.flex}>
+            Impossible de charger la transaction.
+          </AppText>
+          <Button label="Réessayer" size="sm" variant="ghost" onPress={() => q.refetch()} loading={q.isFetching} />
+        </View>
+      </Card>
+    );
+  }
 
-  const iAmSeller = txn.seller_id === myId;
-  const other = iAmSeller ? txn.buyer : txn.seller;
-  const otherName = other?.username ?? (iAmSeller ? 'l’acheteur' : 'le vendeur');
-  const reviewed = (txn.reviews ?? []).some((r) => r.reviewer_id === myId);
-  const busy = statusMut.isPending || disputeMut.isPending;
+  const open = !collapsible || (expanded ?? (actionNeeded || !seenBefore.current[seenKey!]));
+  const statusLabel = TXN_STATUS_LABEL[txn.status] ?? txn.status;
+  const summary = `${iAmSeller ? 'Vente' : 'Achat'} · ${formatAmount(txn.amount)}`;
 
   const helper =
     txn.status === 'pending'
@@ -138,159 +106,101 @@ export default function TransactionPanel({ transactionId, myId, showTitle, onOpe
             ? `Annulée : ${txn.cancellation_reason}`
             : 'Transaction annulée.';
 
+  const titleText = (
+    <AppText variant="labelStrong" color={onOpenListing ? 'brandStrong' : 'ink'} numberOfLines={1}>
+      {txn.post_title ?? 'Annonce'}
+    </AppText>
+  );
+
   return (
     <Card style={styles.card}>
-      <View style={styles.header}>
-        <Ionicons name="receipt-outline" size={18} color={t.colors.inkMuted} />
-        <View style={styles.flex}>
-          {showTitle && (
-            <AppText
-              variant="labelStrong"
-              numberOfLines={1}
-              onPress={onOpenListing ? () => onOpenListing(txn.post_id) : undefined}>
-              {txn.post_title ?? 'Annonce'}
+      <Animated.View layout={layoutEase()} style={styles.body}>
+        {collapsible ? (
+          <PressableScale
+            accessibilityRole="button"
+            accessibilityLabel={`${summary}, ${statusLabel}`}
+            accessibilityHint={open ? 'Réduire le suivi de la transaction' : 'Afficher le suivi de la transaction'}
+            accessibilityState={{ expanded: open }}
+            onPress={() => setExpanded(!open)}
+            style={styles.header}>
+            <Ionicons name="receipt-outline" size={20} color={t.colors.inkMuted} />
+            <AppText variant="labelStrong" numberOfLines={1} style={styles.flex}>
+              {summary}
             </AppText>
-          )}
-          <AppText variant={showTitle ? 'caption' : 'labelStrong'} color={showTitle ? 'inkMuted' : 'ink'}>
-            {iAmSeller ? 'Vente' : 'Achat'} · {formatAmount(txn.amount)}
-            {showTitle ? ` · avec ${otherName}` : ''}
-          </AppText>
-        </View>
-        <Badge label={TXN_STATUS_LABEL[txn.status] ?? txn.status} tone={STATUS_TONE[txn.status] ?? 'neutral'} />
-      </View>
-      <AppText variant="caption" color="inkMuted">
-        {helper}
-      </AppText>
-
-      {txn.status === 'pending' && (
-        <View style={styles.actions}>
-          <Button
-            label={iAmSeller ? 'Vente conclue' : 'Article reçu'}
-            icon="checkmark-done"
-            size="sm"
-            onPress={() => statusMut.mutate({ status: 'completed' })}
-            loading={statusMut.isPending && statusMut.variables?.status === 'completed'}
-            disabled={busy}
-            style={styles.flex}
-          />
-          <Button label="Annuler" size="sm" variant="ghost" onPress={() => openSheet('cancel')} disabled={busy} />
-        </View>
-      )}
-      {txn.status === 'completed' && (
-        <View style={styles.actions}>
-          {!reviewed && (
-            <Button label="Laisser un avis" icon="star-outline" size="sm" onPress={() => openSheet('review')} style={styles.flex} />
-          )}
-          <Button label="Signaler un problème" size="sm" variant="ghost" onPress={() => openSheet('dispute')} disabled={busy} />
-        </View>
-      )}
-
-      {/* Cancel */}
-      <Sheet
-        visible={sheet === 'cancel'}
-        onClose={() => setSheet(null)}
-        title="Annuler la transaction ?"
-        footer={
-          <View style={styles.sheetActions}>
-            <Button
-              label="Annuler la transaction"
-              variant="danger"
-              onPress={() => statusMut.mutate({ status: 'cancelled', reason })}
-              loading={statusMut.isPending}
-              fullWidth
-            />
-            <Button label="Garder" variant="ghost" onPress={() => setSheet(null)} fullWidth />
+            <Badge label={statusLabel} tone={STATUS_TONE[txn.status] ?? 'neutral'} />
+            <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={20} color={t.colors.inkSubtle} />
+          </PressableScale>
+        ) : (
+          <View style={styles.header}>
+            <Ionicons name="receipt-outline" size={20} color={t.colors.inkMuted} />
+            <View style={styles.flex}>
+              {showTitle &&
+                (onOpenListing ? (
+                  <PressableScale
+                    accessibilityRole="link"
+                    accessibilityLabel={`Voir l’annonce ${txn.post_title ?? ''}`}
+                    hitSlop={8}
+                    onPress={() => onOpenListing(txn.post_id)}>
+                    {titleText}
+                  </PressableScale>
+                ) : (
+                  titleText
+                ))}
+              <AppText variant={showTitle ? 'caption' : 'labelStrong'} color={showTitle ? 'inkMuted' : 'ink'}>
+                {summary}
+                {showTitle ? ` · avec ${otherName}` : ''}
+              </AppText>
+            </View>
+            <Badge label={statusLabel} tone={STATUS_TONE[txn.status] ?? 'neutral'} />
           </View>
-        }>
-        <AppText variant="small" color="inkMuted" style={styles.para}>
-          L’annonce redevient disponible pour les autres acheteurs. {otherName} sera informé(e) dans la conversation.
-        </AppText>
-        <TextField
-          label="Raison (facultatif)"
-          placeholder="Ex. : l’acheteur ne s’est pas présenté"
-          value={reason}
-          onChangeText={setReason}
-          maxLength={300}
-        />
-      </Sheet>
+        )}
 
-      {/* Dispute */}
-      <Sheet
-        visible={sheet === 'dispute'}
-        onClose={() => setSheet(null)}
-        title="Signaler un problème"
-        footer={
-          <Button
-            label="Ouvrir un litige"
-            variant="danger"
-            icon="alert-circle-outline"
-            onPress={() => disputeMut.mutate()}
-            loading={disputeMut.isPending}
-            disabled={reason.trim().length < 10}
-            disabledReason={reason.trim().length < 10 ? 'Décrivez le problème (10 caractères minimum).' : undefined}
-            fullWidth
-          />
-        }>
-        <AppText variant="small" color="inkMuted" style={styles.para}>
-          Article non conforme, paiement non reçu… L’équipe BonDeal examinera la transaction avec vous et l’autre partie.
-        </AppText>
-        <TextField
-          label="Que s’est-il passé ?"
-          value={reason}
-          onChangeText={setReason}
-          multiline
-          maxLength={500}
-          showCount
-        />
-      </Sheet>
+        {open && (
+          <Animated.View entering={enterFade()} exiting={exitFade()} style={styles.body}>
+            <DealTimeline status={txn.status} reviewed={reviewed} />
+            <AppText variant="caption" color="inkMuted">
+              {helper}
+            </AppText>
 
-      {/* Review */}
-      <Sheet
-        visible={sheet === 'review'}
-        onClose={() => setSheet(null)}
-        title={`Votre avis sur ${otherName}`}
-        footer={
-          <View style={styles.sheetActions}>
-            <Button
-              label="Publier l’avis"
-              onPress={() => reviewMut.mutate()}
-              loading={reviewMut.isPending}
-              disabled={rating === 0}
-              disabledReason={rating === 0 ? 'Choisissez une note de 1 à 5 étoiles.' : undefined}
-              fullWidth
-            />
-            <Button label="Plus tard" variant="ghost" onPress={() => setSheet(null)} fullWidth />
-          </View>
-        }>
-        <AppText variant="small" color="inkMuted" style={styles.para}>
-          Comment s’est passé {iAmSeller ? 'cette vente' : 'cet achat'} ? Votre avis sera public sur son profil.
-        </AppText>
-        <View style={styles.stars}>
-          <RatingStars value={rating} onChange={setRating} size={36} showValue={false} />
-          <AppText variant="labelStrong" color={rating ? 'ink' : 'inkSubtle'}>
-            {rating ? RATING_WORDS[rating] : 'Touchez une étoile'}
-          </AppText>
-        </View>
-        <TextField
-          label="Commentaire (facultatif)"
-          placeholder="Ponctuel, article conforme, échange agréable…"
-          value={comment}
-          onChangeText={setComment}
-          multiline
-          maxLength={1000}
-          showCount
-        />
-      </Sheet>
+            {txn.status === 'pending' && (
+              <View style={styles.actions}>
+                <Button
+                  label={iAmSeller ? 'Vente conclue' : 'Article reçu'}
+                  icon="checkmark-done"
+                  onPress={confirm}
+                  loading={confirming}
+                  disabled={busy}
+                  style={styles.flex}
+                />
+                <Button
+                  label={iAmSeller ? 'Annuler la vente' : 'Annuler l’achat'}
+                  variant="ghost"
+                  onPress={() => openSheet('cancel')}
+                  disabled={busy}
+                />
+              </View>
+            )}
+            {txn.status === 'completed' && (
+              <View style={styles.actions}>
+                {!reviewed && (
+                  <Button label="Laisser un avis" icon="star-outline" onPress={() => openSheet('review')} style={styles.flex} />
+                )}
+                <Button label="Signaler un problème" variant="ghost" onPress={() => openSheet('dispute')} disabled={busy} />
+              </View>
+            )}
+          </Animated.View>
+        )}
+      </Animated.View>
+
+      {sheets}
     </Card>
   );
 }
 
 const styles = StyleSheet.create({
   card: { gap: 8 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  body: { gap: 8 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 },
   flex: { flex: 1 },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
-  sheetActions: { gap: 4 },
-  para: { marginBottom: 12 },
-  stars: { alignItems: 'center', gap: 8, marginBottom: 16 },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
 });

@@ -13,10 +13,12 @@ import {
 import type { BdPost } from '@/constants/types';
 import { useTheme } from '@/theme';
 import FadeInView, { useDelayedFlag, useFirstPaint } from '../motion/FadeInView';
-import ListingCard, { ListingCardSkeleton } from '../molecules/ListingCard';
+import ListingCard, { coverAspect, ListingCardSkeleton } from '../molecules/ListingCard';
 
 const PAD = 16;
 const GAP = 12;
+/** Masonry gutter (docs/12: 10 px between columns and rows). */
+const M_GAP = 10;
 
 export interface ListingGridProps {
   posts: BdPost[];
@@ -35,6 +37,19 @@ export interface ListingGridProps {
   /** Room for an absolute header above / the tab bar below. */
   contentPaddingTop?: number;
   contentPaddingBottom?: number;
+  /**
+   * Masonry feed (docs/12 "fil en quinconce", FlashList v2 `masonry`): photo
+   * heights follow the photo ratio when the API reports it, else alternate
+   * 4:5 / 1:1 (stable per listing id), clamped to 3:4…4:3 of portrait.
+   */
+  masonry?: boolean;
+}
+
+/** Photo height for a masonry card. */
+export function masonryPhotoHeight(post: BdPost, width: number): number {
+  const aspect = coverAspect(post);
+  const ratio = aspect ? 1 / aspect : post.id % 2 === 0 ? 5 / 4 : 1;
+  return Math.round(width * Math.min(Math.max(ratio, 0.75), 1.4));
 }
 
 /** Columns: 2 on phones (docs/09), 3 on wide screens / tablets. */
@@ -64,34 +79,42 @@ export default function ListingGrid({
   scrollEventThrottle,
   contentPaddingTop = 0,
   contentPaddingBottom = 0,
+  masonry = false,
 }: ListingGridProps) {
   const t = useTheme();
   const router = useRouter();
   const { width } = useWindowDimensions();
   const cols = gridColumns(width);
-  const cardWidth = Math.floor((width - PAD * 2 - GAP * (cols - 1)) / cols);
+  const gap = masonry ? M_GAP : GAP;
+  const cardWidth = Math.floor((width - PAD * 2 - gap * (cols - 1)) / cols);
   const showSkeletons = useDelayedFlag(!!loading, 1000);
   const firstPaint = useFirstPaint(!loading && posts.length > 0);
 
   const renderItem = useCallback(
     ({ item, index }: { item: Cell; index: number }) => (
-      <View style={styles.cell}>
+      <View style={{ paddingHorizontal: gap / 2, paddingBottom: masonry ? gap + 4 : gap }}>
         {item ? (
           <FadeInView index={index} animate={firstPaint}>
             <ListingCard
               post={item}
               width={cardWidth}
+              variant={masonry ? 'masonry' : 'default'}
+              photoHeight={masonry ? masonryPhotoHeight(item, cardWidth) : undefined}
               showState={showState}
               onPress={() => router.push({ pathname: '/item-details', params: { id: String(item.id) } })}
               onToggleLike={onToggleLike ? () => onToggleLike(item) : undefined}
             />
           </FadeInView>
         ) : (
-          <ListingCardSkeleton width={cardWidth} />
+          <ListingCardSkeleton
+            width={cardWidth}
+            variant={masonry ? 'masonry' : 'default'}
+            photoHeight={masonry ? Math.round(cardWidth * (index % 2 ? 1 : 1.25)) : undefined}
+          />
         )}
       </View>
     ),
-    [cardWidth, onToggleLike, router, showState, firstPaint],
+    [cardWidth, gap, masonry, onToggleLike, router, showState, firstPaint],
   );
 
   // While loading: nothing for the first second, then card-shaped skeletons.
@@ -99,20 +122,27 @@ export default function ListingGrid({
 
   return (
     <FlashList
-      key={`cols-${cols}`}
+      key={`cols-${cols}${masonry ? '-m' : ''}`}
       data={data}
       numColumns={cols}
+      masonry={masonry}
       renderItem={renderItem}
       keyExtractor={(item, i) => (item ? String(item.id) : `sk-${i}`)}
       getItemType={(item) => (item ? 'card' : 'skeleton')}
       contentContainerStyle={{
-        paddingHorizontal: PAD - GAP / 2,
+        paddingHorizontal: PAD - gap / 2,
         paddingTop: contentPaddingTop,
         paddingBottom: contentPaddingBottom + 24,
       }}
       showsVerticalScrollIndicator={false}
-      ListHeaderComponent={ListHeaderComponent ? <View style={styles.bleed}>{ListHeaderComponent}</View> : null}
-      ListEmptyComponent={loading || !ListEmptyComponent ? null : <View style={styles.bleed}>{ListEmptyComponent}</View>}
+      ListHeaderComponent={
+        ListHeaderComponent ? <View style={{ marginHorizontal: -(PAD - gap / 2) }}>{ListHeaderComponent}</View> : null
+      }
+      ListEmptyComponent={
+        loading || !ListEmptyComponent ? null : (
+          <View style={{ marginHorizontal: -(PAD - gap / 2) }}>{ListEmptyComponent}</View>
+        )
+      }
       onEndReached={onEndReached}
       onEndReachedThreshold={0.6}
       onScroll={onScroll}
@@ -141,7 +171,5 @@ export default function ListingGrid({
 }
 
 const styles = StyleSheet.create({
-  cell: { paddingHorizontal: GAP / 2, paddingBottom: GAP },
   footer: { paddingVertical: 16 },
-  bleed: { marginHorizontal: -(PAD - GAP / 2) },
 });

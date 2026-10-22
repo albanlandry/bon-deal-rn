@@ -1,11 +1,11 @@
 // app/search-results.tsx — Résultats: count, sort, filter sheet, grid.
 import { Ionicons } from '@expo/vector-icons';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { NativeScrollEvent, NativeSyntheticEvent, ScrollView, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   AppText,
@@ -16,7 +16,6 @@ import {
   EmptyState,
   ErrorState,
   IconButton,
-  SegmentedControl,
   Sheet,
   showToast,
   TextField,
@@ -33,6 +32,7 @@ import { useCityQuartiers } from '@/lib/api/geo';
 import { searchByName } from '@/lib/textSearch';
 import { describeFilters, feedToFilters } from '@/lib/api/savedSearches';
 import { getCurrentCoords, LOCATION_MESSAGES } from '@/lib/location';
+import { formatAmount } from '@/lib/format';
 import { createStyles, useStyles, useTheme } from '@/theme';
 import { track } from '@/lib/analytics';
 
@@ -40,9 +40,9 @@ type PriceBucket = 'under50' | '50to100' | 'over100';
 type ConditionMode = 'all' | 'like_new' | 'used';
 
 const PRICE_BUCKETS: { id: PriceBucket; label: string }[] = [
-  { id: 'under50', label: '< 50 000 FCFA' },
-  { id: '50to100', label: '50 000 – 100 000' },
-  { id: 'over100', label: '> 100 000 FCFA' },
+  { id: 'under50', label: `Moins de ${formatAmount(50000)}` },
+  { id: '50to100', label: `${formatAmount(50000).replace('\u00A0FCFA', '')} – ${formatAmount(100000)}` },
+  { id: 'over100', label: `Plus de ${formatAmount(100000)}` },
 ];
 
 const CONDITION_MODES: { id: ConditionMode; label: string }[] = [
@@ -53,8 +53,8 @@ const CONDITION_MODES: { id: ConditionMode; label: string }[] = [
 
 const SORT_SEGMENTS: { value: PostSort; label: string }[] = [
   { value: 'date_new', label: 'Récents' },
-  { value: 'price_low', label: 'Prix ↑' },
-  { value: 'price_high', label: 'Prix ↓' },
+  { value: 'price_low', label: 'Prix croissant' },
+  { value: 'price_high', label: 'Prix décroissant' },
 ];
 const DISTANCE_SEGMENT: { value: PostSort; label: string } = { value: 'distance', label: 'Distance' };
 const ALL_SORTS: PostSort[] = ['date_new', 'date_old', 'price_low', 'price_high', 'distance'];
@@ -91,6 +91,10 @@ function modeFromConds(conds: string[]): ConditionMode {
   return 'all';
 }
 
+function conditionsFor(mode: ConditionMode): string[] | undefined {
+  return mode === 'like_new' ? ['excellent'] : mode === 'used' ? ['good', 'fair', 'poor'] : undefined;
+}
+
 interface Filters {
   category: string | null;
   minPrice?: number;
@@ -104,6 +108,7 @@ export default function SearchResultsScreen() {
   const t = useTheme();
   const s = useStyles(makeStyles);
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{
     query?: string;
     category?: string;
@@ -147,12 +152,7 @@ export default function SearchResultsScreen() {
     if (!filters.near && sort === 'distance') setSort('date_new');
   }, [filters.near, sort]);
 
-  const condition =
-    filters.conditionMode === 'like_new'
-      ? ['excellent']
-      : filters.conditionMode === 'used'
-        ? ['good', 'fair', 'poor']
-        : undefined;
+  const condition = conditionsFor(filters.conditionMode);
 
   const feedParams: FeedParams = {
     search: query || undefined,
@@ -240,6 +240,29 @@ export default function SearchResultsScreen() {
     [quartiers.quartiers, quartierFilter, draft.quartier],
   );
 
+  // Live count for the filter sheet ("Voir N résultats"): the same feed query
+  // the screen runs on "Appliquer", so applying is then served from cache.
+  const draftSort: PostSort =
+    draft.near && !filters.near ? 'distance' : !draft.near && sort === 'distance' ? 'date_new' : sort;
+  const draftFeed = useInfiniteQuery({
+    ...postsInfiniteQuery({
+      search: query || undefined,
+      categories: draft.category ? [draft.category] : undefined,
+      minPrice: draft.minPrice,
+      maxPrice: draft.maxPrice,
+      condition: conditionsFor(draft.conditionMode),
+      quartier: draft.quartier ?? undefined,
+      near: draft.near ?? undefined,
+      sort: draftSort,
+    }),
+    enabled: showSheet,
+    placeholderData: keepPreviousData,
+  });
+  const draftTotal =
+    showSheet && draftFeed.isSuccess && !draftFeed.isPlaceholderData ? draftFeed.data.pages[0]?.total_posts : undefined;
+  const applyLabel =
+    draftTotal == null ? 'Appliquer' : `Voir ${draftTotal} résultat${draftTotal > 1 ? 's' : ''}`;
+
   const draftBucket = bucketFromRange(draft.minPrice, draft.maxPrice);
   const setDraftBucket = (b: PriceBucket) =>
     setDraft((d) =>
@@ -302,24 +325,7 @@ export default function SearchResultsScreen() {
   }));
 
   const countText = feed.isLoading ? 'Recherche…' : `${total} résultat${total > 1 ? 's' : ''}`;
-  const header = (
-    <View style={s.listHeader}>
-      <SegmentedControl
-        segments={filters.near ? [...SORT_SEGMENTS, DISTANCE_SEGMENT] : SORT_SEGMENTS}
-        value={sort}
-        onChange={setSort}
-        accessibilityLabel="Trier les résultats"
-      />
-      <View style={s.countRow} accessibilityLiveRegion="polite">
-        {/* Count cross-fades on change. */}
-        <Animated.View key={countText} entering={enterFade()} exiting={exitFade()} style={s.flex}>
-          <AppText variant="labelStrong" color="inkMuted">
-            {countText}
-          </AppText>
-        </Animated.View>
-      </View>
-    </View>
-  );
+  const sortSegments = filters.near ? [...SORT_SEGMENTS, DISTANCE_SEGMENT] : SORT_SEGMENTS;
 
   return (
     <SafeAreaView style={s.container}>
@@ -361,6 +367,27 @@ export default function SearchResultsScreen() {
             </Animated.View>
           ))}
         </ScrollView>
+        {/* Count + sort stay visible while the grid scrolls. */}
+        <View style={s.sortRow}>
+          <View style={s.countCell} accessibilityLiveRegion="polite">
+            {/* Count cross-fades on change. */}
+            <Animated.View key={countText} entering={enterFade()} exiting={exitFade()}>
+              <AppText variant="labelStrong" color="inkMuted" numberOfLines={1}>
+                {countText}
+              </AppText>
+            </Animated.View>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            accessibilityRole="radiogroup"
+            accessibilityLabel="Trier les résultats"
+            contentContainerStyle={s.sortChips}>
+            {sortSegments.map((o) => (
+              <Chip key={o.value} label={o.label} selected={sort === o.value} onPress={() => setSort(o.value)} />
+            ))}
+          </ScrollView>
+        </View>
       </View>
 
       {showError ? (
@@ -378,8 +405,8 @@ export default function SearchResultsScreen() {
           onToggleLike={onToggleLike}
           onScroll={onScroll}
           scrollEventThrottle={32}
-          contentPaddingBottom={72}
-          ListHeaderComponent={header}
+          contentPaddingTop={t.spacing.sm}
+          contentPaddingBottom={insets.bottom + 72}
           ListEmptyComponent={
             <EmptyState
               icon="search-outline"
@@ -394,7 +421,9 @@ export default function SearchResultsScreen() {
         />
       )}
 
-      <Animated.View pointerEvents={saveShown ? 'box-none' : 'none'} style={[s.saveWrap, savePillStyle]}>
+      <Animated.View
+        pointerEvents={saveShown ? 'box-none' : 'none'}
+        style={[s.saveWrap, { bottom: insets.bottom + t.spacing.md }, savePillStyle]}>
         <PressableScale
           accessibilityRole="button"
           accessibilityLabel="Enregistrer cette recherche"
@@ -418,9 +447,9 @@ export default function SearchResultsScreen() {
         title="Filtres"
         footer={
           <View style={s.sheetActions}>
-            <Button label="Effacer" variant="secondary" onPress={() => setDraft(emptyFilters)} style={s.flex} />
+            <Button label="Réinitialiser" variant="secondary" onPress={() => setDraft(emptyFilters)} style={s.flex} />
             <Button
-              label="Appliquer"
+              label={applyLabel}
               onPress={() => {
                 const changed = (Object.keys(draft) as (keyof Filters)[]).filter(
                   (k) => JSON.stringify(draft[k] ?? null) !== JSON.stringify(filters[k] ?? null),
@@ -578,27 +607,28 @@ const makeStyles = createStyles((t) => ({
     gap: t.spacing.xs,
     minHeight: 48,
     paddingHorizontal: t.spacing.md,
-    borderRadius: t.radius.full,
+    borderRadius: t.radius.md,
     borderWidth: 1,
     borderColor: t.colors.line,
     backgroundColor: t.colors.surface,
   },
-  listHeader: { paddingHorizontal: t.spacing.md, paddingTop: t.spacing.sm, gap: t.spacing.xs },
   filterBar: {
     borderBottomWidth: 1,
     borderBottomColor: t.colors.line,
     backgroundColor: t.colors.canvas,
   },
   activeRow: { gap: t.spacing.xs, paddingHorizontal: t.spacing.md, paddingVertical: t.spacing.xs },
-  countRow: { flexDirection: 'row', alignItems: 'center', minHeight: 28, paddingBottom: t.spacing.xs },
-  saveWrap: { position: 'absolute', left: 0, right: 0, bottom: 40, alignItems: 'center' },
+  sortRow: { flexDirection: 'row', alignItems: 'center', paddingLeft: t.spacing.md, paddingBottom: t.spacing.xs },
+  countCell: { maxWidth: '35%', paddingRight: t.spacing.xs },
+  sortChips: { gap: t.spacing.xs, paddingRight: t.spacing.md },
+  saveWrap: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
   savePill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: t.spacing.xs,
     minHeight: 48,
     paddingHorizontal: t.spacing.lg,
-    borderRadius: t.radius.full,
+    borderRadius: t.radius.md,
     backgroundColor: t.colors.ink,
   },
   bleed: { marginHorizontal: -20 },

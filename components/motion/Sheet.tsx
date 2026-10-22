@@ -174,8 +174,8 @@ export default function Sheet({
               styles.sheet,
               {
                 backgroundColor: t.colors.surface,
-                borderTopLeftRadius: t.radius.lg + 4,
-                borderTopRightRadius: t.radius.lg + 4,
+                borderTopLeftRadius: t.radius.lg,
+                borderTopRightRadius: t.radius.lg,
                 paddingBottom: Math.max(insets.bottom, 12),
               },
               fixedH ? { height: kbH ? Math.min(fixedH, H - kbH - insets.top - 8) : fixedH } : { maxHeight: kbH ? H - kbH - insets.top - 8 : maxHeight },

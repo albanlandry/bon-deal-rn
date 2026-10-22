@@ -1,10 +1,11 @@
 // app/my-listings.tsx — the seller's own listings.
 //
 // State filter chips with real counts (Hick: one dimension, ≤ 6 options);
-// familiar 2-column ListingCard grid (Jakob) with a compact action bar under
-// each card; "Vendu" is optimistic with an undo toast (Doherty) because it is
-// reversible, while delete keeps a confirm that states the exact consequence
-// (Norman, ethics §2).
+// familiar 2-column ListingCard grid (Jakob) with labelled actions under each
+// card ("Vendu", "Modifier"); delete lives in an overflow sheet, away from the
+// common action, and keeps a confirm that states the exact consequence
+// (Norman, ethics §2). "Vendu" is optimistic with an undo toast (Doherty)
+// because it is reversible, and gets a short celebration (peak–end).
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useMemo, useState } from 'react';
@@ -14,13 +15,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   AppText,
   Button,
+  Celebrate,
   Chip,
   EmptyState,
   ErrorState,
   IconButton,
   ListingCard,
   ListingCardSkeleton,
+  ListRow,
   ScreenHeader,
+  Sheet,
   showToast,
 } from '@/components/ui';
 import { ApiError } from '@/lib/api';
@@ -80,6 +84,8 @@ export default function MyListingsScreen() {
   const { width } = useWindowDimensions();
   const cardWidth = (width - PAD * 2 - GAP) / 2;
   const [selectedFilter, setSelectedFilter] = useState<FilterType>('all');
+  const [menuPost, setMenuPost] = useState<BdPost | null>(null);
+  const [celebrate, setCelebrate] = useState(0);
 
   const listing = useQuery(myPostsQuery());
   const posts = listing.data?.posts ?? [];
@@ -177,6 +183,7 @@ export default function MyListingsScreen() {
   const handleMarkAsSold = (post: BdPost) => {
     const prev = post.state;
     haptics.success();
+    setCelebrate(Date.now()); // never blocks touches; the undo toast stays usable
     stateMut.mutate({ id: post.id, state: 'sold', prev });
     showToast.undo('Marquée comme vendue', () =>
       stateMut.mutate({ id: post.id, state: prev, prev: 'sold' }),
@@ -246,33 +253,34 @@ export default function MyListingsScreen() {
           style={styles.renew}
         />
       )}
+      {(item.state === 'published' || item.state === 'reserved') && (
+        <Button
+          label="Vendu"
+          icon="checkmark-done-outline"
+          size="sm"
+          variant="secondary"
+          onPress={() => handleMarkAsSold(item)}
+          disabled={busy}
+          accessibilityHint={`Marque « ${item.title} » comme vendue`}
+          style={styles.sold}
+        />
+      )}
       <View style={styles.actions}>
-        {(item.state === 'published' || item.state === 'reserved') && (
-          <IconButton
-            icon="checkmark-done-outline"
-            label={`Marquer « ${item.title} » comme vendue`}
-            color="success"
-            variant="tonal"
-            size={20}
-            onPress={() => handleMarkAsSold(item)}
-            disabled={busy}
-          />
-        )}
-        <IconButton
+        <Button
+          label="Modifier"
           icon="create-outline"
-          label={`Modifier « ${item.title} »`}
-          variant="tonal"
-          size={20}
+          size="sm"
+          variant="ghost"
           onPress={() => handleEdit(item.id)}
           disabled={busy}
+          accessibilityHint={`Ouvre « ${item.title} » en modification`}
+          style={styles.flex}
         />
         <IconButton
-          icon="trash-outline"
-          label={`Supprimer « ${item.title} »`}
-          color="danger"
-          variant="tonal"
+          icon="ellipsis-horizontal"
+          label={`Plus d’actions pour « ${item.title} »`}
           size={20}
-          onPress={() => handleDelete(item)}
+          onPress={() => setMenuPost(item)}
           disabled={busy}
         />
       </View>
@@ -285,6 +293,7 @@ export default function MyListingsScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScreenHeader
+        large
         title="Mes annonces"
         subtitle={listing.data ? `${posts.length} annonce${posts.length > 1 ? 's' : ''}` : undefined}
         right={
@@ -361,6 +370,32 @@ export default function MyListingsScreen() {
           }
         />
       )}
+
+      <Sheet visible={!!menuPost} onClose={() => setMenuPost(null)} title={menuPost?.title ?? 'Annonce'}>
+        <ListRow
+          icon="eye-outline"
+          title="Voir l’annonce"
+          onPress={() => {
+            const p = menuPost;
+            setMenuPost(null);
+            if (p) router.push({ pathname: '/item-details', params: { id: String(p.id) } });
+          }}
+        />
+        <ListRow
+          icon="trash-outline"
+          title="Supprimer l’annonce"
+          subtitle="Définitif, avec ses photos"
+          destructive
+          onPress={() => {
+            const p = menuPost;
+            setMenuPost(null);
+            if (p) handleDelete(p);
+          }}
+          last
+        />
+      </Sheet>
+
+      <Celebrate trigger={celebrate} haptic={false} onDone={() => setCelebrate(0)} />
     </SafeAreaView>
   );
 }
@@ -372,10 +407,12 @@ const makeStyles = createStyles((t: Theme) => ({
   skeletonGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP },
   row: { gap: GAP, marginBottom: t.spacing.md },
   emptyGrow: { flexGrow: 1 },
-  stats: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6, paddingHorizontal: 2 },
+  flex: { flex: 1 },
+  stats: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8, paddingHorizontal: 4 },
   statGap: { marginLeft: 8 },
-  actions: { flexDirection: 'row', marginTop: 2, marginLeft: -2 },
-  expiry: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, paddingHorizontal: 2 },
-  renew: { marginTop: 6 },
+  actions: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+  expiry: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4, paddingHorizontal: 4 },
+  renew: { marginTop: 8 },
+  sold: { marginTop: 8 },
 }));
 

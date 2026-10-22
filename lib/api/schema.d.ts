@@ -128,8 +128,10 @@ export interface paths {
         };
         /**
          * Funnel
-         * @description view_item → contact_seller → make_offer → sale_completed: distinct users per
-         *     step over the period, and the conversion from the previous step.
+         * @description view_item → contact_seller → make_offer → sale_completed over the period.
+         *
+         *     A step counts only users who also reached every earlier step, so the
+         *     funnel never grows (conversion ≤ 100 %); `users_total` is the step on its own.
          */
         get: operations["funnel_v1_admin_analytics_funnel_get"];
         put?: never;
@@ -1252,6 +1254,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/auth/login/phone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Phone Password Login
+         * @description Signs in with phone number + the password the user chose. Same answer
+         *     for an unknown number, a number without a chosen password and a wrong
+         *     password, so it doesn't reveal which numbers have accounts.
+         */
+        post: operations["phone_password_login_v1_auth_login_phone_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/auth/logout": {
         parameters: {
             query?: never;
@@ -1360,6 +1384,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/auth/me/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set My Password
+         * @description Chooses or changes the password used by POST /auth/login/phone.
+         *
+         *     A session opened with the phone code (amr "otp") may set it without the
+         *     current one: that is also how a forgotten password is replaced. A session
+         *     opened with the password must confirm the current one. Other password
+         *     sessions are ended (their refresh tokens predate password_set_at).
+         */
+        put: operations["set_my_password_v1_auth_me_password_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/auth/me/preferences": {
         parameters: {
             query?: never;
@@ -1412,6 +1461,27 @@ export interface paths {
          * @description Handles user signup with password verification.
          */
         post: operations["signup_v1_auth_signup_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/token/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mobile Refresh
+         * @description Renews a phone + password session: a new access token and a new
+         *     refresh token (sliding 30 days).
+         */
+        post: operations["mobile_refresh_v1_auth_token_refresh_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2269,6 +2339,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/search/trending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search Trending
+         * @description Most searched terms in a city over the last 7 days (all cities without
+         *     `city`). Public; only terms searched by at least 3 different people.
+         *     Cached 10 minutes.
+         */
+        get: operations["search_trending_v1_search_trending_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/transactions": {
         parameters: {
             query?: never;
@@ -2329,6 +2421,27 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/v1/transactions/{transaction_id}/meeting": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Transaction Meeting
+         * @description Buyer or seller sets or changes the meeting place and time of a pending deal.
+         *     The other party gets a system chat message and a notification.
+         */
+        patch: operations["update_transaction_meeting_v1_transactions__transaction_id__meeting_patch"];
         trace?: never;
     };
     "/v1/transactions/{transaction_id}/reviews": {
@@ -3340,6 +3453,12 @@ export interface components {
         BulkQuartiers: {
             /** Items */
             items: components["schemas"]["QuartierIn"][];
+            /**
+             * Source
+             * @default staff
+             * @enum {string}
+             */
+            source: "staff" | "osm";
         };
         /** ChangePassword */
         ChangePassword: {
@@ -3489,6 +3608,31 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * ConversationLastMessageOut
+         * @description Preview of the newest message. body is cut to 140 characters; system
+         *     messages (offers, acceptances…) have no body and carry payload instead.
+         */
+        ConversationLastMessageOut: {
+            /** Body */
+            body: string | null;
+            /** Created At */
+            created_at: string | null;
+            /** Id */
+            id: number;
+            /** Is Mine */
+            is_mine: boolean;
+            /** Kind */
+            kind: string;
+            /** Payload */
+            payload: unknown;
+            /** Read At */
+            read_at: string | null;
+            /** Sender Id */
+            sender_id: number | null;
+        } & {
+            [key: string]: unknown;
+        };
         /** ConversationListOut */
         ConversationListOut: {
             /** Conversations */
@@ -3554,6 +3698,7 @@ export interface components {
             created_at: string | null;
             /** Id */
             id: number;
+            last_message?: components["schemas"]["ConversationLastMessageOut"] | null;
             /** Last Message At */
             last_message_at: string | null;
             latest_negotiation: components["schemas"]["ConversationNegotiationSummaryOut"] | null;
@@ -4224,6 +4369,8 @@ export interface components {
             first_name: string | null;
             /** Gender */
             gender: string | null;
+            /** Has Password */
+            has_password: boolean;
             /** Id */
             id: number;
             /** Last Name */
@@ -4261,6 +4408,8 @@ export interface components {
             first_name: string | null;
             /** Gender */
             gender: string | null;
+            /** Has Password */
+            has_password: boolean;
             /** Id */
             id: number;
             /** Last Name */
@@ -4353,6 +4502,22 @@ export interface components {
             message: string;
         } & {
             [key: string]: unknown;
+        };
+        /** MobileRefresh */
+        MobileRefresh: {
+            /** Refresh Token */
+            refresh_token: string;
+        };
+        /** MobileTokenResponse */
+        MobileTokenResponse: {
+            /** Access Token */
+            access_token: string;
+            /** Expires In */
+            expires_in: number;
+            /** Refresh Token */
+            refresh_token: string;
+            /** Token Type */
+            token_type: string;
         };
         /** ModerationOwnerOut */
         ModerationOwnerOut: {
@@ -4813,6 +4978,13 @@ export interface components {
             amount: number;
             /** Message */
             message?: string | null;
+        };
+        /** PhonePasswordLogin */
+        PhonePasswordLogin: {
+            /** Password */
+            password: string;
+            /** Phone Number */
+            phone_number: string;
         };
         /** PostCreate */
         PostCreate: {
@@ -5424,6 +5596,15 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** SetPassword */
+        SetPassword: {
+            /** Confirm Password */
+            confirm_password: string;
+            /** Current Password */
+            current_password?: string | null;
+            /** Password */
+            password: string;
+        };
         /** SetReviewVisibility */
         SetReviewVisibility: {
             /** Is Visible */
@@ -5538,6 +5719,8 @@ export interface components {
             disputed_at: string | null;
             /** Id */
             id: number;
+            /** Meeting At */
+            meeting_at: string | null;
             /** Meeting Location */
             meeting_location: string | null;
             /** Payment Method */
@@ -5605,6 +5788,8 @@ export interface components {
             disputed_at: string | null;
             /** Id */
             id: number;
+            /** Meeting At */
+            meeting_at: string | null;
             /** Meeting Location */
             meeting_location: string | null;
             /** Payment Method */
@@ -5644,6 +5829,26 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** TrendingItem */
+        TrendingItem: {
+            /** Count */
+            count: number;
+            /** Query */
+            query: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** TrendingOut */
+        TrendingOut: {
+            /** City */
+            city: string | null;
+            /** Days */
+            days: number;
+            /** Items */
+            items: components["schemas"]["TrendingItem"][];
+        } & {
+            [key: string]: unknown;
+        };
         /** UpdateCountry */
         UpdateCountry: {
             /** Is Default */
@@ -5677,6 +5882,16 @@ export interface components {
             quartier?: string | null;
             /** Username */
             username?: string | null;
+        };
+        /**
+         * UpdateMeeting
+         * @description Omitted fields stay as they are; an explicit null clears the field.
+         */
+        UpdateMeeting: {
+            /** Meeting At */
+            meeting_at?: string | null;
+            /** Meeting Location */
+            meeting_location?: string | null;
         };
         /** UpdatePostRequest */
         UpdatePostRequest: {
@@ -8283,6 +8498,39 @@ export interface operations {
             };
         };
     };
+    phone_password_login_v1_auth_login_phone_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PhonePasswordLogin"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MobileTokenResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     logout_v1_auth_logout_post: {
         parameters: {
             query?: never;
@@ -8475,6 +8723,39 @@ export interface operations {
             };
         };
     };
+    set_my_password_v1_auth_me_password_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetPassword"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_preferences_v1_auth_me_preferences_get: {
         parameters: {
             query?: never;
@@ -8568,6 +8849,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MessageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mobile_refresh_v1_auth_token_refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MobileRefresh"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MobileTokenResponse"];
                 };
             };
             /** @description Validation Error */
@@ -9262,6 +9576,8 @@ export interface operations {
                 near_lng?: number | null;
                 radius_km?: number | null;
                 owner_id?: number | null;
+                /** @description true: annonces gratuites seulement ; false: payantes/échanges seulement */
+                is_free?: boolean | null;
             };
             header?: never;
             path?: never;
@@ -10219,6 +10535,38 @@ export interface operations {
             };
         };
     };
+    search_trending_v1_search_trending_get: {
+        parameters: {
+            query?: {
+                city?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrendingOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_transactions_v1_transactions_get: {
         parameters: {
             query?: {
@@ -10328,6 +10676,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["OpenDispute"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransactionResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_transaction_meeting_v1_transactions__transaction_id__meeting_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                transaction_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMeeting"];
             };
         };
         responses: {

@@ -1,12 +1,14 @@
 // app/notifications.tsx — Notifications grouped by day (sticky headers), a
 // fixed icon + hue per type (category mnemonic when the payload names one),
-// swipe right to mark read, deep links (docs/09 §4 Notifications).
+// swipe right to mark read, deep links (docs/09 §4 Notifications). "Tout lire"
+// is a pill in the thumb zone; an unread dot pops once when it appears.
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { RefreshControl, SectionList, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, { useAnimatedStyle, useSharedValue, withSequence } from 'react-native-reanimated';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   AppText,
@@ -29,6 +31,8 @@ import { markAllRead, markRead, notificationsQuery } from '@/lib/api/notificatio
 import { filtersToRouteParams, savedSearchesQuery } from '@/lib/api/savedSearches';
 import { formatDayLabel, formatRelativeTime } from '@/lib/format';
 import { ColorTokens, createStyles, useStyles, useTheme } from '@/theme';
+import { duration } from '@/theme/motion';
+import { enterFromBottom, exitDown, spring, timing } from '@/components/motion/anim';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 type BdNotificationsResponseLike = { unread_count: number; notifications: BdNotification[] };
@@ -56,9 +60,22 @@ function iconFor(type: string): { name: IconName; color: keyof ColorTokens; tint
       return { name: 'time', color: 'inkMuted', tint: 'surfaceAlt' };
     case 'saved_search_match':
       return { name: 'bookmark', color: 'trust', tint: 'trustTint' };
+    case 'meeting_set':
+      return { name: 'calendar', color: 'brandStrong', tint: 'brandTint' };
     default:
       return { name: 'notifications', color: 'inkMuted', tint: 'surfaceAlt' };
   }
+}
+
+/** Unread dot: pops once (1 → 1.4 → 1) when it appears, like the chat list's. Never loops. */
+function UnreadDot() {
+  const s = useStyles(makeStyles);
+  const scale = useSharedValue(1);
+  useEffect(() => {
+    scale.value = withSequence(timing(1.4, duration.short, 'standard'), spring(1, 'fast'));
+  }, [scale]);
+  const anim = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  return <Animated.View style={[s.dot, anim]} accessibilityElementsHidden />;
 }
 
 export default function NotificationsScreen() {
@@ -66,6 +83,7 @@ export default function NotificationsScreen() {
   const s = useStyles(makeStyles);
   const router = useRouter();
   const queryClient = useQueryClient();
+  const insets = useSafeAreaInsets();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
 
   const { data, isLoading, error, refetch, isRefetching } = useQuery({
@@ -151,6 +169,10 @@ export default function NotificationsScreen() {
       return () => router.push('/my-listings');
     }
     if (item.type === 'saved_search_match') return () => openSavedSearchMatch(item);
+    const transactionId = item.payload?.transaction_id;
+    if (item.type === 'meeting_set' && transactionId != null) {
+      return () => router.push({ pathname: '/deal', params: { id: String(transactionId) } });
+    }
     if (item.conversation_id) {
       return () =>
         router.push({ pathname: '/chatroom', params: { conversationId: String(item.conversation_id) } });
@@ -167,7 +189,17 @@ export default function NotificationsScreen() {
     targetOf(item)?.();
   };
 
-  const renderItem = ({ item }: { item: BdNotification }) => {
+  const renderItem = ({
+    item,
+    index,
+    section,
+  }: {
+    item: BdNotification;
+    index: number;
+    section: { data: BdNotification[] };
+  }) => {
+    const first = index === 0;
+    const last = index === section.data.length - 1;
     const icon = iconFor(item.type);
     const unread = !item.read_at;
     const hasTarget = !!targetOf(item);
@@ -176,6 +208,7 @@ export default function NotificationsScreen() {
     return (
       <FadeInView index={order.get(item.id) ?? 99} animate={firstPaint}>
         <SwipeRow
+          style={[s.groupItem, first && s.groupFirst, last && s.groupLast]}
           enabled={unread}
           left={
             unread
@@ -183,7 +216,7 @@ export default function NotificationsScreen() {
                   label: 'Marquer lu',
                   icon: 'checkmark-done',
                   color: t.colors.trust,
-                  onColor: t.isDark ? t.colors.onBrand : '#FFFFFF',
+                  onColor: t.colors.onDanger, // same pair as on `trust`: white (light), ink (dark)
                   onAction: () => markReadMutation.mutate(item.id),
                 }
               : undefined
@@ -196,7 +229,7 @@ export default function NotificationsScreen() {
             onAccessibilityAction={(e) => e.nativeEvent.actionName === 'markRead' && markReadMutation.mutate(item.id)}
             scaleTo={0.98}
             onPress={() => handlePress(item)}
-            style={[s.row, unread && s.rowUnread]}>
+            style={[s.row, last && s.rowLast]}>
             <View>
               <View style={[s.icon, { backgroundColor: t.colors[icon.tint] }]}>
                 <Ionicons name={icon.name} size={20} color={t.colors[icon.color]} />
@@ -205,7 +238,7 @@ export default function NotificationsScreen() {
             </View>
             <View style={s.flex}>
               <View style={s.titleRow}>
-                <AppText variant={unread ? 'labelStrong' : 'label'} style={s.flex} numberOfLines={1}>
+                <AppText variant={unread ? 'bodyStrong' : 'body'} style={s.flex} numberOfLines={1}>
                   {item.title}
                 </AppText>
                 <AppText variant="caption" color="inkMuted">
@@ -222,7 +255,7 @@ export default function NotificationsScreen() {
               )}
             </View>
             {unread ? (
-              <View style={s.dot} accessibilityElementsHidden />
+              <UnreadDot />
             ) : hasTarget ? (
               <Ionicons name="chevron-forward" size={16} color={t.colors.inkSubtle} />
             ) : null}
@@ -238,7 +271,7 @@ export default function NotificationsScreen() {
       <View style={s.skeletons}>
         {[0, 1, 2, 3, 4].map((i) => (
           <View key={i} style={s.row}>
-            <Skeleton width={40} height={40} radius={20} />
+            <Skeleton width={40} height={40} radius={t.radius.sm} />
             <View style={[s.flex, { gap: 8 }]}>
               <Skeleton width="60%" height={14} />
               <Skeleton width="90%" height={12} />
@@ -273,7 +306,7 @@ export default function NotificationsScreen() {
           </View>
         )}
         stickySectionHeadersEnabled
-        contentContainerStyle={[s.list, notifications.length === 0 && s.grow]}
+        contentContainerStyle={[s.list, unreadCount > 0 && s.listWithPill, notifications.length === 0 && s.grow]}
         refreshControl={
           <RefreshControl
             refreshing={isRefetching}
@@ -297,22 +330,27 @@ export default function NotificationsScreen() {
   return (
     <SafeAreaView style={s.container}>
       <ScreenHeader
+        large
         title="Notifications"
         subtitle={unreadCount > 0 ? `${unreadCount} non lue${unreadCount > 1 ? 's' : ''}` : undefined}
-        right={
-          unreadCount > 0 ? (
-            <Button
-              label="Tout lire"
-              variant="ghost"
-              size="sm"
-              icon="checkmark-done"
-              onPress={() => markAllMutation.mutate()}
-              loading={markAllMutation.isPending}
-            />
-          ) : undefined
-        }
       />
       {body}
+      {isAuthenticated && unreadCount > 0 && (
+        <Animated.View
+          entering={enterFromBottom()}
+          exiting={exitDown()}
+          pointerEvents="box-none"
+          style={[s.pillWrap, { bottom: insets.bottom + t.spacing.md }]}>
+          <Button
+            label="Tout marquer comme lu"
+            icon="checkmark-done"
+            variant="secondary"
+            onPress={() => markAllMutation.mutate()}
+            loading={markAllMutation.isPending}
+            style={s.pill}
+          />
+        </Animated.View>
+      )}
     </SafeAreaView>
   );
 }
@@ -322,15 +360,27 @@ const makeStyles = createStyles((t) => ({
   flex: { flex: 1 },
   grow: { flexGrow: 1 },
   list: { paddingBottom: t.spacing.xxl },
-  skeletons: { paddingTop: t.spacing.md },
+  listWithPill: { paddingBottom: 96 },
+  pillWrap: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
+  pill: { backgroundColor: t.colors.surface, ...t.elevation.sheet },
+  skeletons: { paddingTop: t.spacing.md, marginHorizontal: t.spacing.md },
   sectionHeader: {
     paddingHorizontal: t.spacing.md,
-    paddingTop: t.spacing.md,
+    paddingTop: t.spacing.lg,
     paddingBottom: t.spacing.xs,
     backgroundColor: t.colors.canvas,
   },
+  groupItem: {
+    marginHorizontal: t.spacing.md,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderColor: t.colors.line,
+    backgroundColor: t.colors.surface,
+  },
+  groupFirst: { borderTopWidth: 1, borderTopLeftRadius: t.radius.md, borderTopRightRadius: t.radius.md },
+  groupLast: { borderBottomWidth: 1, borderBottomLeftRadius: t.radius.md, borderBottomRightRadius: t.radius.md },
   sectionText: { letterSpacing: 0.5 },
-  catBadge: { position: 'absolute', right: -6, bottom: -6, borderWidth: 2 },
+  catBadge: { position: 'absolute', right: -4, bottom: -4, borderWidth: 2 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -340,10 +390,10 @@ const makeStyles = createStyles((t) => ({
     paddingVertical: t.spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: t.colors.line,
-    backgroundColor: t.colors.canvas,
+    backgroundColor: t.colors.surface,
   },
-  rowUnread: { backgroundColor: t.colors.surface },
-  icon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  rowLast: { borderBottomWidth: 0 },
+  icon: { width: 40, height: 40, borderRadius: t.radius.sm, alignItems: 'center', justifyContent: 'center' },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs },
   warnNote: { marginTop: 4 },
   dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: t.colors.brand },

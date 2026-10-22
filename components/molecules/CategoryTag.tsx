@@ -25,13 +25,13 @@ export default function CategoryTag({ value, iconOnly, size = 28, style }: Categ
     return (
       <View
         accessibilityLabel={c.meta.label}
-        style={[styles.round, { width: size, height: size, borderRadius: size / 2, backgroundColor: c.tint }, style]}>
+        style={[styles.round, { width: size, height: size, borderRadius: t.radius.sm, backgroundColor: c.tint }, style]}>
         <Ionicons name={categoryIcon(value) as any} size={Math.round(size * 0.55)} color={c.hue} />
       </View>
     );
   }
   return (
-    <View style={[styles.tag, { backgroundColor: c.tint, borderRadius: t.radius.full }, style]}>
+    <View style={[styles.tag, { backgroundColor: c.tint, borderRadius: t.radius.sm }, style]}>
       <Ionicons name={categoryIcon(value) as any} size={14} color={c.hue} />
       <AppText variant="captionStrong" style={{ color: c.text }} numberOfLines={1}>
         {c.meta.label}
@@ -42,5 +42,5 @@ export default function CategoryTag({ value, iconOnly, size = 28, style }: Categ
 
 const styles = StyleSheet.create({
   round: { alignItems: 'center', justifyContent: 'center' },
-  tag: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 5, paddingHorizontal: 10, paddingVertical: 4 },
+  tag: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 4, paddingHorizontal: 8, paddingVertical: 4 },
 });

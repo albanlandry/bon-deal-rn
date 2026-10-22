@@ -9,7 +9,7 @@ export default function FavoritesScreen() {
   const t = useTheme();
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: t.colors.canvas }}>
-      <ScreenHeader title="Favoris" />
+      <ScreenHeader large title="Favoris" />
       <FavoritesList />
     </SafeAreaView>
   );

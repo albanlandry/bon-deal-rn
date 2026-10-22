@@ -37,7 +37,8 @@ export default function Card({
     borderColor: t.colors.line,
     padding: padded ? t.spacing.md : 0,
     overflow: 'hidden',
-    ...(elevated ? (t.elevation.card as ViewStyle) : null),
+    // Direction B is flat: hairline border + the faint `elevation.card`.
+    ...(elevated || tone === 'surface' ? (t.elevation.card as ViewStyle) : null),
   };
   if (onPress) {
     return (

@@ -42,6 +42,6 @@ export default function ProfileStat({ value, label, icon, onPress }: ProfileStat
 }
 
 const styles = StyleSheet.create({
-  tile: { flex: 1, alignItems: 'center', paddingVertical: 12, paddingHorizontal: 8, gap: 2 },
-  icon: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
+  tile: { flex: 1, alignItems: 'center', paddingVertical: 12, paddingHorizontal: 8, gap: 4 },
+  icon: { width: 28, height: 28, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
 });
