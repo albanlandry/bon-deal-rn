@@ -13,12 +13,13 @@ import {
   FadeOutUp,
   LinearTransition,
   ReduceMotion,
+  withDelay,
   withSpring,
   withTiming,
   type WithSpringConfig,
   type WithTimingConfig,
 } from 'react-native-reanimated';
-import { duration, easing, spring as springTokens, staggerDelay } from '@/theme/motion';
+import { duration, easing, offset, spring as springTokens, staggerDelay } from '@/theme/motion';
 
 export const RM = ReduceMotion.System;
 
@@ -71,13 +72,76 @@ export function enterUp(index = 0, ms: number = duration.medium) {
   return d ? b.delay(d) : b;
 }
 
-export const enterFade = (ms: number = duration.short) => FadeIn.duration(ms).reduceMotion(RM);
-export const exitFade = (ms: number = duration.short) => FadeOut.duration(ms).reduceMotion(RM);
+export const enterFade = (ms: number = duration.short) => FadeIn.duration(ms).easing(ease.enter).reduceMotion(RM);
+export const exitFade = (ms: number = duration.short) => FadeOut.duration(ms).easing(ease.exit).reduceMotion(RM);
 export const enterFromBottom = (ms: number = duration.short) =>
-  FadeInDown.duration(ms).withInitialValues({ transform: [{ translateY: 12 }] }).reduceMotion(RM);
-export const enterFromTop = (ms: number = duration.medium) => FadeInUp.duration(ms).reduceMotion(RM);
-export const exitDown = (ms: number = duration.exit) => FadeOutDown.duration(ms).reduceMotion(RM);
-export const exitUp = (ms: number = duration.exit) => FadeOutUp.duration(ms).reduceMotion(RM);
+  FadeInDown.duration(ms).easing(ease.enter).withInitialValues({ transform: [{ translateY: 12 }] }).reduceMotion(RM);
+export const enterFromTop = (ms: number = duration.medium) => FadeInUp.duration(ms).easing(ease.enter).reduceMotion(RM);
+export const exitDown = (ms: number = duration.exit) => FadeOutDown.duration(ms).easing(ease.exit).reduceMotion(RM);
+export const exitUp = (ms: number = duration.exit) => FadeOutUp.duration(ms).easing(ease.exit).reduceMotion(RM);
+
+/* ---------- Screen entrances (custom entering worklets) ---------- */
+
+export interface RiseOptions {
+  /** Start offset below the final position (dp). */
+  dy?: number;
+  /** Delay before starting (ms), e.g. `duration.step` for the dock after the sheet. */
+  delay?: number;
+  /** Opacity fade duration (ms). */
+  ms?: number;
+}
+
+/**
+ * Rises into place from `dy` below: translateY on spring.default (spatial),
+ * opacity on a timed ease-out (effects never overshoot). Entering only, so it
+ * runs once when the view mounts. ReduceMotion.System: jumps to the end.
+ */
+export function riseIn({ dy = offset.rise, delay = 0, ms = duration.medium }: RiseOptions = {}) {
+  const s = springTokens.default;
+  const fade = Math.min(ms, 400);
+  return () => {
+    'worklet';
+    return {
+      initialValues: { opacity: 0, transform: [{ translateY: dy }] },
+      animations: {
+        opacity: withDelay(
+          delay,
+          withTiming(1, { duration: fade, easing: Easing.bezier(0.05, 0.7, 0.1, 1), reduceMotion: ReduceMotion.System }),
+          ReduceMotion.System,
+        ),
+        transform: [
+          {
+            translateY: withDelay(
+              delay,
+              withSpring(0, { damping: s.damping, stiffness: s.stiffness, mass: s.mass, reduceMotion: ReduceMotion.System }),
+              ReduceMotion.System,
+            ),
+          },
+        ],
+      },
+    };
+  };
+}
+
+/**
+ * "The card opens" (docs/09 §4, no shared-element flag): fade + scale up from
+ * `offset.openScale` with the emphasised ease-out.
+ */
+export function openIn({ delay = 0, ms = duration.medium }: { delay?: number; ms?: number } = {}) {
+  const from = offset.openScale;
+  const d = Math.min(ms, 400);
+  return () => {
+    'worklet';
+    const cfg = { duration: d, easing: Easing.bezier(0.05, 0.7, 0.1, 1), reduceMotion: ReduceMotion.System };
+    return {
+      initialValues: { opacity: 0, transform: [{ scale: from }] },
+      animations: {
+        opacity: withDelay(delay, withTiming(1, cfg), ReduceMotion.System),
+        transform: [{ scale: withDelay(delay, withTiming(1, cfg), ReduceMotion.System) }],
+      },
+    };
+  };
+}
 /** Smooth reflow when siblings appear/disappear (rows moving to the top, chips). */
 export const layoutSpring = () => LinearTransition.springify()
     .damping(springTokens.default.damping)

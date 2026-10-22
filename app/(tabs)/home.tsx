@@ -28,6 +28,7 @@ import EmptyState, { ErrorState } from '@/components/molecules/EmptyState';
 import IconButton from '@/components/atoms/IconButton';
 import { showToast } from '@/components/atoms/Toast';
 import { enterFromTop, exitUp, layoutEase, timing } from '@/components/motion/anim';
+import FadeInView, { useFirstPaint } from '@/components/motion/FadeInView';
 import { useTabBarInset } from '@/components/motion/AnimatedTabBar';
 import PressableScale from '@/components/motion/PressableScale';
 import ProgressBar from '@/components/motion/ProgressBar';
@@ -47,7 +48,7 @@ import { useToggleLike } from '@/lib/api/likeToggle';
 import { unreadCountQuery } from '@/lib/api/notifications';
 import { postsInfiniteQuery, type FeedParams, type NearParams } from '@/lib/api/posts';
 import { formatRelativeTime } from '@/lib/format';
-import { coverThumb } from '@/lib/images';
+import { coverThumb, itemDetailsRoute } from '@/lib/images';
 import { getCurrentCoords, LOCATION_MESSAGES } from '@/lib/location';
 import { SELL_STEP_COUNT, sellDraftQuery } from '@/lib/sellDraft';
 import { createStyles, font, useStyles, useTheme } from '@/theme';
@@ -259,6 +260,10 @@ export default function HomeScreen() {
   const heroW = Math.min(280, width - 64);
   const draftStep = Math.min((draft?.step ?? 0) + 1, SELL_STEP_COUNT);
 
+  // Sections (carousel, mosaic) rise in on the first paint only, never on
+  // refetch; the masonry feed staggers its first cards in ListingGrid.
+  const sectionsFirst = useFirstPaint(showHero || posts.length > 0);
+
   const listHeader = (
     <Animated.View layout={layoutEase()}>
       {/* Location chip + bell */}
@@ -322,7 +327,7 @@ export default function HomeScreen() {
       </View>
 
       {showHero && (
-        <View>
+        <FadeInView index={0} animate={sectionsFirst}>
           <SectionHeader title="Nouveau près de vous" action="Tout voir" onAction={seeAllNew} />
           <FlatList
             horizontal
@@ -340,19 +345,21 @@ export default function HomeScreen() {
                 variant="hero"
                 width={heroW}
                 height={HERO_H}
-                onPress={() => router.push({ pathname: '/item-details', params: { id: String(item.id) } })}
+                onPress={() => router.push(itemDetailsRoute(item))}
               />
             )}
           />
-        </View>
+        </FadeInView>
       )}
 
-      <SectionHeader title="Catégories" />
-      <CategoryMosaic
-        categories={MOSAIC_CATEGORIES}
-        onSelect={browseCategory}
-        onSeeAll={() => setShowCategories(true)}
-      />
+      <FadeInView index={1} animate={sectionsFirst}>
+        <SectionHeader title="Catégories" />
+        <CategoryMosaic
+          categories={MOSAIC_CATEGORIES}
+          onSelect={browseCategory}
+          onSeeAll={() => setShowCategories(true)}
+        />
+      </FadeInView>
 
       {showDraft && draft && (
         <Animated.View entering={enterFromTop()} exiting={exitUp()} style={s.draftWrap}>

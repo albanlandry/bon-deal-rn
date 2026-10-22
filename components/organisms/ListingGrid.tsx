@@ -14,6 +14,7 @@ import type { BdPost } from '@/constants/types';
 import { useTheme } from '@/theme';
 import FadeInView, { useDelayedFlag, useFirstPaint } from '../motion/FadeInView';
 import ListingCard, { coverAspect, ListingCardSkeleton } from '../molecules/ListingCard';
+import { itemDetailsRoute } from '@/lib/images';
 
 const PAD = 16;
 const GAP = 12;
@@ -101,7 +102,7 @@ export default function ListingGrid({
               variant={masonry ? 'masonry' : 'default'}
               photoHeight={masonry ? masonryPhotoHeight(item, cardWidth) : undefined}
               showState={showState}
-              onPress={() => router.push({ pathname: '/item-details', params: { id: String(item.id) } })}
+              onPress={() => router.push(itemDetailsRoute(item))}
               onToggleLike={onToggleLike ? () => onToggleLike(item) : undefined}
             />
           </FadeInView>

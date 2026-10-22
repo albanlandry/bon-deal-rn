@@ -4,6 +4,7 @@ import { Redirect, Tabs, useRouter } from 'expo-router';
 import React from 'react';
 import AnimatedTabBar from '@/components/motion/AnimatedTabBar';
 import { ScrollChromeProvider } from '@/components/motion/ScrollChrome';
+import TabScene from '@/components/motion/TabScene';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFallbackInterval } from '@/contexts/RealtimeContext';
 import { conversationsQuery } from '@/lib/api/conversations';
@@ -58,9 +59,13 @@ export default function TabLayout() {
             onCenterPress={() => router.push('/post-item')}
           />
         )}
+        // Tab switch: the newly focused tab's content fades and settles 10 dp
+        // (TabScene, 200 ms, first focus of each switch only); the dock's
+        // active dot springs on its own.
+        screenLayout={({ route, children }) => <TabScene routeKey={route.key}>{children}</TabScene>}
         screenOptions={{
           headerShown: false,
-          animation: t.reduceMotion ? 'none' : 'shift',
+          animation: 'none',
           sceneStyle: { backgroundColor: t.colors.canvas },
         }}>
         <Tabs.Screen name="home" options={{ title: 'Accueil' }} />

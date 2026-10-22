@@ -15,6 +15,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { likedPostsQuery, myPostsQuery } from '@/lib/api/posts';
 import { savedSearchesQuery } from '@/lib/api/savedSearches';
 import { parseServerDate, transactionsQuery } from '@/lib/api/transactions';
+import Animated from 'react-native-reanimated';
+import { enterFade, riseIn } from '@/components/motion/anim';
+import { duration } from '@/theme/motion';
 import { ColorTokens, createStyles, useStyles, useTheme } from '@/theme';
 import {
   AppText,
@@ -224,7 +227,10 @@ export default function ProfileScreen() {
     },
   ];
 
-  let section = 0;
+  // First paint only: header fades, the stats card rises over it, the four
+  // tiles follow 30 ms apart, then the remaining sections.
+  const TILE_INDEX = 2;
+  let section = TILE_INDEX + 4;
   const enter = (child: React.ReactNode) => (
     <FadeInView index={section++} animate={firstPaint}>
       {child}
@@ -252,16 +258,19 @@ export default function ProfileScreen() {
             progressViewOffset={insets.top}
           />
         }>
-        <ProfileHero
-          name={displayName}
-          avatarUri={user?.avatar_url}
-          onAvatarPress={() => router.push('/edit-profile')}
-          lines={[displayLocation, trustLine]}
-          actions={[{ icon: 'settings-outline', label: 'Paramètres', onPress: () => router.push('/settings') }]}
-        />
+        <Animated.View entering={firstPaint ? enterFade(duration.medium) : undefined}>
+          <ProfileHero
+            name={displayName}
+            avatarUri={user?.avatar_url}
+            onAvatarPress={() => router.push('/edit-profile')}
+            lines={[displayLocation, trustLine]}
+            actions={[{ icon: 'settings-outline', label: 'Paramètres', onPress: () => router.push('/settings') }]}
+          />
+        </Animated.View>
 
         <View style={s.body}>
           {/* Stats card overlapping the header — real numbers only. */}
+          <Animated.View entering={firstPaint ? riseIn({ dy: 24, delay: duration.step }) : undefined}>
           <ProfileStatsCard
             loading={mine.isLoading}
             items={[
@@ -288,15 +297,15 @@ export default function ProfileScreen() {
               },
             ]}
           />
+          </Animated.View>
 
-          {/* Shortcuts as 2 × 2 tiles. */}
-          {enter(
-            <View style={s.grid}>
-              {[shortcuts.slice(0, 2), shortcuts.slice(2, 4)].map((pair, r) => (
-                <View key={r} style={s.gridRow}>
-                  {pair.map((tile) => (
+          {/* Shortcuts as 2 × 2 tiles, staggered on first paint. */}
+          <View style={s.grid}>
+            {[shortcuts.slice(0, 2), shortcuts.slice(2, 4)].map((pair, r) => (
+              <View key={r} style={s.gridRow}>
+                {pair.map((tile, i) => (
+                  <FadeInView key={tile.key} index={TILE_INDEX + r * 2 + i} animate={firstPaint} style={s.flex}>
                     <PressableScale
-                      key={tile.key}
                       accessibilityRole="button"
                       accessibilityLabel={tile.a11y}
                       scaleTo={0.97}
@@ -316,11 +325,11 @@ export default function ProfileScreen() {
                         </AppText>
                       )}
                     </PressableScale>
-                  ))}
-                </View>
-              ))}
-            </View>,
-          )}
+                  </FadeInView>
+                ))}
+              </View>
+            ))}
+          </View>
 
           {/* ONE completion suggestion: the next missing step. */}
           {completion < 1 && nextStep?.route && (

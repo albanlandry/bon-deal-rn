@@ -5,6 +5,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Platform } from 'react-native';
 import 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
@@ -13,6 +14,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import AnimatedSplashScreen from '@/components/AnimatedSplashScreen';
 import AppGate from '@/components/organisms/AppGate';
 import OfflineBanner from '@/components/organisms/OfflineBanner';
+import { SharedPhotoOverlay } from '@/components/motion/SharedPhoto';
 import Toast, { toastConfig } from '@/components/atoms/Toast';
 import { PhoneAuthProvider } from '@/contexts/PhoneAuthContext';
 import { AuthProvider } from '@/contexts/AuthContext';
@@ -20,6 +22,7 @@ import { RealtimeProvider } from '@/contexts/RealtimeContext';
 import { queryClient } from '@/lib/queryClient';
 import { useForegroundMessageHandler } from '@/lib/push';
 import { AppThemeProvider, useTheme } from '@/theme';
+import { duration } from '@/theme/motion';
 import { fontFiles } from '@/theme/tokens';
 
 export {
@@ -72,8 +75,17 @@ function RootLayoutNav() {
   const t = useTheme();
   useForegroundMessageHandler();
 
-  type StackAnim = 'slide_from_right' | 'slide_from_bottom' | 'fade' | 'fade_from_bottom';
+  // Screen transitions (docs/09 §3, tokens in theme/motion.ts). With reduce
+  // motion every route switches without animation.
+  type StackAnim = 'slide_from_right' | 'slide_from_bottom' | 'fade' | 'fade_from_bottom' | 'ios_from_right' | 'default';
   const anim = (a: StackAnim) => (t.reduceMotion ? ('none' as const) : a);
+  // Push: slide from the right with the previous screen drifting behind
+  // (parallax) — Android gets the iOS-like transition, iOS its native one.
+  const push = anim(Platform.OS === 'android' ? 'ios_from_right' : 'default');
+  // Modal-like flows (sell, Boutique Éclair, offer, consent) rise from the bottom.
+  const modal = { animation: anim('slide_from_bottom'), animationDuration: duration.screen };
+  // Auth steps cross-fade.
+  const step = { animation: anim('fade'), animationDuration: duration.medium };
 
   const navTheme = useMemo<NavTheme>(() => {
     const base = t.isDark ? DarkTheme : DefaultTheme;
@@ -98,38 +110,43 @@ function RootLayoutNav() {
           <ThemeProvider value={navTheme}>
             <StatusBar style={t.isDark ? 'light' : 'dark'} />
             {/*
-              Transitions (docs/09 §1/§4): pushes slide from the right, sheets
-              rise from the bottom, a listing card "expands" into the item page
-              (fade here + scale-in inside the screen), search grows in place.
-              Everything is 'none' with reduce motion.
+              Transitions (docs/09 §1/§4): pushes slide from the right with
+              parallax, modal-like flows rise from the bottom, the item page
+              fades in while its photo scales up from 0.96 inside the screen
+              (the card "opens"), the deal page fades up, auth steps
+              cross-fade. Back gestures stay on. 'none' with reduce motion.
             */}
             <Stack
               screenOptions={{
                 headerShown: false,
                 contentStyle: { backgroundColor: t.colors.canvas },
-                animation: anim('slide_from_right'),
-                animationDuration: 300,
+                animation: push,
+                animationDuration: duration.screen,
                 gestureEnabled: true,
                 fullScreenGestureEnabled: true,
               }}>
-              <Stack.Screen name="index" options={{ animation: anim('fade') }} />
-              <Stack.Screen name="onboarding" options={{ animation: anim('fade') }} />
-              <Stack.Screen name="(tabs)" options={{ animation: anim('fade') }} />
-              <Stack.Screen name="consent" options={{ gestureEnabled: false, animation: anim('fade_from_bottom') }} />
-              <Stack.Screen name="item-details" options={{ animation: anim('fade'), animationDuration: 250 }} />
-              <Stack.Screen
-                name="make-offer"
-                options={{ presentation: 'modal', animation: anim('slide_from_bottom') }}
-              />
+              <Stack.Screen name="index" options={step} />
+              <Stack.Screen name="onboarding" options={step} />
+              <Stack.Screen name="login" options={step} />
+              <Stack.Screen name="signup" options={step} />
+              <Stack.Screen name="verify-number" options={step} />
+              <Stack.Screen name="set-password" options={step} />
+              <Stack.Screen name="setup-profile" options={step} />
+              <Stack.Screen name="(tabs)" options={step} />
+              <Stack.Screen name="consent" options={{ ...modal, gestureEnabled: false }} />
+              <Stack.Screen name="item-details" options={{ animation: anim('fade'), animationDuration: duration.medium }} />
+              <Stack.Screen name="deal" options={{ animation: anim('fade_from_bottom'), animationDuration: duration.medium }} />
+              <Stack.Screen name="make-offer" options={{ ...modal, presentation: 'modal' }} />
               <Stack.Screen
                 name="post-item"
-                options={{ presentation: 'fullScreenModal', animation: anim('slide_from_bottom'), gestureEnabled: false }}
+                options={{ ...modal, presentation: 'fullScreenModal', gestureEnabled: false }}
               />
-              <Stack.Screen name="boutique-eclair" options={{ presentation: 'modal', animation: anim('slide_from_bottom') }} />
-              <Stack.Screen name="search" options={{ animation: anim('fade'), animationDuration: 250 }} />
-              <Stack.Screen name="search-results" options={{ animation: anim('fade_from_bottom') }} />
-              <Stack.Screen name="notifications" options={{ animation: anim('slide_from_right') }} />
+              <Stack.Screen name="boutique-eclair" options={{ ...modal, presentation: 'modal' }} />
+              <Stack.Screen name="search" options={{ animation: anim('fade'), animationDuration: duration.medium }} />
+              <Stack.Screen name="search-results" options={{ animation: anim('fade_from_bottom'), animationDuration: duration.medium }} />
             </Stack>
+            {/* Card photo → item hero flight, above every screen. */}
+            <SharedPhotoOverlay />
             {/* Maintenance / update-required pages and the soft update banner. */}
             <OfflineBanner />
             <AppGate />

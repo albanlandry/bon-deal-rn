@@ -23,11 +23,13 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { buttonRadius, font, useTheme } from '@/theme';
 import { haptics } from '@/lib/haptics';
 import AppText from '../atoms/AppText';
 import PressableScale from '../motion/PressableScale';
+import { exitDown, riseIn } from '../motion/anim';
 
 /** Gap between the dock and the screen edges. */
 export const DOCK_INSET = 12;
@@ -69,17 +71,25 @@ export interface ActionDockProps {
   top?: React.ReactNode;
   onHeight?: (h: number) => void;
   style?: StyleProp<ViewStyle>;
+  /**
+   * Entrance delay (ms): the dock rises in on mount (spring.default + fade)
+   * and sinks out on unmount. Screens stagger it after their content, e.g.
+   * `duration.step` after the item sheet.
+   */
+  enterDelay?: number;
 }
 
 export const DEFAULT_DOCK_SAFETY = 'Ne payez jamais d’avance. Remise en main propre.';
 
-export default function ActionDock({ children, safety, note, top, onHeight, style }: ActionDockProps) {
+export default function ActionDock({ children, safety, note, top, onHeight, style, enterDelay = 0 }: ActionDockProps) {
   const t = useTheme();
   const c = useDockColors();
   const insets = useSafeAreaInsets();
   const line = safety === true ? DEFAULT_DOCK_SAFETY : safety || null;
   return (
-    <View
+    <Animated.View
+      entering={riseIn({ delay: enterDelay })}
+      exiting={exitDown()}
       onLayout={(e: LayoutChangeEvent) => onHeight?.(Math.round(e.nativeEvent.layout.height))}
       style={[
         styles.dock,
@@ -106,7 +116,7 @@ export default function ActionDock({ children, safety, note, top, onHeight, styl
           {note}
         </AppText>
       )}
-    </View>
+    </Animated.View>
   );
 }
 

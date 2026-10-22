@@ -22,6 +22,22 @@ export const duration = {
   long: 350,
   /** Exits are a step shorter than entrances. */
   exit: 200,
+  /** Tab content settling in when its tab gains focus. */
+  tab: 200,
+  /** Native-stack screen transitions (iOS honours it; Android uses the system timing). */
+  screen: 300,
+  /** Delay between staggered blocks of a screen entrance (sheet → dock). */
+  step: 60,
+} as const;
+
+/** Offsets (dp) used by entrances: small shifts, never a full slide. */
+export const offset = {
+  /** Tab content shift on focus. */
+  tab: 10,
+  /** Content sheet / dock rising into place. */
+  rise: 40,
+  /** "The card opens": the photo scales up from this. */
+  openScale: 0.96,
 } as const;
 
 /** Cubic-bezier control points (Material 3 "emphasized"). */
@@ -160,4 +176,4 @@ export function swipeOutcome(x: number, threshold = SWIPE_THRESHOLD): 'left' | '
   return null;
 }
 
-export const motionTokens = { duration, easing, spring, press, stagger, haptic, MAX_DURATION } as const;
+export const motionTokens = { duration, easing, spring, press, stagger, haptic, offset, MAX_DURATION } as const;

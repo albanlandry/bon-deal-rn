@@ -7,7 +7,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { Href, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
+import { RefreshControl, StyleSheet, View } from 'react-native';
+import Animated from 'react-native-reanimated';
+import FadeInView, { useFirstPaint } from '@/components/motion/FadeInView';
+import { layoutSpring } from '@/components/motion/anim';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   AppImage,
@@ -110,6 +113,9 @@ export default function TransactionsScreen() {
     [side, buys, sells],
   );
   const pendingOf = (rows: BdTransaction[]) => rows.filter((x) => x.status === 'pending').length;
+  // Rows stagger in on the first paint only; afterwards (refetch, Achats ↔
+  // Ventes) rows that move reflow with a layout spring.
+  const firstPaint = useFirstPaint(!!q.data);
   const label = (base: string, rows: BdTransaction[]) => (pendingOf(rows) ? `${base} · ${pendingOf(rows)}` : base);
 
   return (
@@ -154,17 +160,20 @@ export default function TransactionsScreen() {
       ) : q.isError && !q.data ? (
         <ErrorState message="Impossible de charger vos achats et ventes." onRetry={() => q.refetch()} />
       ) : (
-        <FlatList
+        <Animated.FlatList
           data={list}
+          itemLayoutAnimation={firstPaint ? undefined : layoutSpring()}
           keyExtractor={(x) => String(x.id)}
           contentContainerStyle={[styles.list, list.length === 0 && styles.grow]}
           ItemSeparatorComponent={() => <View style={[styles.sep, { backgroundColor: t.colors.line }]} />}
-          renderItem={({ item }) => (
-            <DealRow
-              txn={item}
-              iAmSeller={item.seller_id === myId}
-              onPress={() => router.push({ pathname: '/deal', params: { id: String(item.id) } } as unknown as Href)}
-            />
+          renderItem={({ item, index }) => (
+            <FadeInView index={index} animate={firstPaint}>
+              <DealRow
+                txn={item}
+                iAmSeller={item.seller_id === myId}
+                onPress={() => router.push({ pathname: '/deal', params: { id: String(item.id) } } as unknown as Href)}
+              />
+            </FadeInView>
           )}
           refreshControl={
             <RefreshControl

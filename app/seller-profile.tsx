@@ -32,6 +32,7 @@ import { formatMemberSince, formatResponseTime } from '@/lib/format';
 import { useBlockActions } from '@/lib/useBlock';
 import type { BdPostListResponse } from '@/constants/types';
 import { font, useTheme } from '@/theme';
+import { itemDetailsRoute } from '@/lib/images';
 
 /** This seller's published listings, whatever their city (GET /posts?owner_id=). */
 function sellerListingsQuery(userId: number) {
@@ -252,12 +253,7 @@ export default function SellerProfileScreen() {
                       key={item.id}
                       post={item}
                       width={cardWidth}
-                      onPress={() =>
-                        router.push({
-                          pathname: '/item-details',
-                          params: { id: String(item.id) },
-                        })
-                      }
+                      onPress={() => router.push(itemDetailsRoute(item))}
                     />
                   ))}
                 </View>

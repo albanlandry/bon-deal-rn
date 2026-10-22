@@ -13,6 +13,7 @@ import Price from '../atoms/Price';
 import Skeleton from '../atoms/Skeleton';
 import HeartBurst from '../motion/HeartBurst';
 import PressableScale from '../motion/PressableScale';
+import { useSharedPhotoSource } from '../motion/SharedPhoto';
 import CategoryTag from './CategoryTag';
 import GradientView from './GradientView';
 import PostStats from './PostStats';
@@ -113,13 +114,18 @@ function MasonryCard({ post, onPress, onToggleLike, width, photoHeight, showStat
   const priceText = priceTextOf(post);
   const h = photoHeight ?? Math.round((width ?? 160) * 1.25);
   const meta = [place, time].filter(Boolean).join(' · ');
+  // Card photo → item hero (motion/SharedPhoto); never delays the press.
+  const shared = useSharedPhotoSource(post.id, cover, t.radius.md);
   return (
     <PressableScale
       accessibilityRole="button"
       accessibilityLabel={`${priceText ? `${priceText}, ` : ''}${post.title}${place ? `, ${place}` : ''}${stateBadge ? `, ${stateBadge.label}` : ''}`}
-      onPress={onPress}
+      onPress={() => {
+        shared.launch();
+        onPress();
+      }}
       style={{ width }}>
-      <View style={[styles.mPhoto, { height: h, borderRadius: t.radius.md, backgroundColor: t.colors.skeleton }]}>
+      <View ref={shared.ref} collapsable={false} style={[styles.mPhoto, { height: h, borderRadius: t.radius.md, backgroundColor: t.colors.skeleton }]}>
         <AppImage uri={cover} style={styles.image} recyclingKey={String(post.id)} />
         {!cover && (
           <View style={[StyleSheet.absoluteFill, styles.noImage]}>
@@ -171,13 +177,19 @@ function HeroCard({ post, onPress, width = 280, height = 176 }: ListingCardProps
   const { place } = placeOf(post);
   const priceText = priceTextOf(post);
   const sub = [post.title, place].filter(Boolean).join(' · ');
+  const shared = useSharedPhotoSource(post.id, cover, t.radius.md);
   return (
     <PressableScale
       accessibilityRole="button"
       accessibilityLabel={`${priceText ? `${priceText}, ` : ''}${post.title}${place ? `, ${place}` : ''}`}
-      onPress={onPress}
+      onPress={() => {
+        shared.launch();
+        onPress();
+      }}
       style={[styles.hero, { width, height, borderRadius: t.radius.md, backgroundColor: t.colors.skeleton }]}>
-      <AppImage uri={cover} style={styles.image} recyclingKey={`hero-${post.id}`} />
+      <View ref={shared.ref} collapsable={false} style={StyleSheet.absoluteFill} pointerEvents="none">
+        <AppImage uri={cover} style={styles.image} recyclingKey={`hero-${post.id}`} />
+      </View>
       <GradientView
         colors={['rgba(15,27,45,0)', 'rgba(15,27,45,0.78)']}
         locations={[0.35, 1]}
@@ -220,18 +232,25 @@ function GridCard({ post, onPress, onToggleLike, width, showState, sellerVerifie
               : null;
   const priceText = post.is_free ? 'Gratuit' : post.price != null ? formatAmount(post.price) : '';
   const category = post.categories?.[0];
+  const shared = useSharedPhotoSource(post.id, cover, t.radius.md);
 
   return (
     <PressableScale
       accessibilityRole="button"
       accessibilityLabel={`${priceText ? `${priceText}, ` : ''}${post.title}${place ? `, ${place}` : ''}${stateBadge ? `, ${stateBadge.label}` : ''}${verified ? ', vendeur vérifié' : ''}`}
-      onPress={onPress}
+      onPress={() => {
+        shared.launch();
+        onPress();
+      }}
       style={[
         styles.card,
         t.elevation.card as object,
         { width, backgroundColor: t.colors.surface, borderColor: t.colors.line, borderRadius: t.radius.md },
       ]}>
-      <View style={[styles.photo, { borderTopLeftRadius: t.radius.md - 1, borderTopRightRadius: t.radius.md - 1 }]}>
+      <View
+        ref={shared.ref}
+        collapsable={false}
+        style={[styles.photo, { borderTopLeftRadius: t.radius.md - 1, borderTopRightRadius: t.radius.md - 1 }]}>
         <AppImage uri={cover} style={styles.image} recyclingKey={String(post.id)} />
         {!cover && (
           <View style={[StyleSheet.absoluteFill, styles.noImage]}>

@@ -32,6 +32,7 @@ import { myPostsQuery, deletePost, renewPost, updatePost } from '@/lib/api/posts
 import { haptics } from '@/lib/haptics';
 import { createStyles, Theme, useStyles, useTheme } from '@/theme';
 import type { BdPost, BdPostListResponse } from '@/constants/types';
+import { itemDetailsRoute } from '@/lib/images';
 
 type FilterType = 'all' | 'published' | 'reserved' | 'sold' | 'expired' | 'draft' | 'unpublished';
 
@@ -202,7 +203,7 @@ export default function MyListingsScreen() {
         post={item}
         width={cardWidth}
         showState
-        onPress={() => router.push({ pathname: '/item-details', params: { id: String(item.id) } })}
+        onPress={() => router.push(itemDetailsRoute(item))}
       />
       <View style={styles.stats} accessibilityLabel={`${item.views_count} vues, ${item.likes_count} favoris`}>
         <Ionicons name="eye-outline" size={14} color={t.colors.inkMuted} />

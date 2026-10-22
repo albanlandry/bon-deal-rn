@@ -18,4 +18,5 @@ export {
 } from './ScrollChrome';
 export { default as Sheet, pickSnap, type SheetProps } from './Sheet';
 export { default as Shimmer } from './Shimmer';
+export { default as TabScene } from './TabScene';
 export { default as SwipeRow, SWIPE_THRESHOLD, swipeOutcome, type SwipeAction } from './SwipeRow';

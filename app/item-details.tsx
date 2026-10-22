@@ -6,7 +6,7 @@
 // with the payment safety line on top. The offer Sheet opens in place.
 import { Ionicons } from '@expo/vector-icons';
 import * as Linking from 'expo-linking';
-import { Href, useLocalSearchParams, useRouter } from 'expo-router';
+import { Href, useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, LayoutChangeEvent, Share, StyleSheet, useWindowDimensions, View } from 'react-native';
@@ -36,12 +36,14 @@ import {
   Skeleton,
   showToast,
 } from '@/components/ui';
-import ItemGallery from '@/components/organisms/ItemGallery';
+import ItemGallery, { galleryHeightFor } from '@/components/organisms/ItemGallery';
 import ItemPriceCheckCard from '@/components/molecules/ItemPriceCheckCard';
 import ReportSheet from '@/components/organisms/ReportSheet';
 import OfferSheet from '@/components/organisms/OfferSheet';
 import ActionDock, { dockBottom, DockButton, useDockColors } from '@/components/organisms/ActionDock';
-import { enterFade, layoutSpring, timing } from '@/components/motion/anim';
+import { enterFade, layoutSpring, openIn, riseIn } from '@/components/motion/anim';
+import AppImage from '@/components/atoms/AppImage';
+import { useSharedPhotoTarget } from '@/components/motion/SharedPhoto';
 import { useToggleLike } from '@/lib/api/likeToggle';
 import { duration } from '@/theme/motion';
 import { blockedMessage } from '@/lib/api/safety';
@@ -57,7 +59,7 @@ import {
 import { getOrCreateConversation } from '@/lib/api/conversations';
 import { ApiError } from '@/lib/api';
 import { formatAmount, formatRelativeTime } from '@/lib/format';
-import { isReady, largeUrl } from '@/lib/images';
+import { coverThumb, isReady, itemDetailsRoute, largeUrl, safeCoverParam } from '@/lib/images';
 import { AGE_LABELS, conditionLabel } from '@/constants/catalog';
 
 const SIMILAR_W = 168;
@@ -77,13 +79,29 @@ function priceCheckErrorMessage(e: unknown): string {
   return 'Impossible de vérifier le prix. Réessayez.';
 }
 
-function DetailsSkeleton() {
+/** Gallery ratio on this page (height = 2 × width, capped at 55 % of the screen). */
+const GALLERY_RATIO = 2;
+
+/**
+ * Loading state. With the tapped card's cover (`cover` param, already in the
+ * image cache) the photo shows at once and "opens" (fade + scale from 0.96);
+ * the sheet skeleton rises under it.
+ */
+function DetailsSkeleton({ cover, shared, onCoverLoad }: { cover?: string; shared?: boolean; onCoverLoad?: () => void }) {
   const t = useTheme();
-  const { height } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
+  const photoH = galleryHeightFor(width, height, GALLERY_RATIO);
   return (
     <View style={{ flex: 1, backgroundColor: t.colors.surface }} accessibilityLabel="Chargement de l’annonce">
-      <Skeleton height={Math.round(height * 0.55)} radius={0} />
-      <View
+      {cover ? (
+        <Animated.View entering={shared ? undefined : openIn()}>
+          <AppImage uri={cover} style={{ width, height: photoH }} onLoad={onCoverLoad} />
+        </Animated.View>
+      ) : (
+        <Skeleton height={photoH} radius={0} />
+      )}
+      <Animated.View
+        entering={riseIn()}
         style={{
           marginTop: -SHEET_OVERLAP,
           padding: 16,
@@ -100,7 +118,7 @@ function DetailsSkeleton() {
           <Skeleton height={48} radius={t.radius.sm} style={{ flex: 1 }} />
         </View>
         <Skeleton height={56} radius={t.radius.sm} />
-      </View>
+      </Animated.View>
     </View>
   );
 }
@@ -110,7 +128,10 @@ export default function ItemDetailsScreen() {
   const t = useTheme();
   const styles = useStyles(makeStyles);
   const insets = useSafeAreaInsets();
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  // `cover`: the tapped card's photo URI (optional, display only) so the
+  // photo shows from the image cache while the listing loads.
+  const { id, cover: coverParam } = useLocalSearchParams<{ id?: string; cover?: string }>();
+  const cover = safeCoverParam(coverParam);
   const { user } = useAuth();
   const postId = Number(id);
   const queryClient = useQueryClient();
@@ -145,14 +166,32 @@ export default function ItemDetailsScreen() {
     opacity: interpolate(scrollY.value, [galleryH - 140, galleryH - 60], [0, 1], 'clamp'),
   }));
 
-  // Entrance: the page scales in from 0.96 and fades — with the stack's fade
-  // it reads as the card expanding into the item page.
-  const enter = useSharedValue(0);
-  const enterStyle = useAnimatedStyle(() => ({
-    opacity: enter.value,
-    transform: [{ scale: 0.96 + 0.04 * enter.value }],
-  }));
   const { data: post, isLoading, error, refetch } = useQuery(postByIdQuery(postId));
+
+  // Entrance (with the stack's fade it reads as the card opening): the photo
+  // fades in scaling up from 0.96, the content sheet rises from below on
+  // spring.default, then the dock rises `duration.step` later. When the
+  // loading state already played it (photo + rising sheet), the loaded page
+  // only cross-fades in so nothing moves twice.
+  const sawLoading = useRef(false);
+  if (isLoading) sawLoading.current = true;
+  const coverShown = sawLoading.current && !!cover;
+
+  // Card photo → hero flight (motion/SharedPhoto): when this page was opened
+  // from a card, the photo flies in from the card instead of fading/scaling,
+  // and flies back on the way out if the card is still on screen.
+  const navigation = useNavigation();
+  const win = useWindowDimensions();
+  const shared = useSharedPhotoTarget(postId, {
+    x: 0,
+    y: 0,
+    w: win.width,
+    h: galleryHeightFor(win.width, win.height, GALLERY_RATIO),
+  });
+  useEffect(
+    () => navigation.addListener('beforeRemove', () => shared.back(scrollY.value)),
+    [navigation, shared.back, scrollY],
+  );
 
   // Analytics (opt-in): one view_item per opened listing.
   const viewedId = React.useRef<number | null>(null);
@@ -228,17 +267,12 @@ export default function ItemDetailsScreen() {
     },
   });
 
-  const loaded = !!post;
   useEffect(() => {
     // Same route re-used with a new id (deep link / similar item): the scroll
     // view remounts at 0 without a scroll event, so reset the chrome too.
     scrollY.value = 0;
     setDescOpen(false);
-    if (loaded) {
-      enter.value = 0;
-      enter.value = timing(1, duration.medium, 'enter');
-    }
-  }, [loaded, postId]);
+  }, [postId]);
 
   const handleShare = async () => {
     if (!post) return;
@@ -266,7 +300,7 @@ export default function ItemDetailsScreen() {
     );
   }
 
-  if (isLoading) return <DetailsSkeleton />;
+  if (isLoading) return <DetailsSkeleton cover={cover} shared={shared.active} onCoverLoad={shared.ready} />;
 
   if (error || !post) {
     return (
@@ -353,26 +387,34 @@ export default function ItemDetailsScreen() {
   return (
     <View style={styles.screen}>
       <StatusBar style={lightStatus ? 'light' : t.isDark ? 'light' : 'dark'} />
-      <Animated.View style={[styles.flex, enterStyle]}>
+      <View style={styles.flex}>
         <Animated.ScrollView
           ref={scrollRef}
           onScroll={onScroll}
           scrollEventThrottle={16}
           contentContainerStyle={{ paddingBottom: contentBottom }}
           showsVerticalScrollIndicator={false}>
-          <View onLayout={(e: LayoutChangeEvent) => setGalleryH(e.nativeEvent.layout.height)}>
+          <Animated.View
+            entering={
+              coverShown || shared.active ? undefined : sawLoading.current ? enterFade(duration.medium) : openIn()
+            }
+            onLayout={(e: LayoutChangeEvent) => setGalleryH(e.nativeEvent.layout.height)}>
             <ItemGallery
               images={imageUrls}
               title={post.title}
               scrollY={scrollY}
-              ratio={2}
+              ratio={GALLERY_RATIO}
               bottomInset={SHEET_OVERLAP}
               bottomOverlay={photoBadges}
+              placeholder={cover && cover === coverThumb(post.images) ? cover : undefined}
+              onFirstImageLoad={shared.ready}
             />
-          </View>
+          </Animated.View>
 
           {/* The content sheet slides over the photo */}
-          <View style={styles.sheet}>
+          <Animated.View
+            entering={sawLoading.current ? enterFade(duration.medium) : riseIn({ delay: duration.step })}
+            style={styles.sheet}>
             <View style={styles.handle} />
 
             <View style={styles.priceRow}>
@@ -535,14 +577,14 @@ export default function ItemDetailsScreen() {
                     <ListingCard
                       post={item}
                       width={SIMILAR_W}
-                      onPress={() => router.push({ pathname: '/item-details', params: { id: String(item.id) } })}
+                      onPress={() => router.push(itemDetailsRoute(item))}
                       onToggleLike={() => toggleSimilarLike.mutate({ id: item.id, like: !item.liked_by_me })}
                     />
                   )}
                 />
               </Animated.View>
             )}
-          </View>
+          </Animated.View>
         </Animated.ScrollView>
 
         {/* Compact top bar fades in once the photo has scrolled away */}
@@ -557,7 +599,7 @@ export default function ItemDetailsScreen() {
 
         {/* Floating action dock — thumb zone (Fitts), visible from the start,
             with the payment safety line on top (never hidden). */}
-        <ActionDock safety={!isOwner && available} onHeight={setDockH}>
+        <ActionDock safety={!isOwner && available} onHeight={setDockH} enterDelay={duration.step * 2}>
           {isOwner ? (
             <>
               <DockButton label="Mes annonces" variant="glass" onPress={() => router.push('/my-listings')} />
@@ -599,7 +641,7 @@ export default function ItemDetailsScreen() {
             </>
           )}
         </ActionDock>
-      </Animated.View>
+      </View>
 
       {canOffer && (
         <OfferSheet

@@ -62,6 +62,15 @@ export interface ItemGalleryProps {
   ratio?: number;
   /** Space covered at the bottom by an overlapping sheet: dots and badges sit above it. */
   bottomInset?: number;
+  /** Cached low-res image shown on the first photo until it loads (tapped card's cover). */
+  placeholder?: string | null;
+  /** First photo loaded (SharedPhoto hands over to the gallery). */
+  onFirstImageLoad?: () => void;
+}
+
+/** Gallery height for a ratio, as rendered (so placeholders can match it). */
+export function galleryHeightFor(width: number, height: number, ratio = 0.9) {
+  return Math.round(Math.min(width * ratio, height * 0.55));
 }
 
 function MorphDot({ i, page }: { i: number; page: SharedValue<number> }) {
@@ -87,7 +96,11 @@ function ZoomPage({
   label,
   onOpen,
   zoomed,
+  placeholder,
+  onLoad,
 }: {
+  placeholder?: string | null;
+  onLoad?: () => void;
   uri: string;
   width: number;
   height: number;
@@ -140,7 +153,7 @@ function ZoomPage({
         accessibilityHint="Toucher pour agrandir, toucher deux fois pour zoomer"
         style={{ width, height, overflow: 'hidden' }}>
         <Animated.View style={style}>
-          <AppImage uri={uri} style={{ width, height }} />
+          <AppImage uri={uri} placeholderUri={placeholder} onLoad={onLoad} style={{ width, height }} />
         </Animated.View>
       </View>
     </GestureDetector>
@@ -155,6 +168,8 @@ export default function ItemGallery({
   scrollY,
   ratio = 0.9,
   bottomInset = 0,
+  placeholder,
+  onFirstImageLoad,
 }: ItemGalleryProps) {
   const t = useTheme();
   const insets = useSafeAreaInsets();
@@ -163,7 +178,7 @@ export default function ItemGallery({
   const [fullscreen, setFullscreen] = useState(false);
   const fsRef = useRef<FlatList<string>>(null);
   // Cap the hero on wide screens (tablets) so the price stays above the fold.
-  const galleryHeight = Math.round(Math.min(width * ratio, height * 0.55));
+  const galleryHeight = galleryHeightFor(width, height, ratio);
   const page = useSharedValue(0);
   const zoomed = useSharedValue(0);
   const zero = useSharedValue(0);
@@ -209,6 +224,8 @@ export default function ItemGallery({
                 width={width}
                 height={galleryHeight}
                 zoomed={zoomed}
+                placeholder={i === 0 ? placeholder : undefined}
+                onLoad={i === 0 ? onFirstImageLoad : undefined}
                 label={`Photo ${i + 1} sur ${images.length} de ${title}`}
                 onOpen={() => setFullscreen(true)}
               />

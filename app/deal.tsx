@@ -39,7 +39,11 @@ import {
   TXN_STATUS_LABEL,
 } from '@/lib/api/transactions';
 import { formatAmount, formatClock, formatDayLabel } from '@/lib/format';
-import { coverThumb } from '@/lib/images';
+import { coverThumb, itemDetailsRoute } from '@/lib/images';
+import Animated from 'react-native-reanimated';
+import FadeInView, { useFirstPaint } from '@/components/motion/FadeInView';
+import { riseIn } from '@/components/motion/anim';
+import { duration } from '@/theme/motion';
 import { useTheme } from '@/theme';
 
 /** "Aujourd’hui, 15:12" / "12 octobre, 09:30" from a naive-UTC API date. */
@@ -67,6 +71,9 @@ export default function DealScreen() {
   const deal = useDealActions({ transactionId: txnId, myId, onCompleted: () => setCelebrate(Date.now()) });
   const { q, txn, reviewed, iAmSeller, otherName, busy, confirm, confirming, openSheet, sheets } = deal;
   const post = useQuery({ ...postByIdQuery(txn?.post_id ?? 0), enabled: !!txn?.post_id });
+  // Entrance on first paint only (never on refetch): the header text rises,
+  // the cards follow 30 ms apart, the dock last.
+  const firstPaint = useFirstPaint(!!txn);
 
   const title = txn ? (iAmSeller ? 'Votre vente' : 'Votre achat') : 'Affaire';
 
@@ -137,7 +144,7 @@ export default function DealScreen() {
 
   const listingPlace = [post.data?.pickup_location_note, post.data?.pickup_quartier].filter(Boolean).join(', ') || null;
   const thumb = coverThumb(post.data?.images);
-  const openListing = () => router.push({ pathname: '/item-details', params: { id: String(txn.post_id) } });
+  const openListing = () => router.push(itemDetailsRoute({ id: txn.post_id, images: post.data?.images }));
   const openProfile = () =>
     other &&
     router.push({
@@ -202,7 +209,7 @@ export default function DealScreen() {
               </AppText>
             </View>
           </View>
-          <View style={styles.heroBody}>
+          <Animated.View entering={firstPaint ? riseIn({ dy: 16 }) : undefined} style={styles.heroBody}>
             <AppText variant="h2" style={{ color: onHero }}>
               {headline}
             </AppText>
@@ -225,7 +232,7 @@ export default function DealScreen() {
               </View>
               <Ionicons name="chevron-forward" size={18} color={onHero} />
             </PressableScale>
-          </View>
+          </Animated.View>
         </View>
 
         {q.isError && (
@@ -236,7 +243,7 @@ export default function DealScreen() {
 
         {/* Counterpart */}
         {!!other && (
-          <View style={[styles.pad, styles.mt16]}>
+          <FadeInView index={1} animate={firstPaint} style={[styles.pad, styles.mt16]}>
             <Card padded={false}>
               <PressableScale
                 accessibilityRole="link"
@@ -256,22 +263,22 @@ export default function DealScreen() {
                 <Ionicons name="chevron-forward" size={18} color={t.colors.inkSubtle} />
               </PressableScale>
             </Card>
-          </View>
+          </FadeInView>
         )}
 
         {/* Timeline */}
-        <View style={[styles.pad, styles.mt12]}>
+        <FadeInView index={2} animate={firstPaint} style={[styles.pad, styles.mt12]}>
           <Card>
             <AppText variant="captionStrong" color="inkMuted" style={styles.cardTitle}>
               Étapes
             </AppText>
             <DealTimeline status={txn.status} reviewed={reviewed} vertical details={details} />
           </Card>
-        </View>
+        </FadeInView>
 
         {/* Meeting */}
         {(pending || at || place) && (
-          <View style={[styles.pad, styles.mt12]}>
+          <FadeInView index={3} animate={firstPaint} style={[styles.pad, styles.mt12]}>
             <Card style={styles.meeting}>
               <View style={[styles.meetIcon, { backgroundColor: t.colors.brandTint, borderRadius: t.radius.sm }]}>
                 <Ionicons name="location-outline" size={20} color={t.colors.brandStrong} />
@@ -307,11 +314,11 @@ export default function DealScreen() {
                 />
               )}
             </Card>
-          </View>
+          </FadeInView>
         )}
 
         {/* Safety: never hidden */}
-        <View style={[styles.pad, styles.mt12]}>
+        <FadeInView index={4} animate={firstPaint} style={[styles.pad, styles.mt12]}>
           <Card tone="trust" style={styles.safety} accessibilityRole="text">
             <Ionicons name="shield-checkmark-outline" size={20} color={t.colors.trust} />
             <AppText variant="caption" color="trust" style={styles.flex}>
@@ -319,11 +326,11 @@ export default function DealScreen() {
               d’avance.
             </AppText>
           </Card>
-        </View>
+        </FadeInView>
       </ScrollView>
 
       {/* Next action */}
-      <ActionDock safety={pending ? 'Vérifiez l’objet avant de payer. Jamais d’avance.' : undefined} onHeight={setDockH}>
+      <ActionDock safety={pending ? 'Vérifiez l’objet avant de payer. Jamais d’avance.' : undefined} onHeight={setDockH} enterDelay={duration.step * 2}>
         {bar}
       </ActionDock>
 
