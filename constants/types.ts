@@ -38,6 +38,8 @@ export interface BdPost {
   shares_count: number;
   offer_count: number;
   active_offer_count: number;
+  /** Conversations on this listing with at least one message. */
+  chats_count?: number;
   images: BdPostImage[];
   lat?: number | null;
   lng?: number | null;

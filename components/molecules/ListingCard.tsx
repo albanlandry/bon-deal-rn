@@ -15,6 +15,7 @@ import HeartBurst from '../motion/HeartBurst';
 import PressableScale from '../motion/PressableScale';
 import CategoryTag from './CategoryTag';
 import GradientView from './GradientView';
+import PostStats from './PostStats';
 
 /** Fixed photo ratio (docs/09 §4 Home): nothing jumps while images load. */
 export const CARD_PHOTO_RATIO = 4 / 5;
@@ -157,6 +158,7 @@ function MasonryCard({ post, onPress, onToggleLike, width, photoHeight, showStat
             {meta}
           </AppText>
         )}
+        <PostStats post={post} style={styles.stats} />
       </View>
     </PressableScale>
   );
@@ -190,6 +192,7 @@ function HeroCard({ post, onPress, width = 280, height = 176 }: ListingCardProps
         <AppText numberOfLines={1} style={styles.heroSub} maxFontSizeMultiplier={1.2}>
           {sub}
         </AppText>
+        <PostStats post={post} onImage style={styles.stats} />
       </View>
     </PressableScale>
   );
@@ -283,6 +286,7 @@ function GridCard({ post, onPress, onToggleLike, width, showState, sellerVerifie
             </AppText>
           ) : null}
         </View>
+        <PostStats post={post} style={styles.stats} />
       </View>
     </PressableScale>
   );
@@ -353,6 +357,7 @@ const styles = StyleSheet.create({
   price: { fontSize: 16, lineHeight: 20 },
   title: { minHeight: 40 },
   meta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  stats: { marginTop: 4 },
   flex: { flex: 1 },
   mPhoto: { width: '100%', overflow: 'hidden' },
   mBody: { paddingHorizontal: 2, paddingTop: 8, gap: 1 },

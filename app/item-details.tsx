@@ -64,6 +64,7 @@ const SIMILAR_W = 168;
 const DESC_CLAMP = 260;
 /** How far the content sheet overlaps the photo. */
 const SHEET_OVERLAP = 28;
+import PostStats from '@/components/molecules/PostStats';
 import type { BdPost, BdPriceCheck } from '@/constants/types';
 import { createStyles, useStyles, useTheme } from '@/theme';
 import { track } from '@/lib/analytics';
@@ -74,10 +75,6 @@ function priceCheckErrorMessage(e: unknown): string {
   if (status === 429) return 'Trop de vérifications — réessayez plus tard.';
   if (status === 409) return 'Cette annonce n’a pas de prix à vérifier.';
   return 'Impossible de vérifier le prix. Réessayez.';
-}
-
-function plural(n: number, word: string) {
-  return `${n} ${word}${n > 1 ? 's' : ''}`;
 }
 
 function DetailsSkeleton() {
@@ -418,9 +415,7 @@ export default function ItemDetailsScreen() {
                 ))}
               </View>
             )}
-            <AppText variant="caption" color="inkSubtle" style={styles.counts}>
-              {`${plural(post.views_count, 'vue')} · ${plural(post.likes_count, 'favori')}`}
-            </AppText>
+            <PostStats post={post} size="full" style={styles.counts} />
 
             {/* Seller on one line, before the details (social proof) */}
             <View style={styles.sellerBlock}>

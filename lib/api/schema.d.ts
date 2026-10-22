@@ -4579,6 +4579,8 @@ export interface components {
             allow_negotiation: boolean | null;
             /** Categories */
             categories: string[];
+            /** Chats Count */
+            chats_count: number;
             /** City */
             city: string | null;
             /** Condition */
@@ -5120,6 +5122,8 @@ export interface components {
             allow_negotiation: boolean | null;
             /** Categories */
             categories: string[];
+            /** Chats Count */
+            chats_count: number;
             /** City */
             city: string | null;
             /** Condition */
