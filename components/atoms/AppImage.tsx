@@ -27,6 +27,10 @@ export interface AppImageProps {
   /** Delay-free transition when reduce-motion is on. */
   transition?: number;
   recyclingKey?: string;
+  /** Already-cached image (e.g. the tapped card's cover) shown until `uri` loads. */
+  placeholderUri?: string | null;
+  /** Called once the image (not the placeholder) has loaded. */
+  onLoad?: () => void;
 }
 
 export default function AppImage({
@@ -36,6 +40,8 @@ export default function AppImage({
   accessibilityLabel,
   transition = 200,
   recyclingKey,
+  placeholderUri,
+  onLoad,
 }: AppImageProps) {
   const t = useTheme();
   const [loaded, setLoaded] = useState(false);
@@ -49,11 +55,14 @@ export default function AppImage({
     return (
       <ExpoImage
         source={{ uri }}
+        placeholder={placeholderUri ? { uri: placeholderUri } : undefined}
+        placeholderContentFit={contentFit}
         style={[style, placeholderBg]}
         contentFit={contentFit}
         transition={t.duration(transition)}
         cachePolicy="memory-disk"
         recyclingKey={recyclingKey}
+        onLoad={onLoad}
         accessibilityLabel={accessibilityLabel}
         accessible={!!accessibilityLabel}
       />
@@ -62,11 +71,17 @@ export default function AppImage({
 
   return (
     <View style={[style as any, placeholderBg, styles.clip]}>
+      {!!placeholderUri && !loaded && (
+        <RNImage source={{ uri: placeholderUri }} style={StyleSheet.absoluteFill} resizeMode={contentFit} fadeDuration={0} />
+      )}
       <RNImage
         source={{ uri }}
         style={[StyleSheet.absoluteFill, { opacity: loaded ? 1 : 0 }]}
         resizeMode={contentFit}
-        onLoad={() => setLoaded(true)}
+        onLoad={() => {
+          setLoaded(true);
+          onLoad?.();
+        }}
         accessibilityLabel={accessibilityLabel}
         accessible={!!accessibilityLabel}
         fadeDuration={t.duration(transition)}

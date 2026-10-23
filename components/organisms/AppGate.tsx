@@ -11,15 +11,19 @@
  *   banner, shown at most once a day.
  *
  * The navigation stack stays mounted underneath, so the user lands back where
- * they were.
+ * they were. The illustration "breathes" twice on arrival (docs/09 §4),
+ * static with reduce motion; the banner slides down from the top.
  */
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Constants from 'expo-constants';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, BackHandler, Linking, Platform, Pressable, StyleSheet, View } from 'react-native';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import { AppState, BackHandler, Linking, Platform, StyleSheet, View } from 'react-native';
+import Animated from 'react-native-reanimated';
+import { enterFade, enterFromTop, exitFade, exitUp } from '../motion/anim';
+import Breathe from '../motion/Breathe';
+import PressableScale from '../motion/PressableScale';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
 import { apiFetch } from '@/lib/api';
@@ -172,19 +176,17 @@ function GateLayout({
   const t = useTheme();
   return (
     <Animated.View
-      entering={FadeIn.duration(t.duration(t.motion.enter))}
-      exiting={FadeOut.duration(t.duration(t.motion.exit))}
+      entering={enterFade(250)}
+      exiting={exitFade(200)}
       style={[StyleSheet.absoluteFill, { backgroundColor: t.colors.canvas }]}
       accessibilityViewIsModal>
       <SafeAreaView style={styles.gate}>
         <View style={styles.gateBody}>
-          <View
-            style={[
-              styles.circle,
-              { backgroundColor: tone === 'trust' ? t.colors.trustTint : t.colors.brandTint },
-            ]}>
-            <Ionicons name={icon} size={52} color={tone === 'trust' ? t.colors.trust : t.colors.brandStrong} />
-          </View>
+          <Breathe style={[styles.halo, { backgroundColor: tone === 'trust' ? t.colors.trustTint : t.colors.brandTint }]}>
+            <View style={[styles.circle, { backgroundColor: t.colors.surface }]}>
+              <Ionicons name={icon} size={52} color={tone === 'trust' ? t.colors.trust : t.colors.brandStrong} />
+            </View>
+          </Breathe>
           <AppText variant="h1" align="center" accessibilityRole="header">
             {title}
           </AppText>
@@ -204,7 +206,6 @@ function SupportLink({ email }: { email?: string | null }) {
     <Button
       label={`Contacter ${email}`}
       variant="ghost"
-      size="sm"
       icon="mail-outline"
       onPress={() => Linking.openURL(`mailto:${email}`).catch(() => {})}
     />
@@ -295,7 +296,6 @@ function UpdateRequiredScreen({
       <Button
         label="J’ai mis à jour, vérifier"
         variant="ghost"
-        size="sm"
         loading={busy}
         onPress={async () => {
           setBusy(true);
@@ -341,8 +341,8 @@ function UpdateBanner({ config }: { config?: BdAppConfig }) {
   if (!visible) return null;
   return (
     <Animated.View
-      entering={FadeIn.duration(t.duration(t.motion.enter))}
-      exiting={FadeOut.duration(t.duration(t.motion.exit))}
+      entering={enterFromTop(250)}
+      exiting={exitUp(200)}
       style={[
         styles.banner,
         {
@@ -357,8 +357,8 @@ function UpdateBanner({ config }: { config?: BdAppConfig }) {
       <View style={[styles.bannerIcon, { backgroundColor: t.colors.trustTint, borderRadius: t.radius.sm }]}>
         <Ionicons name="sparkles-outline" size={20} color={t.colors.trust} />
       </View>
-      <Pressable
-        style={styles.flex}
+      <PressableScale
+        style={[styles.flex, styles.bannerTap]}
         accessibilityRole="button"
         accessibilityLabel={`Nouvelle version ${latest} disponible. Mettre à jour`}
         onPress={() => {
@@ -369,7 +369,7 @@ function UpdateBanner({ config }: { config?: BdAppConfig }) {
         <AppText variant="caption" color="inkMuted">
           {storeUrl(config) ? `BonDeal ${latest} · Touchez pour mettre à jour` : `BonDeal ${latest} est disponible`}
         </AppText>
-      </Pressable>
+      </PressableScale>
       <IconButton icon="close" label="Plus tard" onPress={() => setVisible(false)} />
     </Animated.View>
   );
@@ -380,8 +380,10 @@ const styles = StyleSheet.create({
   gate: { flex: 1, paddingHorizontal: 24, paddingBottom: 16 },
   gateBody: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   gateMessage: { maxWidth: 360 },
-  gateActions: { gap: 10, alignItems: 'stretch' },
-  circle: { width: 112, height: 112, borderRadius: 56, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  gateActions: { gap: 8, alignItems: 'stretch' },
+  halo: { width: 168, height: 168, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  circle: { width: 112, height: 112, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  bannerTap: { minHeight: 48, justifyContent: 'center' },
   banner: {
     position: 'absolute',
     left: 12,

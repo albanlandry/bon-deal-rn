@@ -7,6 +7,7 @@ export { default as Button } from './atoms/Button';
 export { default as Card } from './atoms/Card';
 export { default as Chip } from './atoms/Chip';
 export { default as IconButton } from './atoms/IconButton';
+export { default as LargeTitle } from './atoms/LargeTitle';
 export { default as Price } from './atoms/Price';
 export { default as ProgressRing } from './atoms/ProgressRing';
 export { default as RatingStars } from './atoms/RatingStars';
@@ -28,3 +29,27 @@ export { default as Stepper } from './molecules/Stepper';
 export { default as QuartierPickerSheet } from './organisms/QuartierPickerSheet';
 export { default as SellerCard } from './organisms/SellerCard';
 export { default as Sheet } from './organisms/Sheet';
+export { default as CategoryRow } from './molecules/CategoryRow';
+export { default as CategoryTag } from './molecules/CategoryTag';
+export { default as CategoryTile } from './molecules/CategoryTile';
+export { default as CategorySheet } from './molecules/CategorySheet';
+
+/* Motion primitives (docs/09 §3) */
+export {
+  AnimatedHeader,
+  Breathe,
+  Celebrate,
+  CountUp,
+  FadeInView,
+  HeartBurst,
+  PressableScale,
+  ProgressBar,
+  Shimmer,
+  Stagger,
+  SwipeRow,
+  useDelayedFlag,
+  useFirstPaint,
+  useScrollChrome,
+  useShowTabBarOnFocus,
+  useTabBarInset,
+} from './motion';

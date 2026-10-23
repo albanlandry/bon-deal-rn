@@ -1,16 +1,17 @@
 // app/edit-profile.tsx — Modifier le profil
 // Themed fields with inline validation (Norman); avatar upload is optimistic
 // (Doherty). API calls unchanged: PATCH /auth/me, POST /auth/me/avatar.
+// Leaving with unsaved changes asks first (back button, gesture, header).
 import { Ionicons } from '@expo/vector-icons';
+import { usePreventRemove } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import { useNavigation, useRouter } from 'expo-router';
+import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   View,
@@ -22,6 +23,7 @@ import {
   AppText,
   Avatar,
   Button,
+  PressableScale,
   ScreenHeader,
   TextField,
   showToast,
@@ -38,7 +40,7 @@ function saveErrorMessage(e: unknown): string {
   if (e instanceof ApiError) {
     if (e.status === 400) return locationSaveErrorMessage(e);
     if (e.status === 401) return 'Session expirée. Reconnectez-vous.';
-    if (e.status === 409) return apiErrorMessage(e, "Email, téléphone ou nom d'utilisateur déjà utilisé.");
+    if (e.status === 409) return apiErrorMessage(e, 'Email, téléphone ou nom d’utilisateur déjà utilisé.');
     if (e.status === 422) return 'Certaines valeurs sont invalides.';
     if (e.status >= 500) return 'Erreur serveur. Réessayez.';
   }
@@ -47,8 +49,11 @@ function saveErrorMessage(e: unknown): string {
 
 export default function EditProfileScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const t = useTheme();
   const { user, refreshUser } = useAuth();
+  // Set once the save succeeded, so the back navigation after it isn't blocked.
+  const saved = useRef(false);
 
   const [firstName, setFirstName] = useState(user?.first_name ?? '');
   const [lastName, setLastName] = useState(user?.last_name ?? '');
@@ -78,48 +83,55 @@ export default function EditProfileScreen() {
     onSuccess: async (_d, patch) => {
       await refreshUser();
       if ('city' in patch) qc.invalidateQueries({ queryKey: ['posts'] });
+      saved.current = true;
       showToast.success('Profil mis à jour', 'Vos modifications ont été enregistrées.');
       router.back();
     },
     onError: (e) => showToast.error('Échec', saveErrorMessage(e)),
   });
 
-  const pickAvatar = async (fromCamera: boolean) => {
-    const result = fromCamera
-      ? await ImagePicker.launchCameraAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          allowsEditing: true,
-          aspect: [1, 1],
-          quality: 0.6,
-        })
-      : await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          allowsEditing: true,
-          aspect: [1, 1],
-          quality: 0.6,
-        });
-    if (!result.canceled && result.assets[0]) {
-      const uri = result.assets[0].uri;
-      setAvatarUri(uri); // optimistic preview
-      upload.mutate(uri);
-    }
-  };
-
-  const handlePickImage = async () => {
+  /** Ask for the permission of the chosen source only (as in setup-profile). */
+  const pickAvatar = async (source: 'camera' | 'library') => {
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Permission requise', 'Autorisez l’accès à vos photos.');
+      const perm =
+        source === 'camera'
+          ? await ImagePicker.requestCameraPermissionsAsync()
+          : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (perm.status !== 'granted') {
+        Alert.alert(
+          'Permission requise',
+          source === 'camera'
+            ? 'Autorisez l’appareil photo pour prendre votre photo.'
+            : 'Autorisez l’accès à vos photos pour en choisir une.',
+        );
         return;
       }
-      Alert.alert('Changer la photo', 'Choisissez une option', [
-        { text: 'Annuler', style: 'cancel' },
-        { text: 'Prendre une photo', onPress: () => pickAvatar(true) },
-        { text: 'Choisir depuis la galerie', onPress: () => pickAvatar(false) },
-      ]);
+      const opts: ImagePicker.ImagePickerOptions = {
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.6,
+      };
+      const result =
+        source === 'camera'
+          ? await ImagePicker.launchCameraAsync(opts)
+          : await ImagePicker.launchImageLibraryAsync(opts);
+      if (!result.canceled && result.assets[0]) {
+        const uri = result.assets[0].uri;
+        setAvatarUri(uri); // optimistic preview
+        upload.mutate(uri);
+      }
     } catch {
       showToast.error('Erreur', 'Impossible d’accéder aux photos.');
     }
+  };
+
+  const handlePickImage = () => {
+    Alert.alert('Changer la photo', 'Choisissez une option', [
+      { text: 'Annuler', style: 'cancel' },
+      { text: 'Prendre une photo', onPress: () => pickAvatar('camera') },
+      { text: 'Choisir dans la galerie', onPress: () => pickAvatar('library') },
+    ]);
   };
 
   const validateEmail = (value: string) => {
@@ -133,6 +145,17 @@ export default function EditProfileScreen() {
     email !== (user?.email ?? '') ||
     city !== (user?.city ?? '') ||
     quartier !== (user?.quartier ?? '');
+
+  usePreventRemove(dirty, ({ data }) => {
+    if (saved.current) {
+      navigation.dispatch(data.action);
+      return;
+    }
+    Alert.alert('Quitter sans enregistrer ?', 'Vos modifications seront perdues.', [
+      { text: 'Continuer la modification', style: 'cancel' },
+      { text: 'Quitter', style: 'destructive', onPress: () => navigation.dispatch(data.action) },
+    ]);
+  });
 
   const handleSave = () => {
     if (email.trim() && !EMAIL_RE.test(email.trim())) {
@@ -173,7 +196,7 @@ export default function EditProfileScreen() {
           showsVerticalScrollIndicator={false}>
           {/* Avatar */}
           <View style={styles.avatarSection}>
-            <Pressable
+            <PressableScale
               onPress={handlePickImage}
               disabled={upload.isPending}
               accessibilityRole="button"
@@ -181,7 +204,7 @@ export default function EditProfileScreen() {
               <Avatar uri={avatarUri || null} name={displayName} size={104} />
               {upload.isPending && (
                 <View style={[styles.avatarUploading, { backgroundColor: t.colors.scrim }]}>
-                  <ActivityIndicator color="#FFFFFF" />
+                  <ActivityIndicator color={t.colors.onOverlay} />
                 </View>
               )}
               <View
@@ -191,11 +214,10 @@ export default function EditProfileScreen() {
                 ]}>
                 <Ionicons name="camera" size={18} color={t.colors.onBrand} />
               </View>
-            </Pressable>
+            </PressableScale>
             <Button
               label={upload.isPending ? 'Envoi de la photo…' : 'Changer la photo'}
               variant="ghost"
-              size="sm"
               onPress={handlePickImage}
               disabled={upload.isPending}
             />
@@ -256,17 +278,13 @@ export default function EditProfileScreen() {
               <AppText variant="labelStrong" style={styles.label}>
                 Ville et quartier
               </AppText>
-              <Pressable
+              <PressableScale
                 accessibilityRole="button"
                 accessibilityLabel={`Ville et quartier : ${city ? [quartier, city].filter(Boolean).join(', ') : 'non définis'}. Modifier`}
                 onPress={() => setShowLocation(true)}
-                style={({ pressed }) => [
+                style={[
                   styles.locationField,
-                  {
-                    borderColor: t.colors.line,
-                    borderRadius: t.radius.sm,
-                    backgroundColor: pressed ? t.colors.surfaceAlt : t.colors.surface,
-                  },
+                  { borderColor: t.colors.line, borderRadius: t.radius.sm, backgroundColor: t.colors.surface },
                 ]}>
                 <Ionicons name="location-outline" size={18} color={t.colors.brandStrong} />
                 <View style={styles.flex}>
@@ -280,7 +298,7 @@ export default function EditProfileScreen() {
                   )}
                 </View>
                 <Ionicons name="chevron-forward" size={18} color={t.colors.inkSubtle} />
-              </Pressable>
+              </PressableScale>
               <AppText variant="caption" color="inkMuted" style={styles.helper}>
                 Votre ville détermine votre fil d’annonces ; le quartier sert de lieu de retrait par défaut.
               </AppText>
@@ -340,14 +358,14 @@ const styles = StyleSheet.create({
   },
   form: { gap: 8 },
   label: { marginBottom: 8 },
-  helper: { marginTop: 6 },
+  helper: { marginTop: 8 },
   locationField: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    minHeight: 52,
+    gap: 12,
+    minHeight: 56,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
     borderWidth: 1,
   },
   footer: { padding: 16, borderTopWidth: StyleSheet.hairlineWidth },

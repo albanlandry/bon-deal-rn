@@ -13,6 +13,11 @@
  * "test session" is marked by the stored dev phone; while it exists, a 401
  * re-runs the dev exchange instead of Firebase, and Firebase's signed-out
  * state doesn't clear it.
+ *
+ * Phone + password (`POST /auth/login/phone`, once the user chose a password):
+ * no Firebase session either. The stored refresh token marks a "password
+ * session"; a 401 renews the JWT through `POST /auth/token/refresh`. It takes
+ * precedence over the other two when restoring and refreshing.
  */
 import React, {
   createContext,
@@ -27,7 +32,17 @@ import {
   setAuthToken,
   setUnauthorizedHandler,
 } from '@/lib/api';
-import { getJwt, setJwt, clearJwt, getDevPhone, setDevPhone, clearDevPhone } from '@/lib/auth-storage';
+import {
+  getJwt,
+  setJwt,
+  clearJwt,
+  getDevPhone,
+  setDevPhone,
+  clearDevPhone,
+  getRefreshToken,
+  setRefreshToken,
+  clearRefreshToken,
+} from '@/lib/auth-storage';
 import { config } from '@/utils/config';
 import { registerPushToken, unregisterPushToken } from '@/lib/push';
 import type { BdNotificationPrefs, BdPrivacyPrefs } from '@/constants/types';
@@ -48,6 +63,8 @@ export interface BackendUser {
   avg_rating: number | null;
   review_count: number;
   created_at: string | null;
+  /** Chose a password: phone + password sign-in works (PUT /auth/me/password). */
+  has_password?: boolean;
   /** Legal documents whose current version still needs acceptance. */
   consent_required?: ('terms' | 'privacy')[];
   notification_prefs?: BdNotificationPrefs;
@@ -60,6 +77,10 @@ interface TokenResponse {
   expires_in: number;
 }
 
+interface MobileTokenResponse extends TokenResponse {
+  refresh_token: string;
+}
+
 interface AuthContextType {
   jwt: string | null;
   user: BackendUser | null;
@@ -70,6 +91,10 @@ interface AuthContextType {
   signOut: (opts?: { local?: boolean }) => Promise<void>;
   /** Local test login (config.devLogin only). Throws ApiError on a wrong number/code. */
   signInWithDevOtp: (phone: string, code: string) => Promise<void>;
+  /** Phone + password sign-in. Throws ApiError (401 `invalid_credentials`, 429…). */
+  signInWithPassword: (phone: string, password: string) => Promise<void>;
+  /** Signed in with phone + password (changing the password then needs the current one). */
+  isPasswordSession: boolean;
 }
 
 /** The fixed code accepted by the backend's local test login. */
@@ -81,6 +106,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [jwt, setJwtState] = useState<string | null>(null);
   const [user, setUser] = useState<BackendUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isPasswordSession, setIsPasswordSession] = useState(false);
+
+  const applyJwt = async (token: string) => {
+    await setJwt(token);
+    setAuthToken(token);
+    setJwtState(token);
+  };
+
+  const clearSession = async () => {
+    await clearRefreshToken();
+    await clearJwt();
+    setAuthToken(null);
+    setJwtState(null);
+    setUser(null);
+    setIsPasswordSession(false);
+  };
+
+  /** Store a phone + password session (login or renewal). */
+  const applyMobileTokens = async (res: MobileTokenResponse) => {
+    await setRefreshToken(res.refresh_token);
+    await applyJwt(res.access_token);
+    setIsPasswordSession(true);
+  };
+
+  /**
+   * Renew a password session's JWT. A refused refresh token (expired, or the
+   * password was changed on another phone) ends the session; a network
+   * failure keeps it for the next try.
+   */
+  const exchangeRefreshToken = async (refreshToken: string): Promise<boolean> => {
+    try {
+      const res = await apiFetch<MobileTokenResponse>('/auth/token/refresh', {
+        method: 'POST',
+        body: { refresh_token: refreshToken },
+        skipUnauthorized: true,
+      });
+      await applyMobileTokens(res);
+      return true;
+    } catch (e: any) {
+      if (e?.status === 401 || e?.status === 403) await clearSession();
+      else console.warn('[auth] token refresh failed:', e);
+      return false;
+    }
+  };
 
   /**
    * Exchange the current Firebase user's ID token for a backend JWT.
@@ -134,6 +203,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // → dev exchange, otherwise Firebase).
   useEffect(() => {
     setUnauthorizedHandler(async () => {
+      const refreshToken = await getRefreshToken();
+      if (refreshToken) return exchangeRefreshToken(refreshToken);
       const devPhone = config.devLogin.enabled ? await getDevPhone() : null;
       if (devPhone) {
         return exchangeDevOtp(devPhone, DEV_OTP_CODE).catch(() => false);
@@ -147,8 +218,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // (except a local test session, restored here first).
   useEffect(() => {
     const unsubscribe = auth().onAuthStateChanged(async (fbUser) => {
+      const refreshToken = await getRefreshToken();
       const devPhone = config.devLogin.enabled ? await getDevPhone() : null;
-      if (devPhone) {
+      if (refreshToken) {
+        // Password session: cached JWT for a fast start, else renew it.
+        const cached = await getJwt();
+        if (cached) {
+          setAuthToken(cached);
+          setJwtState(cached);
+          setIsPasswordSession(true);
+        }
+        const ready = cached ? true : await exchangeRefreshToken(refreshToken);
+        if (ready) await loadMe();
+      } else if (devPhone) {
         const cached = await getJwt();
         if (cached) {
           setAuthToken(cached);
@@ -189,18 +271,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async (opts?: { local?: boolean }) => {
     if (!opts?.local) {
       try {
-        await unregisterPushToken();
+        // best-effort — never block sign-out. Without Google Play services
+        // (e.g. Waydroid) getToken() never settles, so give up after 3 s.
+        await Promise.race([unregisterPushToken(), new Promise((resolve) => setTimeout(resolve, 3000))]);
       } catch {
-        // best-effort — never block sign-out
+        // ignore
       }
     }
-    if (await getDevPhone()) {
-      // Test session: no Firebase user to sign out, so clear everything here.
+    if ((await getRefreshToken()) || (await getDevPhone())) {
+      // Password or test session: no Firebase user to sign out, so clear
+      // everything here.
       await clearDevPhone();
-      await clearJwt();
-      setAuthToken(null);
-      setJwtState(null);
-      setUser(null);
+      await clearSession();
+      if (auth().currentUser) await auth().signOut();
       return;
     }
     await auth().signOut();
@@ -214,6 +297,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await loadMe();
   };
 
+  const signInWithPassword = async (phone: string, password: string) => {
+    const res = await apiFetch<MobileTokenResponse>('/auth/login/phone', {
+      method: 'POST',
+      body: { phone_number: phone, password },
+      skipUnauthorized: true,
+    });
+    // A password session replaces any test session left on this phone.
+    await clearDevPhone();
+    await applyMobileTokens(res);
+    await loadMe();
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -224,6 +319,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         refreshUser,
         signOut,
         signInWithDevOtp,
+        signInWithPassword,
+        isPasswordSession,
       }}>
       {children}
     </AuthContext.Provider>
