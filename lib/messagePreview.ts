@@ -1,6 +1,7 @@
 // lib/messagePreview.ts — one-line text for chat messages: the system-event
 // sentences shown in the chatroom, and the conversation-list preview.
 import type { BdChatMessage, BdConversation } from '@/constants/types';
+import { appointmentSentence } from '@/lib/api/appointments';
 import { meetingSummary } from '@/lib/api/transactions';
 import { formatAmount } from '@/lib/format';
 
@@ -38,6 +39,8 @@ export function renderSystemMessage(
       }, now);
       return summary ? `Rendez-vous fixé : ${summary}` : 'Rendez-vous retiré';
     }
+    case 'system_appointment':
+      return appointmentSentence(p, myId, conv?.counterparty?.username ?? "L'autre partie", now);
     default:
       return msg.kind;
   }

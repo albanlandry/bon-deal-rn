@@ -59,6 +59,8 @@ import { blockedMessage } from '@/lib/api/safety';
 import { useBlockActions } from '@/lib/useBlock';
 import ReportSheet from '@/components/organisms/ReportSheet';
 import DealTimeline from '@/components/molecules/DealTimeline';
+import AppointmentCard from '@/components/organisms/AppointmentCard';
+import AppointmentSheet from '@/components/organisms/AppointmentSheet';
 import { transactionQuery } from '@/lib/api/transactions';
 import { ApiError } from '@/lib/api';
 import { clearUnread, mergeServerMessage, messagesKey, nextTempId } from '@/lib/chatCache';
@@ -75,7 +77,7 @@ const SAFETY_DISMISSED_KEY = 'bondeal.chat.safety.dismissed.v1';
 
 function systemIcon(kind: string): React.ComponentProps<typeof Ionicons>['name'] {
   if (kind === 'system_accepted') return 'checkmark-circle';
-  if (kind === 'system_meeting_set') return 'calendar-outline';
+  if (kind === 'system_meeting_set' || kind === 'system_appointment') return 'calendar-outline';
   if (kind === 'system_rejected' || kind === 'system_auto_rejected' || kind === 'system_withdrawn')
     return 'close-circle';
   return 'pricetag';
@@ -150,7 +152,7 @@ function SystemPill({ text, kind, animate }: { text: string; kind: string; anima
   const t = useTheme();
   const styles = useStyles(makeStyles);
   const accepted = kind === 'system_accepted';
-  const meeting = kind === 'system_meeting_set';
+  const meeting = kind === 'system_meeting_set' || kind === 'system_appointment';
   return (
     <Animated.View entering={animate ? enterFromBottom() : undefined} style={styles.systemRow} accessibilityRole="text">
       <View
@@ -578,6 +580,7 @@ export default function ChatroomScreen() {
   const [report, setReport] = useState<{ type: 'user' | 'message'; id: number; subject?: string } | null>(null);
   const [actionMsg, setActionMsg] = useState<BdChatMessage | null>(null);
   const [celebrate, setCelebrate] = useState(0);
+  const [appointmentOpen, setAppointmentOpen] = useState(false);
   // Ids present at first paint: those never animate (only new messages rise in).
   const seenIds = useRef<Set<number> | null>(null);
   const safetyShownFull = useRef(false);
@@ -711,8 +714,14 @@ export default function ChatroomScreen() {
 
   const negBusy = acceptMutation.isPending || rejectMutation.isPending;
   const ln = conv?.latest_negotiation;
-  // Accepted offer → the header card becomes the deal's (amount + timeline → deal page).
-  const dealId = ln?.status === 'accepted' && ln.transaction_id ? ln.transaction_id : null;
+  const appointment = conv?.appointment ?? null;
+  // Accepted offer or appointment holding a deal (confirmed, or changed and
+  // awaiting re-confirmation) → the header card becomes the deal's (amount +
+  // timeline → deal page).
+  const dealId =
+    ln?.status === 'accepted' && ln.transaction_id
+      ? ln.transaction_id
+      : appointment?.transaction_id ?? null;
   const dealQuery = useQuery(transactionQuery(dealId));
   const deal = dealQuery.data;
   // A meeting set by the other party (live message) refreshes the deal.
@@ -726,6 +735,17 @@ export default function ChatroomScreen() {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
     }
   }, [lastMeetingMsgId, dealId, queryClient]);
+  // Appointment events (live from the other party) refresh the card and the deal.
+  const lastAppointmentMsgId = useMemo(() => {
+    const m = [...(msgsQuery.data ?? [])].reverse().find((x) => x.kind === 'system_appointment');
+    return m ? m.id : null;
+  }, [msgsQuery.data]);
+  useEffect(() => {
+    if (lastAppointmentMsgId == null) return;
+    queryClient.invalidateQueries({ queryKey: ['conversation', cid] });
+    queryClient.invalidateQueries({ queryKey: ['appointment', cid] });
+    queryClient.invalidateQueries({ queryKey: ['transactions'] });
+  }, [lastAppointmentMsgId, cid, queryClient]);
   const dealReviewed = (deal?.reviews ?? []).some((r) => r.reviewer_id === myId);
 
   const ladderKey = ln
@@ -882,6 +902,11 @@ export default function ChatroomScreen() {
   // Buyer can (re)open a negotiation from the chat when none is pending.
   const canMakeOffer =
     !!conv && isBuyer && !blockedByMe && post?.state === 'published' && !post.is_free && ln?.status !== 'pending' && ln?.status !== 'accepted';
+  // Either party can propose a meeting while the listing is on sale, or
+  // reserved for this pair (an accepted offer opened the deal).
+  const canProposeAppointment =
+    !!conv && !blockedByMe && !appointment &&
+    (post?.state === 'published' || (post?.state === 'reserved' && !!dealId));
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -947,6 +972,15 @@ export default function ChatroomScreen() {
             {postBadge && <Badge label={postBadge} tone={postBadge === 'Vendu' ? 'overlay' : 'warning'} />}
             <Ionicons name="chevron-forward" size={18} color={t.colors.inkSubtle} />
           </PressableScale>
+          )}
+          {appointment && (
+            <AppointmentCard
+              appointment={appointment}
+              myId={myId}
+              otherName={conv?.counterparty?.username ?? 'L’autre partie'}
+              postTitle={post.title ?? undefined}
+              onEdit={() => setAppointmentOpen(true)}
+            />
           )}
         </View>
       )}
@@ -1074,17 +1108,28 @@ export default function ChatroomScreen() {
           </Animated.View>
         )}
 
-        {canMakeOffer && (
+        {(canMakeOffer || canProposeAppointment) && (
           <View style={styles.offerRow}>
-            <Button
-              label="Faire une offre"
-              icon="pricetag-outline"
-              size="sm"
-              variant="secondary"
-              onPress={() =>
-                router.push({ pathname: '/make-offer', params: { postId: String(post!.id), conversationId: String(cid) } })
-              }
-            />
+            {canMakeOffer && (
+              <Button
+                label="Faire une offre"
+                icon="pricetag-outline"
+                size="sm"
+                variant="secondary"
+                onPress={() =>
+                  router.push({ pathname: '/make-offer', params: { postId: String(post!.id), conversationId: String(cid) } })
+                }
+              />
+            )}
+            {canProposeAppointment && (
+              <Button
+                label="Fixer un rendez-vous"
+                icon="calendar-outline"
+                size="sm"
+                variant="secondary"
+                onPress={() => setAppointmentOpen(true)}
+              />
+            )}
           </View>
         )}
 
@@ -1187,6 +1232,15 @@ export default function ChatroomScreen() {
 
       <Celebrate trigger={celebrate} haptic={false} onDone={() => setCelebrate(0)} />
 
+      {conv && (
+        <AppointmentSheet
+          visible={appointmentOpen}
+          onClose={() => setAppointmentOpen(false)}
+          conversationId={cid}
+          appointment={appointment}
+        />
+      )}
+
       <ReportSheet
         visible={!!report}
         onClose={() => setReport(null)}
@@ -1217,6 +1271,7 @@ const makeStyles = createStyles((t: Theme) => ({
   listingWrap: {
     paddingHorizontal: t.spacing.sm,
     paddingBottom: t.spacing.xs,
+    gap: t.spacing.xs,
     backgroundColor: t.colors.surface,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: t.colors.line,
@@ -1268,7 +1323,7 @@ const makeStyles = createStyles((t: Theme) => ({
   skeletons: { padding: t.spacing.md, gap: t.spacing.sm },
   dealCard: { flexDirection: 'column', alignItems: 'stretch', gap: t.spacing.xs },
   dealTop: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.sm },
-  offerRow: { flexDirection: 'row', paddingHorizontal: t.spacing.sm, paddingBottom: t.spacing.xs },
+  offerRow: { flexDirection: 'row', flexWrap: 'wrap', gap: t.spacing.xs, paddingHorizontal: t.spacing.sm, paddingBottom: t.spacing.xs },
   quoted: { marginBottom: t.spacing.sm },
   messagesContent: { paddingHorizontal: t.spacing.sm, paddingBottom: t.spacing.xs, flexGrow: 1 },
   safety: { paddingVertical: t.spacing.xs },

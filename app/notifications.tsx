@@ -61,7 +61,10 @@ function iconFor(type: string): { name: IconName; color: keyof ColorTokens; tint
     case 'saved_search_match':
       return { name: 'bookmark', color: 'trust', tint: 'trustTint' };
     case 'meeting_set':
+    case 'appointment':
       return { name: 'calendar', color: 'brandStrong', tint: 'brandTint' };
+    case 'post_available_again':
+      return { name: 'refresh-circle', color: 'success', tint: 'successTint' };
     default:
       return { name: 'notifications', color: 'inkMuted', tint: 'surfaceAlt' };
   }

@@ -11,7 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
-import { TXN_STATUS_LABEL } from '@/lib/api/transactions';
+import { cancellationReasonLabel, TXN_STATUS_LABEL } from '@/lib/api/transactions';
 import { formatAmount, formatDayLabel } from '@/lib/format';
 import { useTheme } from '@/theme';
 import AppText from '../atoms/AppText';
@@ -103,7 +103,7 @@ export default function TransactionPanel({
         : txn.status === 'disputed'
           ? 'Litige en cours d’examen par l’équipe BonDeal.'
           : txn.cancellation_reason
-            ? `Annulée : ${txn.cancellation_reason}`
+            ? `Annulée : ${cancellationReasonLabel(txn.cancellation_reason)}`
             : 'Transaction annulée.';
 
   const titleText = (

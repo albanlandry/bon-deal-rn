@@ -1,3 +1,4 @@
+import type { BdAppointment } from '@/lib/api/appointments';
 /**
  * Shared API types — mirror the FastAPI serializers in the backend
  * (post_service.serialize_post, conversation_service._serialize_*,
@@ -110,6 +111,8 @@ export interface BdConversation {
   created_at: string | null;
   unread_count: number;
   latest_negotiation: BdNegotiationSummary | null;
+  /** The open appointment (docs/14); older APIs omit it. */
+  appointment?: BdAppointment | null;
 }
 
 /** Preview of a conversation's newest message (body cut to 140 chars). */
@@ -132,7 +135,8 @@ export type BdChatMessageKind =
   | 'system_rejected'
   | 'system_auto_rejected'
   | 'system_withdrawn'
-  | 'system_meeting_set';
+  | 'system_meeting_set'
+  | 'system_appointment';
 
 export interface BdChatMessage {
   id: number;
@@ -379,6 +383,10 @@ export interface BdTransaction {
   meeting_location: string | null;
   /** Agreed hand-over time (naive UTC ISO from the API, see `parseServerDate`). */
   meeting_at?: string | null;
+  /** Set when an appointment fixed the meeting (docs/14). */
+  appointment_id?: number | null;
+  /** The deal's chat, where its appointment lives. */
+  conversation_id?: number | null;
   status: BdTransactionStatus;
   cancellation_reason: string | null;
   created_at: string | null;

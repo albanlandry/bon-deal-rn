@@ -1,5 +1,5 @@
 /**
- * Where a deal stands (audit S7): Offre acceptée → Échange → Avis, derived
+ * Where a deal stands (audit S7): Accord → Échange → Avis, derived
  * from the transaction status and whether I've reviewed. A cancelled deal
  * stops at "Échange", a disputed one at "Avis" (disputes follow completion).
  * Static on purpose: state, not celebration.
@@ -34,7 +34,8 @@ export function dealSteps(status: BdTransactionStatus | string, reviewed: boolea
           : 'current'
         : 'todo';
   return [
-    { label: 'Offre acceptée', longLabel: 'Offre acceptée', state: 'done' },
+    // An accepted offer or a confirmed appointment (docs/14): both are an agreement.
+    { label: 'Accord', longLabel: 'Accord conclu', state: 'done' },
     {
       label: status === 'cancelled' ? 'Annulée' : 'Échange',
       longLabel: status === 'cancelled' ? 'Affaire annulée' : 'Remise en main propre',

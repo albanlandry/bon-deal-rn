@@ -58,29 +58,6 @@ export async function createReview(id: number, rating: number, comment?: string)
   return res.review;
 }
 
-/** Body of PATCH /transactions/{id}/meeting: omitted = kept, null = cleared. */
-export interface MeetingPatch {
-  meeting_location?: string | null;
-  /** ISO datetime with an offset (we send UTC, `toISOString()`). */
-  meeting_at?: string | null;
-}
-
-/** Set or change the hand-over place and/or time (pending deals only). */
-export async function updateMeeting(id: number, patch: MeetingPatch): Promise<BdTransaction> {
-  const res = await apiFetch<TxnResponse>(`/transactions/${id}/meeting`, { method: 'PATCH', body: patch });
-  return res.transaction;
-}
-
-export function meetingErrorMessage(e: unknown): string {
-  if (e instanceof ApiError) {
-    if (e.code === 'meeting_in_past') return 'Choisissez une heure à venir.';
-    if (e.code === 'meeting_too_far') return apiErrorMessage(e, 'Le rendez-vous doit avoir lieu dans les 60 prochains jours.');
-    if (e.code === 'meeting_empty') return 'Indiquez un lieu ou une heure de rendez-vous.';
-    if (e.code === 'transaction_not_pending') return 'Le rendez-vous ne peut plus être modifié : l’affaire est terminée.';
-  }
-  return transactionErrorMessage(e);
-}
-
 // --- Meeting time helpers (pure) -----------------------------------------
 
 /** The API returns naive UTC ISO strings ("2026-10-23T17:00:00"): read them as UTC. */
@@ -149,6 +126,18 @@ export function transactionErrorMessage(e: unknown): string {
     if (e.status === 422) return 'Vérifiez les informations saisies.';
   }
   return apiErrorMessage(e, 'Action impossible. Réessayez.');
+}
+
+/** System cancellation codes (docs/14) in French; people's own reasons as typed. */
+const CANCEL_REASON_LABEL: Record<string, string> = {
+  appointment_cancelled: 'Rendez-vous annulé',
+  appointment_expired: 'Réservation levée sans réponse après le rendez-vous',
+  not_sold: 'Vente non conclue',
+};
+
+export function cancellationReasonLabel(reason: string | null | undefined): string | null {
+  const r = reason?.trim();
+  return r ? (CANCEL_REASON_LABEL[r] ?? r) : null;
 }
 
 export const TXN_STATUS_LABEL: Record<string, string> = {

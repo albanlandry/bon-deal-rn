@@ -1208,6 +1208,89 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/appointments/{appt_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Appointment
+         * @description Change the time and/or place. The appointment goes back to `proposed`
+         *     (the other party confirms again); a reserved post stays reserved.
+         */
+        patch: operations["update_appointment_v1_appointments__appt_id__patch"];
+        trace?: never;
+    };
+    "/v1/appointments/{appt_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Appointment
+         * @description Either party cancels. A held post goes back on sale and the deal is cancelled.
+         */
+        post: operations["cancel_appointment_v1_appointments__appt_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/appointments/{appt_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm Appointment
+         * @description The party who did not propose confirms. Reserves the post and creates
+         *     the deal (or links the pending one an accepted offer opened).
+         */
+        post: operations["confirm_appointment_v1_appointments__appt_id__confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/appointments/{appt_id}/outcome": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report Outcome
+         * @description After the meeting. Seller "sold": deal completed, post sold. Buyer
+         *     "sold": the seller is asked to confirm. "Not sold" (either): like cancel.
+         */
+        post: operations["report_outcome_v1_appointments__appt_id__outcome_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/auth/firebase": {
         parameters: {
             query?: never;
@@ -1517,6 +1600,46 @@ export interface paths {
         get: operations["get_conversation_v1_conversations__conv_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/conversations/{conv_id}/appointment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Conversation Appointment
+         * @description The open appointment of the conversation, else its latest one, else null.
+         */
+        get: operations["get_conversation_appointment_v1_conversations__conv_id__appointment_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/conversations/{conv_id}/appointments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Propose Appointment
+         * @description Either party proposes a time (required) and a place (optional).
+         */
+        post: operations["propose_appointment_v1_conversations__conv_id__appointments_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3213,6 +3336,126 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** AppointmentMaybeOut */
+        AppointmentMaybeOut: {
+            appointment: components["schemas"]["AppointmentOut"] | null;
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AppointmentOut */
+        AppointmentOut: {
+            /** Buyer Id */
+            buyer_id: number;
+            /** Can Cancel */
+            can_cancel: boolean;
+            /** Can Confirm */
+            can_confirm: boolean;
+            /** Can Edit */
+            can_edit: boolean;
+            /** Can Report Outcome */
+            can_report_outcome: boolean;
+            /** Cancel Reason */
+            cancel_reason: string | null;
+            /** Cancelled At */
+            cancelled_at: string | null;
+            /** Cancelled By Id */
+            cancelled_by_id: number | null;
+            /** Completed At */
+            completed_at: string | null;
+            /** Confirmed At */
+            confirmed_at: string | null;
+            /** Conversation Id */
+            conversation_id: number;
+            /** Created At */
+            created_at: string | null;
+            /** Id */
+            id: number;
+            place: components["schemas"]["AppointmentPlaceOut"] | null;
+            /** Post Id */
+            post_id: number;
+            /** Proposed By Id */
+            proposed_by_id: number;
+            quartier: components["schemas"]["AppointmentQuartierOut"] | null;
+            /** Sale Reported At */
+            sale_reported_at: string | null;
+            /** Seller Id */
+            seller_id: number;
+            /** Starts At */
+            starts_at: string;
+            /** Status */
+            status: string;
+            /** Transaction Id */
+            transaction_id: number | null;
+            /** Updated At */
+            updated_at: string | null;
+            /** Version */
+            version: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AppointmentOutcome */
+        AppointmentOutcome: {
+            /** Sold */
+            sold: boolean;
+            /** Version */
+            version: number;
+        };
+        /** AppointmentPlaceOut */
+        AppointmentPlaceOut: {
+            /** Address */
+            address?: string | null;
+            /** Details */
+            details?: string | null;
+            /** Kind */
+            kind: string;
+            /** Name */
+            name?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AppointmentQuartierOut */
+        AppointmentQuartierOut: {
+            /** City */
+            city: string | null;
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AppointmentResultOut */
+        AppointmentResultOut: {
+            appointment: components["schemas"]["AppointmentOut"];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AppointmentTransactionOut */
+        AppointmentTransactionOut: {
+            /** Amount */
+            amount: number;
+            /** Id */
+            id: number;
+            /** Post Id */
+            post_id: number;
+            /** Status */
+            status: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AppointmentWithDealOut */
+        AppointmentWithDealOut: {
+            appointment: components["schemas"]["AppointmentOut"];
+            /** Success */
+            success: boolean;
+            transaction: components["schemas"]["AppointmentTransactionOut"] | null;
+        } & {
+            [key: string]: unknown;
+        };
         /** AttachImages */
         AttachImages: {
             /** Keys */
@@ -3460,6 +3703,13 @@ export interface components {
              */
             source: "staff" | "osm";
         };
+        /** CancelAppointment */
+        CancelAppointment: {
+            /** Reason */
+            reason?: string | null;
+            /** Version */
+            version: number;
+        };
         /** ChangePassword */
         ChangePassword: {
             /** Current Password */
@@ -3691,6 +3941,7 @@ export interface components {
         };
         /** ConversationOut */
         ConversationOut: {
+            appointment?: components["schemas"]["AppointmentOut"] | null;
             /** Buyer Id */
             buyer_id: number;
             counterparty: components["schemas"]["ConversationCounterpartyOut"];
@@ -4988,6 +5239,20 @@ export interface components {
             /** Phone Number */
             phone_number: string;
         };
+        /** PlaceIn */
+        PlaceIn: {
+            /** Address */
+            address?: string | null;
+            /** Details */
+            details?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "exact" | "relative";
+            /** Name */
+            name?: string | null;
+        };
         /** PostCreate */
         PostCreate: {
             /** Age Bucket */
@@ -5345,6 +5610,17 @@ export interface components {
             /** User Id */
             user_id?: number | null;
         };
+        /** ProposeAppointment */
+        ProposeAppointment: {
+            place?: components["schemas"]["PlaceIn"] | null;
+            /** Quartier Id */
+            quartier_id?: number | null;
+            /**
+             * Starts At
+             * Format: date-time
+             */
+            starts_at: string;
+        };
         /** QuartierDeleteOut */
         QuartierDeleteOut: {
             /** Quartier Id */
@@ -5701,6 +5977,8 @@ export interface components {
         TransactionDetailOut: {
             /** Amount */
             amount: number;
+            /** Appointment Id */
+            appointment_id?: number | null;
             buyer: components["schemas"]["TransactionUserBriefOut"] | null;
             /** Buyer Id */
             buyer_id: number;
@@ -5710,6 +5988,8 @@ export interface components {
             cancelled_at: string | null;
             /** Completed At */
             completed_at: string | null;
+            /** Conversation Id */
+            conversation_id?: number | null;
             /** Created At */
             created_at: string | null;
             /** Currency */
@@ -5770,6 +6050,8 @@ export interface components {
         TransactionOut: {
             /** Amount */
             amount: number;
+            /** Appointment Id */
+            appointment_id?: number | null;
             buyer: components["schemas"]["TransactionUserBriefOut"] | null;
             /** Buyer Id */
             buyer_id: number;
@@ -5779,6 +6061,8 @@ export interface components {
             cancelled_at: string | null;
             /** Completed At */
             completed_at: string | null;
+            /** Conversation Id */
+            conversation_id?: number | null;
             /** Created At */
             created_at: string | null;
             /** Currency */
@@ -5852,6 +6136,16 @@ export interface components {
             items: components["schemas"]["TrendingItem"][];
         } & {
             [key: string]: unknown;
+        };
+        /** UpdateAppointment */
+        UpdateAppointment: {
+            place?: components["schemas"]["PlaceIn"] | null;
+            /** Quartier Id */
+            quartier_id?: number | null;
+            /** Starts At */
+            starts_at?: string | null;
+            /** Version */
+            version: number;
         };
         /** UpdateCountry */
         UpdateCountry: {
@@ -6076,6 +6370,11 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** VersionBody */
+        VersionBody: {
+            /** Version */
+            version: number;
         };
         /** WarnRequest */
         WarnRequest: {
@@ -8436,6 +8735,146 @@ export interface operations {
             };
         };
     };
+    update_appointment_v1_appointments__appt_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                appt_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAppointment"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppointmentResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_appointment_v1_appointments__appt_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                appt_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CancelAppointment"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppointmentResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_appointment_v1_appointments__appt_id__confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                appt_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VersionBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppointmentWithDealOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    report_outcome_v1_appointments__appt_id__outcome_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                appt_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppointmentOutcome"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppointmentWithDealOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     firebase_exchange_v1_auth_firebase_post: {
         parameters: {
             query?: never;
@@ -8982,6 +9421,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConversationResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_conversation_appointment_v1_conversations__conv_id__appointment_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conv_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppointmentMaybeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    propose_appointment_v1_conversations__conv_id__appointments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conv_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProposeAppointment"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppointmentResultOut"];
                 };
             };
             /** @description Validation Error */

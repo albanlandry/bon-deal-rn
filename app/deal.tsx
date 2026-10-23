@@ -28,11 +28,14 @@ import {
 } from '@/components/ui';
 import DealTimeline from '@/components/molecules/DealTimeline';
 import { useDealActions } from '@/components/organisms/DealActions';
-import MeetingSheet from '@/components/organisms/MeetingSheet';
+import AppointmentCard from '@/components/organisms/AppointmentCard';
+import AppointmentSheet from '@/components/organisms/AppointmentSheet';
+import { appointmentQuery } from '@/lib/api/appointments';
 import ActionDock, { dockBottom, DockButton } from '@/components/organisms/ActionDock';
 import { useAuth } from '@/contexts/AuthContext';
 import { postByIdQuery } from '@/lib/api/posts';
 import {
+  cancellationReasonLabel,
   dealHeadline,
   formatMeetingWhen,
   parseServerDate,
@@ -71,6 +74,9 @@ export default function DealScreen() {
   const deal = useDealActions({ transactionId: txnId, myId, onCompleted: () => setCelebrate(Date.now()) });
   const { q, txn, reviewed, iAmSeller, otherName, busy, confirm, confirming, openSheet, sheets } = deal;
   const post = useQuery({ ...postByIdQuery(txn?.post_id ?? 0), enabled: !!txn?.post_id });
+  const convId = txn?.conversation_id ?? null;
+  const apptQ = useQuery(appointmentQuery(convId));
+  const openAppt = apptQ.data && (apptQ.data.status === 'proposed' || apptQ.data.status === 'confirmed') ? apptQ.data : null;
   // Entrance on first paint only (never on refetch): the header text rises,
   // the cards follow 30 ms apart, the dock last.
   const firstPaint = useFirstPaint(!!txn);
@@ -129,7 +135,7 @@ export default function DealScreen() {
         ? 'Laissez l’acheteur vérifier l’objet'
         : 'Vérifiez l’objet avant de payer'
       : txn.status === 'cancelled'
-        ? txn.cancellation_reason || stamp(txn.cancelled_at)
+        ? cancellationReasonLabel(txn.cancellation_reason) || stamp(txn.cancelled_at)
         : stamp(txn.completed_at),
     txn.status === 'disputed'
       ? 'L’équipe BonDeal examine la situation'
@@ -276,8 +282,18 @@ export default function DealScreen() {
           </Card>
         </FadeInView>
 
-        {/* Meeting */}
-        {(pending || at || place) && (
+        {/* Meeting: the open appointment (docs/14), else the deal's legacy meeting */}
+        {openAppt ? (
+          <FadeInView index={3} animate={firstPaint} style={[styles.pad, styles.mt12]}>
+            <AppointmentCard
+              appointment={openAppt}
+              myId={myId}
+              otherName={otherName}
+              postTitle={txn.post_title ?? undefined}
+              onEdit={() => setMeetingOpen(true)}
+            />
+          </FadeInView>
+        ) : (pending || at || place) && (
           <FadeInView index={3} animate={firstPaint} style={[styles.pad, styles.mt12]}>
             <Card style={styles.meeting}>
               <View style={[styles.meetIcon, { backgroundColor: t.colors.brandTint, borderRadius: t.radius.sm }]}>
@@ -304,7 +320,7 @@ export default function DealScreen() {
                   </AppText>
                 )}
               </View>
-              {pending && (
+              {pending && !!convId && (
                 <Button
                   label={at || place ? 'Modifier' : 'Fixer'}
                   size="sm"
@@ -335,7 +351,15 @@ export default function DealScreen() {
       </ActionDock>
 
       {sheets}
-      {pending && <MeetingSheet visible={meetingOpen} onClose={() => setMeetingOpen(false)} txn={txn} listingPlace={listingPlace} />}
+      {pending && !!convId && (
+        <AppointmentSheet
+          visible={meetingOpen}
+          onClose={() => setMeetingOpen(false)}
+          conversationId={convId}
+          appointment={openAppt}
+          listingPlace={listingPlace}
+        />
+      )}
       <Celebrate trigger={celebrate} haptic={false} onDone={() => setCelebrate(0)} />
     </View>
   );
