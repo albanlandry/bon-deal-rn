@@ -1039,6 +1039,10 @@ export default function ChatroomScreen() {
               )
             }
             contentContainerStyle={styles.messagesContent}
+            // Android clips off-screen rows by default; with Reanimated entering
+            // animations the first message then crashes Fabric ("addViewAt:
+            // failed to insert view … at index 2", count=0).
+            removeClippedSubviews={false}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
             onScroll={onThreadScroll}
