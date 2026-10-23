@@ -28,8 +28,8 @@ import { CATEGORY_META } from '@/constants/catalog';
 import type { BdNotification } from '@/constants/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { markAllRead, markRead, notificationsQuery } from '@/lib/api/notifications';
-import { filtersToRouteParams, savedSearchesQuery } from '@/lib/api/savedSearches';
 import { formatDayLabel, formatRelativeTime } from '@/lib/format';
+import { notificationHref, openNotificationTarget } from '@/lib/notificationTarget';
 import { ColorTokens, createStyles, useStyles, useTheme } from '@/theme';
 import { duration } from '@/theme/motion';
 import { enterFromBottom, exitDown, spring, timing } from '@/components/motion/anim';
@@ -143,50 +143,9 @@ export default function NotificationsScreen() {
     },
   });
 
-  // Saved-search alert: replay the search (or open the single new listing).
-  const openSavedSearchMatch = async (item: BdNotification) => {
-    const p = item.payload ?? {};
-    if (Number(p.count) === 1 && p.post_id != null) {
-      router.push({ pathname: '/item-details', params: { id: String(p.post_id) } });
-      return;
-    }
-    try {
-      const list = await queryClient.fetchQuery(savedSearchesQuery());
-      const ss = list.find((x) => x.id === Number(p.saved_search_id));
-      if (ss) {
-        router.push({ pathname: '/search-results', params: filtersToRouteParams(ss.filters) });
-        return;
-      }
-    } catch {
-      // fall through to the list
-    }
-    router.push('/saved-searches' as any);
-  };
-
-  const targetOf = (item: BdNotification): (() => void) | null => {
-    if (item.type === 'staff_warning') return null;
-    if (item.type === 'listing_expiring' || item.type === 'listing_expired') {
-      return () => router.push('/my-listings');
-    }
-    if (item.type === 'saved_search_match') return () => openSavedSearchMatch(item);
-    const transactionId = item.payload?.transaction_id;
-    if (item.type === 'meeting_set' && transactionId != null) {
-      return () => router.push({ pathname: '/deal', params: { id: String(transactionId) } });
-    }
-    if (item.conversation_id) {
-      return () =>
-        router.push({ pathname: '/chatroom', params: { conversationId: String(item.conversation_id) } });
-    }
-    const postId = item.payload?.post_id;
-    if (postId != null && Number.isFinite(Number(postId))) {
-      return () => router.push({ pathname: '/item-details', params: { id: String(postId) } });
-    }
-    return null;
-  };
-
   const handlePress = (item: BdNotification) => {
     if (!item.read_at) markReadMutation.mutate(item.id);
-    targetOf(item)?.();
+    openNotificationTarget(item);
   };
 
   const renderItem = ({
@@ -202,7 +161,7 @@ export default function NotificationsScreen() {
     const last = index === section.data.length - 1;
     const icon = iconFor(item.type);
     const unread = !item.read_at;
-    const hasTarget = !!targetOf(item);
+    const hasTarget = notificationHref(item) != null;
     const rawCat = item.payload?.category ?? item.payload?.categories?.[0];
     const category = typeof rawCat === 'string' && CATEGORY_META[rawCat] ? rawCat : null;
     return (

@@ -20,7 +20,7 @@ import { PhoneAuthProvider } from '@/contexts/PhoneAuthContext';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { RealtimeProvider } from '@/contexts/RealtimeContext';
 import { queryClient } from '@/lib/queryClient';
-import { useForegroundMessageHandler } from '@/lib/push';
+import { useForegroundMessageHandler, usePushTapHandler } from '@/lib/push';
 import { AppThemeProvider, useTheme } from '@/theme';
 import { duration } from '@/theme/motion';
 import { fontFiles } from '@/theme/tokens';
@@ -74,6 +74,7 @@ export default function RootLayout() {
 function RootLayoutNav() {
   const t = useTheme();
   useForegroundMessageHandler();
+  usePushTapHandler();
 
   // Screen transitions (docs/09 §3, tokens in theme/motion.ts). With reduce
   // motion every route switches without animation.
