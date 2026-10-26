@@ -3,14 +3,18 @@
  * (two weeks) and hour chips, no native picker. The place is optional: a known
  * place (name + details, the usual way to meet in Libreville), an exact
  * address, or "Plus tard" to settle it in the chat. The other party confirms.
+ * Known places are suggested from the listing's quartier (OSM, docs/14 §8).
  */
 import { Ionicons } from '@expo/vector-icons';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import {
   appointmentErrorMessage,
   isStaleAppointmentError,
+  MEETING_PLACE_ICON,
+  meetingPlaceLabel,
+  meetingPlacesQuery,
   proposeAppointment,
   updateAppointment,
   type BdAppointment,
@@ -27,7 +31,7 @@ import { showToast } from '../atoms/Toast';
 import SegmentedControl from '../molecules/SegmentedControl';
 import Sheet from './Sheet';
 
-/** Generic public places: busy, visible, and found in every quartier. */
+/** Generic public places, when the listing's quartier has none mapped. */
 const PLACE_SUGGESTIONS = [
   'Devant la pharmacie',
   'Station-service',
@@ -78,6 +82,9 @@ export default function AppointmentSheet({
   const [day, setDay] = useState<number | null>(null); // offset from today
   const [hour, setHour] = useState<number | null>(null); // minutes since midnight
   const [now, setNow] = useState(() => new Date());
+  const placesQuery = useQuery({ ...meetingPlacesQuery(conversationId), enabled: visible && conversationId > 0 });
+  const listingQuartier = placesQuery.data?.quartier ?? null;
+  const knownPlaces = placesQuery.data?.places ?? [];
 
   // Prefill from the appointment being changed, each time the sheet opens.
   useEffect(() => {
@@ -153,7 +160,9 @@ export default function AppointmentSheet({
 
   const mut = useMutation({
     mutationFn: () => {
-      const body = { starts_at: when!.toISOString(), place };
+      // The listing's quartier, so reminders and the deal page can name it.
+      const quartier_id = listingQuartier?.id ?? appointment?.quartier?.id ?? null;
+      const body = { starts_at: when!.toISOString(), place, quartier_id };
       return appointment ? updateAppointment(appointment, body) : proposeAppointment(conversationId, body);
     },
     onSuccess: (next) => {
@@ -175,7 +184,11 @@ export default function AppointmentSheet({
     },
   });
 
-  const suggestions = [listingPlace, ...PLACE_SUGGESTIONS].filter((x): x is string => !!x && !!x.trim());
+  const suggestions = knownPlaces.length
+    ? knownPlaces.map((p) => ({ key: `p${p.id}`, label: meetingPlaceLabel(p, listingQuartier?.name), value: p.name, icon: MEETING_PLACE_ICON[p.category] }))
+    : [listingPlace, ...PLACE_SUGGESTIONS]
+        .filter((x): x is string => !!x && !!x.trim())
+        .map((x) => ({ key: x, label: x, value: x, icon: undefined }));
   const late = hour != null && hour >= LATE_HOUR * 60;
 
   return (
@@ -259,9 +272,21 @@ export default function AppointmentSheet({
             contentContainerStyle={styles.chips}
             keyboardShouldPersistTaps="handled">
             {suggestions.map((s) => (
-              <Chip key={s} kind="choice" label={s} selected={name.trim() === s} onPress={() => setName(s)} />
+              <Chip
+                key={s.key}
+                kind="choice"
+                icon={s.icon}
+                label={s.label}
+                selected={name.trim() === s.value}
+                onPress={() => setName(s.value)}
+              />
             ))}
           </ScrollView>
+          {knownPlaces.length > 0 && listingQuartier && (
+            <AppText variant="caption" color="inkSubtle">
+              Lieux publics près de {listingQuartier.name} · © OpenStreetMap
+            </AppText>
+          )}
         </View>
       )}
       {mode === 'exact' && (

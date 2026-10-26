@@ -5,6 +5,7 @@ import {
   appointmentShareText,
   appointmentSummary,
   isStaleAppointmentError,
+  meetingPlaceLabel,
   placeSummary,
 } from '@/lib/api/appointments';
 import { renderSystemMessage } from '@/lib/messagePreview';
@@ -102,5 +103,17 @@ describe('cancellation reasons', () => {
     expect(cancellationReasonLabel('not_sold')).toBe('Vente non conclue');
     expect(cancellationReasonLabel('Plus disponible')).toBe('Plus disponible');
     expect(cancellationReasonLabel('  ')).toBeNull();
+  });
+});
+
+describe('meetingPlaceLabel', () => {
+  it('names the quartier only for a place of the next quartier', () => {
+    expect(meetingPlaceLabel({ name: 'Pharmacie Nzeng-Ayong', quartier: 'Nzeng-Ayong' }, 'Nzeng-Ayong')).toBe(
+      'Pharmacie Nzeng-Ayong',
+    );
+    expect(meetingPlaceLabel({ name: 'Carrefour Market', quartier: 'PK 6' }, 'Nzeng-Ayong')).toBe(
+      'Carrefour Market · PK 6',
+    );
+    expect(meetingPlaceLabel({ name: 'Engen', quartier: 'Louis' }, null)).toBe('Engen');
   });
 });

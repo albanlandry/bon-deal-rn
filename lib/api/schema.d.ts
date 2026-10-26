@@ -543,6 +543,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/geo/quartiers/{quartier_id}/meeting-places": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Admin List Meeting Places
+         * @description Every place of the quartier, disabled ones included.
+         */
+        get: operations["admin_list_meeting_places_v1_admin_geo_quartiers__quartier_id__meeting_places_get"];
+        put?: never;
+        /** Admin Create Meeting Place */
+        post: operations["admin_create_meeting_place_v1_admin_geo_quartiers__quartier_id__meeting_places_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/geo/search": {
         parameters: {
             query?: never;
@@ -561,6 +582,28 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/meeting-places/{place_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Admin Delete Meeting Place
+         * @description Staff places are deleted; OSM places are disabled instead, so the next
+         *     seed does not bring them back.
+         */
+        delete: operations["admin_delete_meeting_place_v1_admin_meeting_places__place_id__delete"];
+        options?: never;
+        head?: never;
+        /** Admin Update Meeting Place */
+        patch: operations["admin_update_meeting_place_v1_admin_meeting_places__place_id__patch"];
         trace?: never;
     };
     "/v1/admin/moderation/photos": {
@@ -1646,6 +1689,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/conversations/{conv_id}/meeting-places": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Conversation Meeting Places
+         * @description Suggestions for the listing's pickup quartier, nearest to the listing.
+         *     `quartier` is null (and the list empty) when the listing names none.
+         */
+        get: operations["conversation_meeting_places_v1_conversations__conv_id__meeting_places_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/conversations/{conv_id}/messages": {
         parameters: {
             query?: never;
@@ -1750,6 +1814,26 @@ export interface paths {
          * @description Enabled cities of an enabled country.
          */
         get: operations["public_cities_v1_geo_countries__iso2__cities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/geo/quartiers/{quartier_id}/meeting-places": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Quartier Meeting Places
+         * @description Suggestions for any approved quartier.
+         */
+        get: operations["quartier_meeting_places_v1_geo_quartiers__quartier_id__meeting_places_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4374,6 +4458,8 @@ export interface components {
         GeoMergeMovedOut: {
             /** Listings */
             listings: number;
+            /** Meeting Places */
+            meeting_places: number;
             /** Users */
             users: number;
         } & {
@@ -4739,6 +4825,123 @@ export interface components {
             sales_count: number;
             /** Username */
             username: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** MeetingPlaceAdminListOut */
+        MeetingPlaceAdminListOut: {
+            /** Places */
+            places: components["schemas"]["MeetingPlaceAdminOut"][];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** MeetingPlaceAdminOut */
+        MeetingPlaceAdminOut: {
+            /** Category */
+            category: string;
+            /** Id */
+            id: number;
+            /** Is Enabled */
+            is_enabled: boolean;
+            /** Lat */
+            lat: number | null;
+            /** Lng */
+            lng: number | null;
+            /** Name */
+            name: string;
+            /** Osm Id */
+            osm_id: string | null;
+            /** Quartier Id */
+            quartier_id: number;
+            /** Sort Order */
+            sort_order: number;
+            /** Source */
+            source: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** MeetingPlaceIn */
+        MeetingPlaceIn: {
+            /**
+             * Category
+             * @default other
+             * @enum {string}
+             */
+            category: "market" | "supermarket" | "mall" | "pharmacy" | "fuel" | "roundabout" | "bank" | "post_office" | "townhall" | "police" | "other";
+            /** Lat */
+            lat?: number | null;
+            /** Lng */
+            lng?: number | null;
+            /** Name */
+            name: string;
+            /**
+             * Sort Order
+             * @default 0
+             */
+            sort_order: number;
+        };
+        /** MeetingPlaceListOut */
+        MeetingPlaceListOut: {
+            /** Places */
+            places: components["schemas"]["MeetingPlaceOut"][];
+            quartier: components["schemas"]["MeetingPlaceQuartierOut"] | null;
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** MeetingPlaceOut */
+        MeetingPlaceOut: {
+            /** Category */
+            category: string;
+            /** Distance Km */
+            distance_km: number | null;
+            /** Id */
+            id: number;
+            /** Lat */
+            lat: number | null;
+            /** Lng */
+            lng: number | null;
+            /** Name */
+            name: string;
+            /** Quartier */
+            quartier: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** MeetingPlacePatch */
+        MeetingPlacePatch: {
+            /** Category */
+            category?: ("market" | "supermarket" | "mall" | "pharmacy" | "fuel" | "roundabout" | "bank" | "post_office" | "townhall" | "police" | "other") | null;
+            /** Is Enabled */
+            is_enabled?: boolean | null;
+            /** Lat */
+            lat?: number | null;
+            /** Lng */
+            lng?: number | null;
+            /** Name */
+            name?: string | null;
+            /** Sort Order */
+            sort_order?: number | null;
+        };
+        /** MeetingPlaceQuartierOut */
+        MeetingPlaceQuartierOut: {
+            /** City */
+            city: string;
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** MeetingPlaceResultOut */
+        MeetingPlaceResultOut: {
+            place: components["schemas"]["MeetingPlaceAdminOut"];
+            /** Success */
+            success: boolean;
         } & {
             [key: string]: unknown;
         };
@@ -5303,9 +5506,75 @@ export interface components {
         PostDetailOut: {
             /** Message */
             message: string;
-            post: components["schemas"]["PostOut"];
+            post: components["schemas"]["PostDetailPostOut"];
             /** Success */
             success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** PostDetailPostOut */
+        PostDetailPostOut: {
+            /** Active Offer Count */
+            active_offer_count: number;
+            /** Age Bucket */
+            age_bucket: string | null;
+            /** Allow Negotiation */
+            allow_negotiation: boolean | null;
+            /** Categories */
+            categories: string[];
+            /** Chats Count */
+            chats_count: number;
+            /** City */
+            city: string | null;
+            /** Condition */
+            condition: string | null;
+            /** Created At */
+            created_at: string | null;
+            /** Description */
+            description: string | null;
+            /** Exchange Items */
+            exchange_items: string | null;
+            /** Expires At */
+            expires_at: string | null;
+            /** Id */
+            id: number;
+            /** Images */
+            images: components["schemas"]["PostImageOut"][];
+            /** Is Free */
+            is_free: boolean | null;
+            /** Lat */
+            lat: number | null;
+            /** Liked By Me */
+            liked_by_me: boolean;
+            /** Likes Count */
+            likes_count: number;
+            /** Lng */
+            lng: number | null;
+            /** Moderation Status */
+            moderation_status: string;
+            /** Offer Count */
+            offer_count: number;
+            /** Owner Id */
+            owner_id: number | null;
+            /** Owner Username */
+            owner_username: string | null;
+            /** Pickup Location Note */
+            pickup_location_note: string | null;
+            /** Pickup Quartier */
+            pickup_quartier: string | null;
+            /** Price */
+            price: number | null;
+            reservation: components["schemas"]["PostReservationOut"] | null;
+            /** Shares Count */
+            shares_count: number;
+            /** State */
+            state: string | null;
+            /** Title */
+            title: string | null;
+            /** Updated At */
+            updated_at: string | null;
+            /** Views Count */
+            views_count: number;
         } & {
             [key: string]: unknown;
         };
@@ -5439,6 +5708,15 @@ export interface components {
             updated_at: string | null;
             /** Views Count */
             views_count: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** PostReservationOut */
+        PostReservationOut: {
+            /** For Me */
+            for_me: boolean;
+            /** Notify Me */
+            notify_me: boolean;
         } & {
             [key: string]: unknown;
         };
@@ -7372,6 +7650,72 @@ export interface operations {
             };
         };
     };
+    admin_list_meeting_places_v1_admin_geo_quartiers__quartier_id__meeting_places_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                quartier_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingPlaceAdminListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_create_meeting_place_v1_admin_geo_quartiers__quartier_id__meeting_places_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                quartier_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MeetingPlaceIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingPlaceResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     admin_geo_search_v1_admin_geo_search_get: {
         parameters: {
             query: {
@@ -7391,6 +7735,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GeoSearchOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_delete_meeting_place_v1_admin_meeting_places__place_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                place_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_update_meeting_place_v1_admin_meeting_places__place_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                place_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MeetingPlacePatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingPlaceResultOut"];
                 };
             };
             /** @description Validation Error */
@@ -9500,6 +9910,37 @@ export interface operations {
             };
         };
     };
+    conversation_meeting_places_v1_conversations__conv_id__meeting_places_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conv_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingPlaceListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_messages_v1_conversations__conv_id__messages_get: {
         parameters: {
             query?: {
@@ -9703,6 +10144,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GeoPublicCityListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    quartier_meeting_places_v1_geo_quartiers__quartier_id__meeting_places_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                quartier_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingPlaceListOut"];
                 };
             };
             /** @description Validation Error */

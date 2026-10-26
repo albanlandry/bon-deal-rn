@@ -330,12 +330,22 @@ export default function ItemDetailsScreen() {
             : null;
 
   // Not available to buyers: the action bar explains why instead of "Contacter".
+  // A reserved listing tells who will hear when it frees up (docs/14 §8).
+  const reservation = post.state === 'reserved' ? post.reservation : null;
+  const reservedForMe = !!reservation?.for_me;
+  const notifyMe = !!reservation && (reservation.notify_me || post.liked_by_me);
   const unavailableReason =
     post.state === 'sold'
       ? 'Cette annonce est vendue.'
-      : post.state === 'reserved'
-        ? 'Cette annonce est réservée.'
-        : 'Cette annonce n’est plus disponible.';
+      : reservedForMe
+        ? 'Réservée pour vous.'
+        : post.state === 'reserved'
+          ? notifyMe
+            ? 'Réservé — vous serez prévenu s’il se libère.'
+            : 'Réservé — aimez l’annonce pour être prévenu s’il se libère.'
+          : 'Cette annonce n’est plus disponible.';
+  // The heart stays while reserved: liking it is how you ask to be told.
+  const canLike = !isOwner && (available || (post.state === 'reserved' && !reservedForMe));
 
   // Three fact tiles (docs/12): État, Retrait, Publié — Âge fills a gap.
   const published = formatRelativeTime(post.created_at).replace("'", '’');
@@ -358,7 +368,7 @@ export default function ItemDetailsScreen() {
       <GlassButton icon="arrow-back" label="Retour" onPress={goBack} bg={glassBg} fg={glassFg} />
       <View style={styles.headerRight}>
         <GlassButton icon="share-social-outline" label="Partager l’annonce" onPress={handleShare} bg={glassBg} fg={glassFg} />
-        {!isOwner && available && (
+        {canLike && (
           <HeartBurst
             liked={post.liked_by_me}
             onToggle={() => {
@@ -612,12 +622,24 @@ export default function ItemDetailsScreen() {
           ) : !available ? (
             <>
               <View style={[styles.flex, styles.unavailable]} accessibilityRole="text">
-                <Ionicons name="lock-closed-outline" size={18} color={dock.fgMuted} />
+                <Ionicons
+                  name={reservedForMe ? 'calendar-outline' : notifyMe ? 'notifications-outline' : 'lock-closed-outline'}
+                  size={18}
+                  color={dock.fgMuted}
+                />
                 <AppText variant="labelStrong" style={[styles.flex, { color: dock.fg }]}>
                   {unavailableReason}
                 </AppText>
               </View>
-              {similar.length > 0 && (
+              {reservedForMe ? (
+                <DockButton
+                  label="Conversation"
+                  icon="chatbubble-outline"
+                  grow={false}
+                  loading={contactMutation.isPending}
+                  onPress={() => contactMutation.mutate()}
+                />
+              ) : similar.length > 0 && (
                 <DockButton
                   label="Annonces similaires"
                   variant="glass"

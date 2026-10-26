@@ -48,6 +48,8 @@ export interface BdPost {
   expires_at?: string | null;
   /** Only with a `near_*` feed query. */
   distance_km?: number | null;
+  /** Detail only: a reserved listing seen by someone other than the owner. */
+  reservation?: { for_me: boolean; notify_me: boolean } | null;
   created_at: string | null;
   updated_at: string | null;
 }

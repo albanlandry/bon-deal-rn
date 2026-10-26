@@ -59,8 +59,9 @@ import { blockedMessage } from '@/lib/api/safety';
 import { useBlockActions } from '@/lib/useBlock';
 import ReportSheet from '@/components/organisms/ReportSheet';
 import DealTimeline from '@/components/molecules/DealTimeline';
-import AppointmentCard from '@/components/organisms/AppointmentCard';
+import AppointmentCard, { useAppointmentActions } from '@/components/organisms/AppointmentCard';
 import AppointmentSheet from '@/components/organisms/AppointmentSheet';
+import type { BdAppointment } from '@/lib/api/appointments';
 import { transactionQuery } from '@/lib/api/transactions';
 import { ApiError } from '@/lib/api';
 import { clearUnread, mergeServerMessage, messagesKey, nextTempId } from '@/lib/chatCache';
@@ -171,6 +172,62 @@ function SystemPill({ text, kind, animate }: { text: string; kind: string; anima
       </View>
     </Animated.View>
   );
+}
+
+/**
+ * Inline answer under the latest appointment message (docs/14 §6): Confirmer /
+ * Autre horaire for the recipient of a proposal, Vendu / Pas conclu after the
+ * follow-up question. The header card offers the same actions.
+ */
+function AppointmentInlineActions({
+  appointment: a,
+  event,
+  myId,
+  otherName,
+  onEdit,
+}: {
+  appointment: BdAppointment;
+  event: string;
+  myId: number | undefined;
+  otherName: string;
+  onEdit: () => void;
+}) {
+  const styles = useStyles(makeStyles);
+  const { confirmMut, outcomeMut, busy, askNotSold } = useAppointmentActions(a, otherName);
+  const iAmSeller = a.seller_id === myId;
+  if ((event === 'proposed' || event === 'updated') && a.can_confirm) {
+    return (
+      <View style={styles.inlineActions}>
+        <Button
+          size="sm"
+          label="Confirmer"
+          icon="checkmark"
+          onPress={() => confirmMut.mutate()}
+          loading={confirmMut.isPending}
+          disabled={busy}
+        />
+        {a.can_edit && <Button size="sm" variant="secondary" label="Autre horaire" onPress={onEdit} disabled={busy} />}
+      </View>
+    );
+  }
+  if (event === 'follow_up' && a.can_report_outcome) {
+    return (
+      <View style={styles.inlineActions}>
+        {!(a.sale_reported_at && !iAmSeller) && (
+          <Button
+            size="sm"
+            label={iAmSeller ? 'Vendu' : 'C’est fait'}
+            icon="checkmark-done"
+            onPress={() => outcomeMut.mutate(true)}
+            loading={outcomeMut.isPending && outcomeMut.variables === true}
+            disabled={busy}
+          />
+        )}
+        <Button size="sm" variant="secondary" label="Pas conclu" onPress={askNotSold} disabled={busy} />
+      </View>
+    );
+  }
+  return null;
 }
 
 /** Sticky (stickyHeaderIndices) day pill. */
@@ -893,6 +950,15 @@ export default function ChatroomScreen() {
     if (m.kind === 'system_offer_made' || m.kind === 'system_counter') latestOfferId = m.id;
   });
 
+  // Only the latest message of the open appointment carries inline buttons.
+  const actionableAppointmentMsgId = (() => {
+    if (!appointment) return null;
+    const m = [...(messages ?? [])]
+      .reverse()
+      .find((x) => x.kind === 'system_appointment' && x.payload?.appointment_id === appointment.id);
+    const ev = m?.payload?.event;
+    return m && (ev === 'proposed' || ev === 'updated' || ev === 'follow_up') ? m.id : null;
+  })();
   const hasMyMessage = (messages ?? []).some((m) => m.kind === 'text' && m.sender_id === myId);
   const isBuyer = conv?.role === 'buyer';
   const showQuickReplies = !!conv && !hasMyMessage;
@@ -1065,11 +1131,22 @@ export default function ChatroomScreen() {
                   onCoach={() => coachMutation.mutate()}
                 />
               ) : (
-                <SystemPill
-                  text={renderSystemMessage(item.msg, conv, myId)}
-                  kind={item.msg.kind}
-                  animate={shouldAnimate(item.msg)}
-                />
+                <>
+                  <SystemPill
+                    text={renderSystemMessage(item.msg, conv, myId)}
+                    kind={item.msg.kind}
+                    animate={shouldAnimate(item.msg)}
+                  />
+                  {appointment && item.msg.id === actionableAppointmentMsgId && (
+                    <AppointmentInlineActions
+                      appointment={appointment}
+                      event={item.msg.payload?.event}
+                      myId={myId}
+                      otherName={conv?.counterparty?.username ?? 'L’autre partie'}
+                      onEdit={() => setAppointmentOpen(true)}
+                    />
+                  )}
+                </>
               )
             }
             contentContainerStyle={styles.messagesContent}
@@ -1334,6 +1411,7 @@ const makeStyles = createStyles((t: Theme) => ({
   bubble: { borderRadius: t.radius.md, paddingHorizontal: 12, paddingVertical: 8 },
   metaRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4, marginTop: 4 },
   systemRow: { alignItems: 'center', marginVertical: 8 },
+  inlineActions: { flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', gap: 8, marginTop: -2, marginBottom: 8 },
   systemPill: {
     flexDirection: 'row',
     alignItems: 'center',

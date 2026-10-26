@@ -4,6 +4,7 @@
  * listing. Every write sends the `version` the screen showed — a 409
  * `appointment_changed` means the other party changed it meanwhile.
  */
+import type { Ionicons } from '@expo/vector-icons';
 import { queryOptions } from '@tanstack/react-query';
 import { ApiError, apiErrorMessage, apiFetch } from '@/lib/api';
 import { formatHour, formatMeetingWhen, parseServerDate } from '@/lib/api/transactions';
@@ -141,6 +142,61 @@ export function appointmentErrorMessage(e: unknown): string {
     }
   }
   return apiErrorMessage(e, 'Action impossible. Réessayez.');
+}
+
+export type BdMeetingPlaceCategory =
+  | 'market' | 'supermarket' | 'mall' | 'pharmacy' | 'fuel' | 'roundabout' | 'bank'
+  | 'post_office' | 'townhall' | 'police' | 'other';
+
+export interface BdMeetingPlace {
+  id: number;
+  name: string;
+  category: BdMeetingPlaceCategory;
+  /** The quartier it belongs to (nearby ones may be in the next quartier). */
+  quartier: string;
+  lat: number | null;
+  lng: number | null;
+  distance_km: number | null;
+}
+
+export interface BdMeetingPlaces {
+  quartier: { id: number; name: string; city: string } | null;
+  places: BdMeetingPlace[];
+}
+
+/** Public places near the listing's pickup quartier (docs/14 §8). */
+export function meetingPlacesQuery(conversationId: number | null | undefined) {
+  return queryOptions({
+    queryKey: ['meeting-places', conversationId ?? 0] as const,
+    queryFn: async (): Promise<BdMeetingPlaces> => {
+      const res = await apiFetch<BdMeetingPlaces & { success: boolean }>(
+        `/conversations/${conversationId}/meeting-places`,
+      );
+      return { quartier: res.quartier, places: res.places };
+    },
+    enabled: !!conversationId && conversationId > 0,
+    staleTime: 60 * 60 * 1000,
+  });
+}
+
+export const MEETING_PLACE_ICON: Record<BdMeetingPlaceCategory, keyof typeof Ionicons.glyphMap> = {
+  market: 'basket-outline',
+  supermarket: 'cart-outline',
+  mall: 'storefront-outline',
+  pharmacy: 'medkit-outline',
+  fuel: 'car-outline',
+  roundabout: 'sync-outline',
+  bank: 'business-outline',
+  post_office: 'mail-outline',
+  townhall: 'flag-outline',
+  police: 'shield-outline',
+  other: 'location-outline',
+};
+
+/** "Pharmacie Nzeng-Ayong", or "Carrefour Market · PK 6" when the place is in
+ *  another quartier than the listing's. */
+export function meetingPlaceLabel(p: Pick<BdMeetingPlace, 'name' | 'quartier'>, listingQuartier?: string | null): string {
+  return listingQuartier && p.quartier !== listingQuartier ? `${p.name} · ${p.quartier}` : p.name;
 }
 
 // --- Pure helpers (formatting) --------------------------------------------

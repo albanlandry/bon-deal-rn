@@ -36,13 +36,13 @@ export interface AppointmentCardProps {
   onEdit: () => void;
 }
 
-export default function AppointmentCard({ appointment: a, myId, otherName, postTitle, onEdit }: AppointmentCardProps) {
-  const t = useTheme();
+/**
+ * Confirm / cancel / outcome for one appointment, with the toasts, the
+ * confirmation alerts and the re-fetch on a stale version. Shared by the card
+ * and the inline buttons of the chat messages.
+ */
+export function useAppointmentActions(a: BdAppointment, otherName: string) {
   const qc = useQueryClient();
-  const at = parseServerDate(a.starts_at);
-  const where = placeSummary(a.place);
-  const mineProposal = a.proposed_by_id === myId;
-  const iAmSeller = a.seller_id === myId;
   const confirmed = a.status === 'confirmed';
 
   const refresh = () => {
@@ -106,6 +106,18 @@ export default function AppointmentCard({ appointment: a, myId, otherName, postT
       { text: 'Retour', style: 'cancel' },
       { text: 'Pas conclu', style: 'destructive', onPress: () => outcomeMut.mutate(false) },
     ]);
+  return { confirmMut, outcomeMut, busy, askCancel, askNotSold };
+}
+
+export default function AppointmentCard({ appointment: a, myId, otherName, postTitle, onEdit }: AppointmentCardProps) {
+  const t = useTheme();
+  const at = parseServerDate(a.starts_at);
+  const where = placeSummary(a.place);
+  const mineProposal = a.proposed_by_id === myId;
+  const iAmSeller = a.seller_id === myId;
+  const confirmed = a.status === 'confirmed';
+
+  const { confirmMut, outcomeMut, busy, askCancel, askNotSold } = useAppointmentActions(a, otherName);
   const share = () =>
     Share.share({ message: appointmentShareText(a, postTitle, otherName) }).catch(() => {});
 
