@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { useTheme } from '@/theme';
+import { font, useTheme } from '@/theme';
 import AppText from '../atoms/AppText';
 
 export interface SafetyBannerProps {
@@ -45,7 +45,7 @@ export default function SafetyBanner({
             • {tip}
           </AppText>
         ))}
-        <AppText variant="caption" style={{ color: t.colors.trust, fontWeight: '600', marginTop: 2 }}>
+        <AppText variant="caption" style={[font('600'), { color: t.colors.trust, marginTop: 4 }]}>
           Conseils de sécurité BonDeal
         </AppText>
       </View>
@@ -64,7 +64,7 @@ export default function SafetyBanner({
 }
 
 const styles = StyleSheet.create({
-  wrap: { flexDirection: 'row', gap: 10, padding: 12, borderLeftWidth: 3 },
-  text: { flex: 1, gap: 2 },
-  close: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', marginTop: -6, marginRight: -6 },
+  wrap: { flexDirection: 'row', gap: 12, padding: 12, borderLeftWidth: 3 },
+  text: { flex: 1, gap: 4 },
+  close: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', marginTop: -4, marginRight: -4 },
 });

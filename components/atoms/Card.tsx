@@ -1,5 +1,6 @@
 import React from 'react';
-import { Pressable, StyleProp, View, ViewProps, ViewStyle } from 'react-native';
+import { StyleProp, View, ViewProps, ViewStyle } from 'react-native';
+import PressableScale from '../motion/PressableScale';
 import { useTheme } from '@/theme';
 
 export interface CardProps extends ViewProps {
@@ -36,18 +37,19 @@ export default function Card({
     borderColor: t.colors.line,
     padding: padded ? t.spacing.md : 0,
     overflow: 'hidden',
-    ...(elevated ? (t.elevation.card as ViewStyle) : null),
+    // Direction B is flat: hairline border + the faint `elevation.card`.
+    ...(elevated || tone === 'surface' ? (t.elevation.card as ViewStyle) : null),
   };
   if (onPress) {
     return (
-      <Pressable
+      <PressableScale
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
         onPress={onPress}
-        style={({ pressed }) => [base, { opacity: pressed ? 0.85 : 1 }, style]}
-        {...rest}>
+        style={[base, style]}
+        {...(rest as object)}>
         {children}
-      </Pressable>
+      </PressableScale>
     );
   }
   return (

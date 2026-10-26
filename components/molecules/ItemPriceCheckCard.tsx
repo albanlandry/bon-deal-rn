@@ -79,7 +79,7 @@ export default function ItemPriceCheckCard({ check, onDismiss }: { check: BdPric
 }
 
 const styles = StyleSheet.create({
-  card: { gap: 6 },
+  card: { gap: 8 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   track: { height: 6, borderRadius: 3, marginVertical: 8 },
   dot: { position: 'absolute', top: -5, width: 16, height: 16, marginLeft: -8, borderRadius: 8, borderWidth: 2 },

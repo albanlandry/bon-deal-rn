@@ -316,7 +316,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     minHeight: 56,
-    paddingVertical: 6,
+    paddingVertical: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   empty: { paddingVertical: 16 },

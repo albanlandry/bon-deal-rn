@@ -11,6 +11,9 @@ import { useEffect } from 'react';
 import { Platform } from 'react-native';
 import { apiFetch } from '@/lib/api';
 import { showToast } from '@/components/atoms/Toast';
+import { markRead } from '@/lib/api/notifications';
+import { openNotificationTarget } from '@/lib/notificationTarget';
+import { queryClient } from '@/lib/queryClient';
 
 let messaging: any = null;
 try {
@@ -86,6 +89,41 @@ export function useForegroundMessageHandler(): void {
       return unsub;
     } catch (e) {
       console.warn('[push] onMessage handler failed:', e);
+    }
+  }, []);
+}
+
+// A push's FCM data: the notification's type and ids, all as strings.
+function openFromPush(msg: any): void {
+  const data = msg?.data;
+  if (!data?.type) return;
+  const id = Number(data.notification_id);
+  if (id > 0) {
+    markRead(id)
+      .then(() => queryClient.invalidateQueries({ queryKey: ['notifications'] }))
+      .catch(() => {});
+  }
+  openNotificationTarget({ type: data.type, conversation_id: data.conversation_id, payload: data });
+}
+
+/**
+ * Opens the screen a tapped push points to, whether the tap woke the app from
+ * the background or launched it. No-op when the native module is unavailable.
+ */
+export function usePushTapHandler(): void {
+  useEffect(() => {
+    if (!messaging) return;
+    try {
+      messaging()
+        .getInitialNotification()
+        .then((msg: any) => {
+          // Let the root stack mount before pushing onto it.
+          if (msg) setTimeout(() => openFromPush(msg), 0);
+        })
+        .catch(() => {});
+      return messaging().onNotificationOpenedApp(openFromPush);
+    } catch (e) {
+      console.warn('[push] tap handler failed:', e);
     }
   }, []);
 }

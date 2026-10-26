@@ -61,13 +61,14 @@ export function mergeServerMessage(
 }
 
 /**
- * Move the conversation to the top with the new timestamp; bump its unread
+ * Move the conversation to the top with the new timestamp and preview; bump its unread
  * count for messages from the other party unless it's the open chatroom.
  * Returns `null` when the conversation isn't in the list (caller refetches).
  */
 export function bumpConversation(
   list: BdConversation[] | undefined,
-  msg: Pick<BdChatMessage, 'conversation_id' | 'sender_id' | 'created_at'>,
+  msg: Pick<BdChatMessage, 'conversation_id' | 'sender_id' | 'created_at'> &
+    Partial<Pick<BdChatMessage, 'id' | 'kind' | 'body' | 'payload' | 'read_at'>>,
   myId: number | undefined,
   activeConversationId: number | null,
 ): BdConversation[] | null | undefined {
@@ -80,6 +81,20 @@ export function bumpConversation(
   const updated: BdConversation = {
     ...conv,
     last_message_at: msg.created_at ?? new Date().toISOString(),
+    // The list preview follows the socket; a bare event keeps the old one.
+    last_message:
+      msg.id != null && msg.kind
+        ? {
+            id: msg.id,
+            sender_id: msg.sender_id,
+            kind: msg.kind,
+            body: msg.body ?? null,
+            payload: msg.payload ?? null,
+            created_at: msg.created_at,
+            read_at: msg.read_at ?? null,
+            is_mine: msg.sender_id != null && msg.sender_id === myId,
+          }
+        : conv.last_message,
     unread_count: fromOther && !isOpen ? conv.unread_count + 1 : conv.unread_count,
   };
   return [updated, ...list.slice(0, idx), ...list.slice(idx + 1)];

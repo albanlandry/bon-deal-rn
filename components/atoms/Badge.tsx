@@ -27,7 +27,7 @@ export default function Badge({ label, tone = 'neutral', icon, style }: BadgePro
   };
   const p = map[tone];
   return (
-    <View style={[styles.base, { backgroundColor: p.bg, borderRadius: t.radius.full }, style]}>
+    <View style={[styles.base, { backgroundColor: p.bg, borderRadius: t.radius.xs }, style]}>
       {icon && <Ionicons name={icon} size={12} color={p.fg} />}
       <AppText variant="captionStrong" style={{ color: p.fg }} numberOfLines={1}>
         {label}

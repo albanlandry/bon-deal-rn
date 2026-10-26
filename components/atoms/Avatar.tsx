@@ -57,7 +57,7 @@ export default function Avatar({ uri, name, size = 40, verified = false }: Avata
               borderColor: t.colors.surface,
             },
           ]}>
-          <Ionicons name="checkmark" size={badge * 0.65} color={t.isDark ? '#1C1917' : '#FFFFFF'} />
+          <Ionicons name="checkmark" size={badge * 0.65} color={t.colors.surface} />
         </View>
       )}
     </View>

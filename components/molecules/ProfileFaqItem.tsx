@@ -39,7 +39,7 @@ export default function ProfileFaqItem({
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 56, paddingHorizontal: 16, paddingVertical: 10 },
-  answer: { paddingHorizontal: 16, paddingBottom: 14 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 56, paddingHorizontal: 16, paddingVertical: 12 },
+  answer: { paddingHorizontal: 16, paddingBottom: 16 },
   flex: { flex: 1 },
 });

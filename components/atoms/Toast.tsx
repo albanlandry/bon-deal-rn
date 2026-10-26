@@ -36,7 +36,7 @@ function ToastView({ kind, text1, text2, props, hide }: ToastConfigParams<any> &
       {kind === 'undo' && props?.onUndo && (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Annuler l'action"
+          accessibilityLabel="Annuler l’action"
           onPress={() => {
             props.onUndo();
             hide();

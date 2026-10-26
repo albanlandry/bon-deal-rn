@@ -19,3 +19,20 @@ it('never uses a photo that is still processing as the cover', () => {
   expect(coverThumb([processing])).toBeNull();
   expect(coverThumb(undefined)).toBeNull();
 });
+
+describe('itemDetailsRoute / safeCoverParam', () => {
+  const { itemDetailsRoute, safeCoverParam } = require('@/lib/images');
+  it('carries the card cover thumbnail when there is one', () => {
+    expect(itemDetailsRoute({ id: 7, images: [processed] })).toEqual({
+      pathname: '/item-details',
+      params: { id: '7', cover: 'https://cdn/t.webp' },
+    });
+    expect(itemDetailsRoute({ id: 8, images: [processing] }).params).toEqual({ id: '8' });
+  });
+  it('accepts only http(s) cover params', () => {
+    expect(safeCoverParam('https://cdn/t.webp')).toBe('https://cdn/t.webp');
+    expect(safeCoverParam(['http://x/a.jpg'])).toBe('http://x/a.jpg');
+    expect(safeCoverParam('file:///etc/passwd')).toBeUndefined();
+    expect(safeCoverParam(undefined)).toBeUndefined();
+  });
+});

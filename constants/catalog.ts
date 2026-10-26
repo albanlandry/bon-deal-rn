@@ -23,6 +23,56 @@ export const CATEGORIES: CatalogOption[] = [
   { value: 'other', label: 'Autres' },
 ];
 
+/**
+ * Category mnemonics (docs/09 §5): each category has ONE fixed icon and ONE
+ * fixed hue, used everywhere it appears (chip, card badge, filter,
+ * notification, sell step). `icon` is the Ionicons base name; use
+ * `categoryIcon(v, false)` for the outline variant.
+ */
+export type CategoryHueToken =
+  | 'catBlue'
+  | 'catPink'
+  | 'catBrown'
+  | 'catTeal'
+  | 'catIndigo'
+  | 'catYellow'
+  | 'catGreen'
+  | 'catPurple'
+  | 'catOrange'
+  | 'catGrey';
+
+export interface CategoryMeta {
+  value: string;
+  label: string;
+  /** Ionicons glyph (filled); the `-outline` variant exists for every one. */
+  icon: string;
+  hue: CategoryHueToken;
+}
+
+const META: Record<string, { icon: string; hue: CategoryHueToken }> = {
+  electronics: { icon: 'phone-portrait', hue: 'catBlue' },
+  fashion: { icon: 'shirt', hue: 'catPink' },
+  furniture: { icon: 'bed', hue: 'catBrown' },
+  appliances: { icon: 'tv', hue: 'catTeal' },
+  vehicles: { icon: 'car', hue: 'catIndigo' },
+  baby_kids: { icon: 'happy', hue: 'catYellow' },
+  sports: { icon: 'football', hue: 'catGreen' },
+  books: { icon: 'book', hue: 'catPurple' },
+  tools: { icon: 'hammer', hue: 'catOrange' },
+  other: { icon: 'apps', hue: 'catGrey' },
+};
+
+/** Pseudo-category for "Tout" / "Toutes" chips. */
+export const ALL_CATEGORIES_META: CategoryMeta = {
+  value: 'all',
+  label: 'Tout',
+  icon: 'grid',
+  hue: 'catGrey',
+};
+
+/** The 6 categories shown inline on Home (Hick: the rest live behind "Plus"). */
+export const TOP_CATEGORIES = ['electronics', 'fashion', 'furniture', 'vehicles', 'appliances', 'baby_kids'];
+
 export const CONDITIONS: CatalogOption[] = [
   { value: 'excellent', label: 'Excellent état' },
   { value: 'good', label: 'Bon état' },
@@ -64,3 +114,19 @@ export const conditionLabel = (v: string | null | undefined) =>
   (v && CONDITION_LABELS[v]) || null;
 export const stateBadge = (v: string | null | undefined): StateBadge =>
   (v && STATE_BADGES[v]) || STATE_BADGES.published;
+
+export const CATEGORY_META: Record<string, CategoryMeta> = Object.fromEntries(
+  CATEGORIES.map((c) => [c.value, { ...c, ...META[c.value] }]),
+);
+
+/** Meta for a backend category value; unknown/empty → "Autres". */
+export function categoryMeta(v: string | null | undefined): CategoryMeta {
+  if (v === 'all') return ALL_CATEGORIES_META;
+  return (v && CATEGORY_META[v]) || CATEGORY_META.other;
+}
+
+/** Ionicons name for a category, filled (selected) or outline. */
+export function categoryIcon(v: string | null | undefined, filled = true): string {
+  const base = categoryMeta(v).icon;
+  return filled ? base : `${base}-outline`;
+}

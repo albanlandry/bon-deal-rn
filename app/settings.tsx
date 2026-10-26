@@ -1,6 +1,8 @@
 // app/settings.tsx — Paramètres
 // Grouped list (Hick: few groups, one decision per row). Logout and account
-// deletion are both reachable in ≤ 3 taps (ethics guardrail §2.4).
+// deletion are both reachable in ≤ 3 taps (ethics guardrail §2.4). Logout is
+// a neutral row; deletion, the only irreversible action, sits alone at the
+// bottom in red.
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Href, useRouter } from 'expo-router';
 import React, { useState } from 'react';
@@ -22,6 +24,7 @@ import {
   SegmentedControl,
   Sheet,
   showToast,
+  Stagger,
   TextField,
 } from '@/components/ui';
 
@@ -113,10 +116,18 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: t.colors.canvas }]}>
-      <ScreenHeader title="Paramètres" />
+      <ScreenHeader large title="Paramètres" />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Grouped cards; destructive actions last, in red (docs/09 §4). */}
+        <Stagger>
         <ListGroup title="Compte">
           <ListRow icon="person-outline" title="Modifier le profil" onPress={() => router.push('/edit-profile')} />
+          <ListRow
+            icon="key-outline"
+            title="Mot de passe"
+            subtitle={user?.has_password ? 'Modifier votre mot de passe' : 'Se connecter sans attendre de SMS'}
+            onPress={() => router.push({ pathname: '/set-password', params: { mode: 'settings' } })}
+          />
           <ListRow
             icon="location-outline"
             title="Mon quartier"
@@ -132,13 +143,12 @@ export default function SettingsScreen() {
             title="Notifications"
             onPress={() => router.push('/notification-settings')}
           />
-          <ListRow icon="shield-outline" title="Confidentialité" onPress={() => router.push('/privacy-settings')} />
           <View style={styles.themeRow}>
-            <AppText variant="body" style={styles.themeLabel}>
+            <AppText variant="body">
               Thème
             </AppText>
             <SegmentedControl
-              accessibilityLabel="Thème de l'application"
+              accessibilityLabel="Thème de l’application"
               segments={THEME_SEGMENTS}
               value={t.preference}
               onChange={t.setPreference}
@@ -146,35 +156,48 @@ export default function SettingsScreen() {
           </View>
         </ListGroup>
 
-        <ListGroup title="Aide">
+        <ListGroup title="Aide et informations">
           <ListRow icon="help-circle-outline" title="Aide & Support" onPress={() => router.push('/help-support')} />
           <ListRow
             icon="document-text-outline"
-            title="Conditions d'utilisation"
+            title="Conditions d’utilisation"
             onPress={() => router.push({ pathname: '/terms-and-conditions', params: { mode: 'read' } } as Href)}
+          />
+          <ListRow
+            icon="shield-outline"
+            title="Confidentialité"
+            subtitle="Visibilité, statistiques, export de vos données"
+            onPress={() => router.push('/privacy-settings')}
           />
           <ListRow icon="information-circle-outline" title="À propos" onPress={() => router.push('/about' as Href)} last />
         </ListGroup>
 
-        <ListGroup>
+        <ListGroup title="Session">
           <ListRow
             icon="log-out-outline"
             title={signingOut ? 'Déconnexion…' : 'Se déconnecter'}
             onPress={signingOut ? undefined : confirmSignOut}
-            destructive
-            chevron={false}
-          />
-          <ListRow
-            icon="trash-outline"
-            title="Supprimer mon compte"
-            onPress={openDelete}
-            destructive
             chevron={false}
             last
           />
         </ListGroup>
 
-        <AppText variant="caption" color="inkSubtle" align="center">
+        <View style={styles.dangerZone}>
+          <ListGroup title="Suppression du compte">
+            <ListRow
+              icon="trash-outline"
+              title="Supprimer mon compte"
+              subtitle="Définitif : efface votre profil et vos annonces"
+              onPress={openDelete}
+              destructive
+              chevron={false}
+              last
+            />
+          </ListGroup>
+        </View>
+        </Stagger>
+
+        <AppText variant="caption" color="inkMuted" align="center">
           {config.app.name} v{config.app.version}
         </AppText>
       </ScrollView>
@@ -221,7 +244,6 @@ export default function SettingsScreen() {
           label={exportMut.isPending ? 'Préparation…' : 'Télécharger mes données avant'}
           icon="download-outline"
           variant="secondary"
-          size="sm"
           onPress={() => exportMut.mutate()}
           loading={exportMut.isPending}
           style={styles.exportBtn}
@@ -244,8 +266,9 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: 16, paddingBottom: 32 },
   themeRow: { paddingHorizontal: 16, paddingVertical: 12, gap: 8 },
-  themeLabel: { marginBottom: 2 },
-  sheetActions: { gap: 4 },
+  // Extra space above the irreversible action, away from the logout row.
+  dangerZone: { marginTop: 16 },
+  sheetActions: { gap: 8 },
   para: { marginTop: 12 },
   exportBtn: { alignSelf: 'flex-start', marginTop: 12 },
 });
