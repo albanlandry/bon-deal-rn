@@ -25,6 +25,10 @@ module.exports = {
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.gabtech.bondeal',
+      // EAS builds get the plist from the GOOGLE_SERVICE_INFO_PLIST file env var
+      // (it's gitignored, so not uploaded); local builds read it from firebase/configs/.
+      googleServicesFile:
+        process.env.GOOGLE_SERVICE_INFO_PLIST || './firebase/configs/GoogleService-Info.plist',
     },
     android: {
       adaptiveIcon: {

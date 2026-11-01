@@ -12,7 +12,7 @@ import { haptics } from '@/lib/haptics';
 import type { BdPost, BdPostListResponse } from '@/constants/types';
 import { showToast } from '../atoms/Toast';
 import EmptyState, { ErrorState } from '../molecules/EmptyState';
-import ListingGrid from './ListingGrid';
+import ListingGrid, { type ListingGridProps } from './ListingGrid';
 
 const LIKED_KEY = ['posts', 'liked'] as const;
 
@@ -25,7 +25,14 @@ function errMessage(e: unknown): string {
   return 'Une erreur est survenue. Réessayez.';
 }
 
-export default function FavoritesList({ header }: { header?: React.ReactElement | null }) {
+export interface FavoritesListProps {
+  header?: React.ReactElement | null;
+  /** Scroll passthrough (tab screen drives the hiding tab bar). */
+  onScroll?: ListingGridProps['onScroll'];
+  contentPaddingBottom?: number;
+}
+
+export default function FavoritesList({ header, onScroll, contentPaddingBottom }: FavoritesListProps) {
   const router = useRouter();
   const qc = useQueryClient();
   const liked = useQuery(likedPostsQuery());
@@ -104,6 +111,8 @@ export default function FavoritesList({ header }: { header?: React.ReactElement 
       onRefresh={() => liked.refetch()}
       onToggleLike={onToggleLike}
       showState
+      onScroll={onScroll}
+      contentPaddingBottom={contentPaddingBottom}
       ListHeaderComponent={header}
       ListEmptyComponent={
         <EmptyState

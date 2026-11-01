@@ -5,6 +5,9 @@
  *
  * Local test login (config.devLogin): no SMS is sent; only the configured
  * number is accepted, and the code screen takes the fixed code 123456.
+ *
+ * With `onPasswordSubmit` (login screen, "mot de passe" mode) it asks for the
+ * password instead and sends no SMS; any number may try.
  */
 import { Ionicons } from '@expo/vector-icons';
 import auth, { FirebaseAuthTypes } from '@react-native-firebase/auth';
@@ -22,6 +25,7 @@ import CountryPicker, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AppText from '@/components/atoms/AppText';
 import Button from '@/components/atoms/Button';
+import IconButton from '@/components/atoms/IconButton';
 import TextField from '@/components/atoms/TextField';
 import { appConfigQuery } from '@/lib/api/appConfig';
 import { countriesQuery } from '@/lib/api/geo';
@@ -33,11 +37,17 @@ const DEV = config.devLogin;
 const devPhone = DEV.enabled ? parsePhoneNumberFromString(DEV.phone) : undefined;
 /** The test number as typed in the national field, e.g. "06 12 34 56". */
 const DEV_NATIONAL = devPhone ? devPhone.formatNational() : '';
+/** Test-login copy is for developers only, never in a release build. */
+const SHOW_DEV_HINTS = __DEV__ && DEV.enabled;
 
 export interface AuthPhoneFormProps {
   submitLabel: string;
+  /** Push the submit button to the bottom of the available height. */
+  submitAtBottom?: boolean;
   /** Called with the Firebase confirmation (null in local test login) and the E.164 number. */
-  onCodeSent: (confirmation: FirebaseAuthTypes.ConfirmationResult | null, e164: string) => void;
+  onCodeSent?: (confirmation: FirebaseAuthTypes.ConfirmationResult | null, e164: string) => void;
+  /** Password mode: sign in with the number + password. Resolves to an error message, or null on success. */
+  onPasswordSubmit?: (e164: string, password: string) => Promise<string | null>;
 }
 
 function firebaseErrorMessage(code: string | undefined): string {
@@ -51,11 +61,16 @@ function firebaseErrorMessage(code: string | undefined): string {
     case 'auth/network-request-failed':
       return 'Pas de connexion. Vérifiez votre réseau et réessayez.';
     default:
-      return "Impossible d'envoyer le code. Réessayez.";
+      return 'Impossible d’envoyer le code. Réessayez.';
   }
 }
 
-export default function AuthPhoneForm({ submitLabel, onCodeSent }: AuthPhoneFormProps) {
+export default function AuthPhoneForm({
+  submitLabel,
+  submitAtBottom = false,
+  onCodeSent,
+  onPasswordSubmit,
+}: AuthPhoneFormProps) {
   const t = useTheme();
   const insets = useSafeAreaInsets();
   const [countryCode, setCountryCode] = useState<CountryCode>('GA');
@@ -63,6 +78,10 @@ export default function AuthPhoneForm({ submitLabel, onCodeSent }: AuthPhoneForm
   const [nationalNumber, setNationalNumber] = useState(DEV_NATIONAL);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const passwordMode = !!onPasswordSubmit;
+  const [password, setPassword] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
 
   // Default to the platform's default country (/app-config), and offer only
   // the enabled countries (/geo/countries). Until they load (or if they fail)
@@ -108,9 +127,10 @@ export default function AuthPhoneForm({ submitLabel, onCodeSent }: AuthPhoneForm
   }, [callingCode, digits]);
 
   const tooShort = digits.length < 6;
+  const missing = tooShort || (passwordMode && password.length === 0);
 
   const handleSubmit = async () => {
-    if (tooShort) return;
+    if (missing) return;
     const parsed = parsePhoneNumberFromString(fullE164);
     if (!parsed || !parsed.isValid()) {
       setError('Ce numéro ne semble pas valide. Vérifiez le pays et les chiffres.');
@@ -118,30 +138,43 @@ export default function AuthPhoneForm({ submitLabel, onCodeSent }: AuthPhoneForm
       return;
     }
     setError(null);
+    if (onPasswordSubmit) {
+      setPasswordError(null);
+      setLoading(true);
+      const message = await onPasswordSubmit(parsed.number, password);
+      setLoading(false);
+      if (message) setPasswordError(message);
+      return;
+    }
     if (DEV.enabled) {
       if (parsed.number !== DEV.phone) {
-        setError(`Mode test : seul le ${devPhone?.formatInternational() ?? DEV.phone} est accepté.`);
+        setError(
+          SHOW_DEV_HINTS
+            ? `Mode test : seul le ${devPhone?.formatInternational() ?? DEV.phone} est accepté.`
+            : 'Ce numéro ne peut pas recevoir de code pour le moment.',
+        );
         haptics.error();
         return;
       }
-      onCodeSent(null, parsed.number);
+      onCodeSent?.(null, parsed.number);
       return;
     }
     setLoading(true);
     try {
       const confirmation = await auth().signInWithPhoneNumber(fullE164);
       setLoading(false);
-      onCodeSent(confirmation, fullE164);
+      onCodeSent?.(confirmation, fullE164);
     } catch (e: any) {
       setLoading(false);
       console.error('Firebase phone auth error:', e);
       setError(firebaseErrorMessage(e?.code));
-      haptics.error();
+      // No error haptic when offline: the user did nothing wrong.
+      if (e?.code !== 'auth/network-request-failed') haptics.error();
     }
   };
 
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, submitAtBottom && styles.grow]}>
       <AppText variant="labelStrong" style={styles.label}>
         Numéro de téléphone
       </AppText>
@@ -184,22 +217,61 @@ export default function AuthPhoneForm({ submitLabel, onCodeSent }: AuthPhoneForm
           autoComplete="tel-national"
           textContentType="telephoneNumber"
           accessibilityLabel="Numéro de téléphone"
-          returnKeyType="done"
-          onSubmitEditing={handleSubmit}
+          returnKeyType={passwordMode ? 'next' : 'done'}
+          onSubmitEditing={passwordMode ? undefined : handleSubmit}
           error={error}
-          helper={DEV.enabled ? 'Mode test, sans SMS : le code est 123456.' : 'Nous vous enverrons un code par SMS.'}
+          helper={
+            passwordMode
+              ? undefined
+              : SHOW_DEV_HINTS
+                ? 'Mode test, sans SMS : le code est 123456.'
+                : 'Nous vous enverrons un code par SMS.'
+          }
         />
       </View>
+      {passwordMode && (
+        <TextField
+          label="Mot de passe"
+          value={password}
+          onChangeText={(v) => {
+            setPassword(v);
+            if (passwordError) setPasswordError(null);
+          }}
+          secureTextEntry={!passwordVisible}
+          autoCapitalize="none"
+          autoComplete="password"
+          textContentType="password"
+          returnKeyType="done"
+          onSubmitEditing={handleSubmit}
+          error={passwordError}
+          containerStyle={styles.password}
+          right={
+            <IconButton
+              icon={passwordVisible ? 'eye-off-outline' : 'eye-outline'}
+              label={passwordVisible ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+              onPress={() => setPasswordVisible((v) => !v)}
+              color="inkMuted"
+              size={20}
+            />
+          }
+        />
+      )}
       <Button
         label={submitLabel}
         onPress={handleSubmit}
         loading={loading}
-        disabled={tooShort}
-        disabledReason={tooShort ? 'Saisissez votre numéro pour continuer' : undefined}
+        disabled={missing}
+        disabledReason={
+          tooShort
+            ? 'Saisissez votre numéro pour continuer'
+            : missing
+              ? 'Saisissez votre mot de passe pour continuer'
+              : undefined
+        }
         fullWidth
         size="lg"
         haptic
-        style={styles.submit}
+        style={submitAtBottom ? styles.submitBottom : styles.submit}
       />
     </View>
   );
@@ -207,16 +279,19 @@ export default function AuthPhoneForm({ submitLabel, onCodeSent }: AuthPhoneForm
 
 const styles = StyleSheet.create({
   wrap: { alignSelf: 'stretch' },
-  label: { marginBottom: 6 },
+  label: { marginBottom: 8 },
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   country: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     minHeight: 48,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     borderWidth: 1,
   },
   flex: { flex: 1 },
+  password: { marginTop: 16 },
   submit: { marginTop: 16 },
+  grow: { flexGrow: 1 },
+  submitBottom: { marginTop: 'auto', paddingTop: 24 },
 });

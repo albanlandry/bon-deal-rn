@@ -1,7 +1,8 @@
 /**
  * App-wide blocking states reported by the API: maintenance (503
  * `code: "maintenance"` or `/app-config` maintenance_mode) and a required
- * update (426 `code: "update_required"` or `/app-config` min_app_version).
+ * update (426 `code: "update_required"` or `/app-config` min_app_version),
+ * plus `offline`: the last request failed at the network level (no response).
  *
  * A tiny external store: `lib/api.ts` reports into it from any request, and
  * the root `AppGate` renders the full-screen pages from it.
@@ -16,14 +17,20 @@ export interface StoreUrls {
 export interface AppStatus {
   maintenance: { message: string | null } | null;
   updateRequired: (StoreUrls & { message: string | null; min_app_version?: string | null }) | null;
+  offline: boolean;
 }
 
-let state: AppStatus = { maintenance: null, updateRequired: null };
+let state: AppStatus = { maintenance: null, updateRequired: null, offline: false };
 const listeners = new Set<() => void>();
 
 function set(next: Partial<AppStatus>) {
   const merged = { ...state, ...next };
-  if (merged.maintenance === state.maintenance && merged.updateRequired === state.updateRequired) return;
+  if (
+    merged.maintenance === state.maintenance &&
+    merged.updateRequired === state.updateRequired &&
+    merged.offline === state.offline
+  )
+    return;
   state = merged;
   listeners.forEach((fn) => fn());
 }
@@ -62,6 +69,16 @@ export function reportUpdateRequired(info: AppStatus['updateRequired'] & object)
 
 export function clearUpdateRequired(): void {
   if (state.updateRequired) set({ updateRequired: null });
+}
+
+/** A request got no response at all (no network, server unreachable). */
+export function reportOffline(): void {
+  if (!state.offline) set({ offline: true });
+}
+
+/** Any response came back, whatever its status: the network is reachable. */
+export function reportOnline(): void {
+  if (state.offline) set({ offline: false });
 }
 
 export function useAppStatus(): AppStatus {

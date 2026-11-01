@@ -58,6 +58,60 @@ export async function createReview(id: number, rating: number, comment?: string)
   return res.review;
 }
 
+// --- Meeting time helpers (pure) -----------------------------------------
+
+/** The API returns naive UTC ISO strings ("2026-10-23T17:00:00"): read them as UTC. */
+export function parseServerDate(iso: string | null | undefined): Date | null {
+  if (!iso) return null;
+  const hasZone = /([zZ]|[+-]\d{2}:?\d{2})$/.test(iso);
+  const d = new Date(hasZone ? iso : `${iso}Z`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+/** "18 h", "18 h 30" (French clock). */
+export function formatHour(d: Date): string {
+  const m = d.getMinutes();
+  return `${d.getHours()}\u00A0h${m ? `\u00A0${pad2(m)}` : ''}`;
+}
+
+const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+
+/** "aujourd’hui à 18 h", "demain à 9 h 30", "le 23/10 à 18 h" (device local time). */
+export function formatMeetingWhen(d: Date, now: Date = new Date()): string {
+  const days = Math.round((startOfDay(d) - startOfDay(now)) / 86400000);
+  const day =
+    days === 0 ? 'aujourd’hui' : days === 1 ? 'demain' : `le ${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}`;
+  return `${day} à ${formatHour(d)}`;
+}
+
+/** One line for a meeting: "le 23/10 à 18 h · Rond-point de Louis", or null when none is set. */
+export function meetingSummary(
+  m: { meeting_at?: string | null; meeting_location?: string | null },
+  now: Date = new Date(),
+): string | null {
+  const at = parseServerDate(m.meeting_at);
+  const place = m.meeting_location?.trim() || null;
+  const parts = [at ? formatMeetingWhen(at, now) : null, place].filter(Boolean);
+  return parts.length ? parts.join(' · ') : null;
+}
+
+/** Deal page headline, by status then meeting. */
+export function dealHeadline(txn: BdTransaction, iAmSeller: boolean, now: Date = new Date()): string {
+  if (txn.status === 'completed') return iAmSeller ? 'Vente conclue' : 'Achat conclu';
+  if (txn.status === 'cancelled') return iAmSeller ? 'Vente annulée' : 'Achat annulé';
+  if (txn.status === 'disputed') return 'Litige en cours d’examen';
+  const at = parseServerDate(txn.meeting_at);
+  if (at) {
+    const when = formatMeetingWhen(at, now);
+    return `Rendez-vous ${when}`;
+  }
+  const place = txn.meeting_location?.trim();
+  if (place) return `Rendez-vous : ${place}`;
+  return 'Fixez un rendez-vous';
+}
+
 /** Message for transaction / review failures: the server's detail, by status otherwise. */
 export function transactionErrorMessage(e: unknown): string {
   if (e instanceof ApiError) {
@@ -72,6 +126,18 @@ export function transactionErrorMessage(e: unknown): string {
     if (e.status === 422) return 'Vérifiez les informations saisies.';
   }
   return apiErrorMessage(e, 'Action impossible. Réessayez.');
+}
+
+/** System cancellation codes (docs/14) in French; people's own reasons as typed. */
+const CANCEL_REASON_LABEL: Record<string, string> = {
+  appointment_cancelled: 'Rendez-vous annulé',
+  appointment_expired: 'Réservation levée sans réponse après le rendez-vous',
+  not_sold: 'Vente non conclue',
+};
+
+export function cancellationReasonLabel(reason: string | null | undefined): string | null {
+  const r = reason?.trim();
+  return r ? (CANCEL_REASON_LABEL[r] ?? r) : null;
 }
 
 export const TXN_STATUS_LABEL: Record<string, string> = {

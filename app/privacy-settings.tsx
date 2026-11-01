@@ -5,6 +5,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import React, { useEffect, useState } from 'react';
+import { Href, useRouter } from 'expo-router';
 import { Linking, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '@/theme';
@@ -30,6 +31,7 @@ import { useBlockActions } from '@/lib/useBlock';
 import { usePreferences } from '@/lib/usePreferences';
 
 export default function PrivacySettingsScreen() {
+  const router = useRouter();
   const t = useTheme();
   const { user } = useAuth();
   const { prefs, isLoading, isError, refetch, setPrivacy } = usePreferences();
@@ -77,7 +79,7 @@ export default function PrivacySettingsScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: t.colors.canvas }]}>
-      <ScreenHeader title="Confidentialité" />
+      <ScreenHeader large title="Confidentialité" />
       <ScrollView contentContainerStyle={styles.content}>
         {isLoading ? (
           <View style={styles.loading}>
@@ -172,6 +174,11 @@ export default function PrivacySettingsScreen() {
             title={exportMut.isPending ? 'Préparation du lien…' : 'Télécharger mes données'}
             subtitle="Profil, annonces, messages, transactions et avis (fichier JSON)"
             onPress={exportMut.isPending ? undefined : () => exportMut.mutate()}
+          />
+          <ListRow
+            icon="document-text-outline"
+            title="Politique de confidentialité"
+            onPress={() => router.push('/privacy-policy' as Href)}
             last
           />
         </ListGroup>
@@ -196,7 +203,7 @@ const styles = StyleSheet.create({
   content: { padding: 16, paddingBottom: 32 },
   loading: { gap: 12, marginBottom: 20 },
   pad: { padding: 16 },
-  blockRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 10, minHeight: 56 },
+  blockRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingVertical: 12, minHeight: 56 },
   info: { flexDirection: 'row', gap: 12 },
   flex: { flex: 1 },
 });

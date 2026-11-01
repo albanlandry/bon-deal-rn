@@ -40,6 +40,8 @@ export interface FeedParams {
   /** "Près de moi": only listings within the radius; rows get distance_km. */
   near?: NearParams;
   sort?: PostSort;
+  /** true: free listings only; false: non-free only; unset: all (`is_free`). */
+  isFree?: boolean;
 }
 
 const SORT_PARAM: Record<PostSort, string | null> = {
@@ -64,6 +66,7 @@ function buildFeedQuery(params: FeedParams, page: number): string {
   if (params.maxPrice != null) q.set('max_price', String(params.maxPrice));
   if (params.condition?.length) q.set('condition', params.condition.join(','));
   if (params.quartier) q.set('quartier', params.quartier);
+  if (params.isFree != null) q.set('is_free', String(params.isFree));
   if (params.near) {
     q.set('near_lat', String(params.near.lat));
     q.set('near_lng', String(params.near.lng));

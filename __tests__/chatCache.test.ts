@@ -38,6 +38,15 @@ describe('bumpConversation', () => {
     expect(bumpConversation([conv(2, 1)], { conversation_id: 2, sender_id: 8, created_at: 'x' }, 5, 2)![0].unread_count).toBe(1);
   });
 
+  it('replaces the list preview with the new message', () => {
+    const msg = { id: 41, conversation_id: 2, sender_id: 5, created_at: 'x', kind: 'text' as const, body: 'Ok', payload: null, read_at: null };
+    const last = bumpConversation([conv(2)], msg, 5, null)![0].last_message!;
+    expect(last).toMatchObject({ id: 41, body: 'Ok', is_mine: true });
+    // An event without the message itself keeps the previous preview.
+    const before = { ...conv(2), last_message: last };
+    expect(bumpConversation([before], { conversation_id: 2, sender_id: 8, created_at: 'y' }, 5, null)![0].last_message).toBe(last);
+  });
+
   it('asks for a refetch when the conversation is unknown', () => {
     expect(bumpConversation([conv(1)], { conversation_id: 9, sender_id: 8, created_at: 'x' }, 5, null)).toBeNull();
   });

@@ -1,12 +1,14 @@
 // app/reviews.tsx — Avis reçus par un utilisateur (MB-TRD-06)
 // GET /users/{id}/reviews, newest first, infinite scroll. Summary numbers
-// come from the API only (total + reviewee.avg_rating); nothing is invented.
-import { useInfiniteQuery } from '@tanstack/react-query';
+// come from the API only (total + the profile's avg_rating, else the reviewee
+// brief); nothing is invented. Reporting lives in each card's overflow menu.
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useLocalSearchParams } from 'expo-router';
 import React, { useState } from 'react';
 import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
+import { publicProfileQuery } from '@/lib/api/account';
 import { userReviewsInfiniteQuery } from '@/lib/api/reviews';
 import { useTheme } from '@/theme';
 import ReviewCard from '@/components/molecules/ReviewCard';
@@ -26,7 +28,7 @@ function ReviewSkeleton() {
     <Card style={styles.item}>
       <View style={styles.itemHeader}>
         <Skeleton width={40} height={40} radius={20} />
-        <View style={[styles.flex, { gap: 6 }]}>
+        <View style={[styles.flex, { gap: 8 }]}>
           <Skeleton width="50%" height={14} />
           <Skeleton width="30%" height={10} />
         </View>
@@ -48,7 +50,9 @@ export default function ReviewsScreen() {
   const q = useInfiniteQuery(userReviewsInfiniteQuery(userId));
   const reviews = q.data?.pages.flatMap((p) => p.reviews) ?? [];
   const total = q.data?.pages[0]?.total ?? 0;
-  const avg = reviews[0]?.reviewee?.avg_rating ?? null;
+  // The profile carries the authoritative average; the reviewee brief is a fallback.
+  const profile = useQuery(publicProfileQuery(userId));
+  const avg = profile.data?.avg_rating ?? reviews[0]?.reviewee?.avg_rating ?? null;
 
   const [reportId, setReportId] = useState<number | null>(null);
 
@@ -73,7 +77,7 @@ export default function ReviewsScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: t.colors.canvas }]}>
-      <ScreenHeader title={title} />
+      <ScreenHeader large title={title} />
       {q.isLoading ? (
         <View style={styles.list}>
           {[0, 1, 2].map((i) => (
@@ -81,7 +85,7 @@ export default function ReviewsScreen() {
           ))}
         </View>
       ) : q.isError ? (
-        <ErrorState onRetry={() => q.refetch()} />
+        <ErrorState message="Impossible de charger les avis." onRetry={() => q.refetch()} />
       ) : (
         <FlatList
           data={reviews}
@@ -97,7 +101,7 @@ export default function ReviewsScreen() {
           ListEmptyComponent={
             <EmptyState
               icon="star-outline"
-              title="Pas encore d'avis"
+              title="Pas encore d’avis"
               message={
                 isMe
                   ? 'Après une vente ou un achat terminé, l’autre partie pourra vous laisser un avis.'
@@ -139,7 +143,6 @@ const styles = StyleSheet.create({
   summary: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 4 },
   item: { gap: 8 },
   itemHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  comment: { marginTop: 2 },
   footer: { paddingVertical: 16 },
   flex: { flex: 1 },
 });

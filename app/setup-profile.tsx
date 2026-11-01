@@ -174,6 +174,19 @@ export default function SetupProfileScreen() {
             </View>
           </View>
         </View>
+      }
+      bottom={
+        <Button
+          label="Continuer"
+          onPress={handleContinue}
+          loading={saving}
+          disabled={!canContinue}
+          disabledReason={
+            !nicknameOk ? 'Choisissez un pseudonyme (2 caractères min.)' : !city ? 'Choisissez votre ville' : undefined
+          }
+          fullWidth
+          size="lg"
+        />
       }>
       <View style={styles.avatarSection}>
         <Pressable
@@ -185,16 +198,19 @@ export default function SetupProfileScreen() {
             <AppImage uri={profileImage} style={styles.avatar} />
           ) : (
             <View style={[styles.avatar, styles.avatarEmpty, { backgroundColor: t.colors.brandTint }]}>
-              <Ionicons name="camera-outline" size={36} color={t.colors.brandStrong} />
+              <Ionicons name="camera-outline" size={30} color={t.colors.brandStrong} />
             </View>
           )}
           <View style={[styles.editBadge, { backgroundColor: t.colors.brand, borderColor: t.colors.canvas }]}>
-            <Ionicons name={profileImage ? 'pencil' : 'add'} size={18} color={t.colors.onBrand} />
+            <Ionicons name={profileImage ? 'pencil' : 'add'} size={16} color={t.colors.onBrand} />
           </View>
         </Pressable>
-        <AppText variant="caption" color="inkMuted">
-          Photo facultative, mais recommandée
-        </AppText>
+        <View style={styles.flex}>
+          <AppText variant="labelStrong">Photo de profil</AppText>
+          <AppText variant="caption" color="inkMuted">
+            Facultative, mais recommandée
+          </AppText>
+        </View>
       </View>
 
       <TextField
@@ -244,18 +260,6 @@ export default function SetupProfileScreen() {
         </AppText>
       </View>
 
-      <Button
-        label="Continuer"
-        onPress={handleContinue}
-        loading={saving}
-        disabled={!canContinue}
-        disabledReason={
-          !nicknameOk ? 'Choisissez un pseudonyme (2 caractères min.)' : !city ? 'Choisissez votre ville' : undefined
-        }
-        fullWidth
-        size="lg"
-        style={styles.cta}
-      />
       <LocationPickerSheet
         visible={showLocation}
         onClose={() => setShowLocation(false)}
@@ -275,33 +279,32 @@ const styles = StyleSheet.create({
   hero: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 },
   heroText: { gap: 2 },
   doneRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  avatarSection: { alignItems: 'center', gap: 8, marginBottom: 20 },
-  avatarWrap: { width: 112, height: 112 },
-  avatar: { width: 112, height: 112, borderRadius: 56 },
+  avatarSection: { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 20 },
+  avatarWrap: { width: 88, height: 88 },
+  avatar: { width: 88, height: 88, borderRadius: 44 },
   avatarEmpty: { alignItems: 'center', justifyContent: 'center' },
   editBadge: {
     position: 'absolute',
     right: 0,
     bottom: 0,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     borderWidth: 3,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cta: { marginTop: 8 },
   flex: { flex: 1 },
   locationBlock: { marginTop: 8, marginBottom: 12 },
-  locationLabel: { marginBottom: 6 },
-  locationHelper: { marginTop: 6 },
+  locationLabel: { marginBottom: 8 },
+  locationHelper: { marginTop: 8 },
   locationField: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
     minHeight: 52,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
     borderWidth: 1,
   },
 });

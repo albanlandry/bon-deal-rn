@@ -107,6 +107,16 @@ describe('ApiError.code', () => {
     });
   });
 
+  it('flags the app offline on a network failure and online on any response', async () => {
+    fetchMock.mockRejectedValueOnce(new TypeError('Network request failed'));
+    await expect(apiFetch('/posts')).rejects.toMatchObject({ status: 0, code: 'network' });
+    expect(getAppStatus().offline).toBe(true);
+    // An error response still proves the network is reachable.
+    fetchMock.mockResolvedValueOnce(res(404, { detail: 'Introuvable' }));
+    await apiFetch('/posts').catch(() => {});
+    expect(getAppStatus().offline).toBe(false);
+  });
+
   it('blockedMessage branches on the code, not the text', () => {
     const blocked = new ApiError(403, 'Vous ne pouvez pas contacter cet utilisateur.', 'user_blocked', true);
     const other = new ApiError(403, "Vous n'êtes pas autorisé à effectuer cette action", 'forbidden', true);

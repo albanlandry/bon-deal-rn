@@ -128,8 +128,10 @@ export interface paths {
         };
         /**
          * Funnel
-         * @description view_item → contact_seller → make_offer → sale_completed: distinct users per
-         *     step over the period, and the conversion from the previous step.
+         * @description view_item → contact_seller → make_offer → sale_completed over the period.
+         *
+         *     A step counts only users who also reached every earlier step, so the
+         *     funnel never grows (conversion ≤ 100 %); `users_total` is the step on its own.
          */
         get: operations["funnel_v1_admin_analytics_funnel_get"];
         put?: never;
@@ -541,6 +543,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/geo/quartiers/{quartier_id}/meeting-places": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Admin List Meeting Places
+         * @description Every place of the quartier, disabled ones included.
+         */
+        get: operations["admin_list_meeting_places_v1_admin_geo_quartiers__quartier_id__meeting_places_get"];
+        put?: never;
+        /** Admin Create Meeting Place */
+        post: operations["admin_create_meeting_place_v1_admin_geo_quartiers__quartier_id__meeting_places_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/geo/search": {
         parameters: {
             query?: never;
@@ -559,6 +582,28 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/meeting-places/{place_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Admin Delete Meeting Place
+         * @description Staff places are deleted; OSM places are disabled instead, so the next
+         *     seed does not bring them back.
+         */
+        delete: operations["admin_delete_meeting_place_v1_admin_meeting_places__place_id__delete"];
+        options?: never;
+        head?: never;
+        /** Admin Update Meeting Place */
+        patch: operations["admin_update_meeting_place_v1_admin_meeting_places__place_id__patch"];
         trace?: never;
     };
     "/v1/admin/moderation/photos": {
@@ -1206,6 +1251,89 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/appointments/{appt_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Appointment
+         * @description Change the time and/or place. The appointment goes back to `proposed`
+         *     (the other party confirms again); a reserved post stays reserved.
+         */
+        patch: operations["update_appointment_v1_appointments__appt_id__patch"];
+        trace?: never;
+    };
+    "/v1/appointments/{appt_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Appointment
+         * @description Either party cancels. A held post goes back on sale and the deal is cancelled.
+         */
+        post: operations["cancel_appointment_v1_appointments__appt_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/appointments/{appt_id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirm Appointment
+         * @description The party who did not propose confirms. Reserves the post and creates
+         *     the deal (or links the pending one an accepted offer opened).
+         */
+        post: operations["confirm_appointment_v1_appointments__appt_id__confirm_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/appointments/{appt_id}/outcome": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report Outcome
+         * @description After the meeting. Seller "sold": deal completed, post sold. Buyer
+         *     "sold": the seller is asked to confirm. "Not sold" (either): like cancel.
+         */
+        post: operations["report_outcome_v1_appointments__appt_id__outcome_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/auth/firebase": {
         parameters: {
             query?: never;
@@ -1246,6 +1374,28 @@ export interface paths {
          * @description Authenticates user and returns access token + sets refresh token cookie.
          */
         post: operations["login_v1_auth_login_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/auth/login/phone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Phone Password Login
+         * @description Signs in with phone number + the password the user chose. Same answer
+         *     for an unknown number, a number without a chosen password and a wrong
+         *     password, so it doesn't reveal which numbers have accounts.
+         */
+        post: operations["phone_password_login_v1_auth_login_phone_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1360,6 +1510,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/auth/me/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set My Password
+         * @description Chooses or changes the password used by POST /auth/login/phone.
+         *
+         *     A session opened with the phone code (amr "otp") may set it without the
+         *     current one: that is also how a forgotten password is replaced. A session
+         *     opened with the password must confirm the current one. Other password
+         *     sessions are ended (their refresh tokens predate password_set_at).
+         */
+        put: operations["set_my_password_v1_auth_me_password_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/auth/me/preferences": {
         parameters: {
             query?: never;
@@ -1418,6 +1593,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/auth/token/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mobile Refresh
+         * @description Renews a phone + password session: a new access token and a new
+         *     refresh token (sliding 30 days).
+         */
+        post: operations["mobile_refresh_v1_auth_token_refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/conversations": {
         parameters: {
             query?: never;
@@ -1445,6 +1641,67 @@ export interface paths {
         };
         /** Get Conversation */
         get: operations["get_conversation_v1_conversations__conv_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/conversations/{conv_id}/appointment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Conversation Appointment
+         * @description The open appointment of the conversation, else its latest one, else null.
+         */
+        get: operations["get_conversation_appointment_v1_conversations__conv_id__appointment_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/conversations/{conv_id}/appointments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Propose Appointment
+         * @description Either party proposes a time (required) and a place (optional).
+         */
+        post: operations["propose_appointment_v1_conversations__conv_id__appointments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/conversations/{conv_id}/meeting-places": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Conversation Meeting Places
+         * @description Suggestions for the listing's pickup quartier, nearest to the listing.
+         *     `quartier` is null (and the list empty) when the listing names none.
+         */
+        get: operations["conversation_meeting_places_v1_conversations__conv_id__meeting_places_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1557,6 +1814,26 @@ export interface paths {
          * @description Enabled cities of an enabled country.
          */
         get: operations["public_cities_v1_geo_countries__iso2__cities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/geo/quartiers/{quartier_id}/meeting-places": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Quartier Meeting Places
+         * @description Suggestions for any approved quartier.
+         */
+        get: operations["quartier_meeting_places_v1_geo_quartiers__quartier_id__meeting_places_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2269,6 +2546,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/search/trending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search Trending
+         * @description Most searched terms in a city over the last 7 days (all cities without
+         *     `city`). Public; only terms searched by at least 3 different people.
+         *     Cached 10 minutes.
+         */
+        get: operations["search_trending_v1_search_trending_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/transactions": {
         parameters: {
             query?: never;
@@ -2329,6 +2628,27 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/v1/transactions/{transaction_id}/meeting": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Transaction Meeting
+         * @description Buyer or seller sets or changes the meeting place and time of a pending deal.
+         *     The other party gets a system chat message and a notification.
+         */
+        patch: operations["update_transaction_meeting_v1_transactions__transaction_id__meeting_patch"];
         trace?: never;
     };
     "/v1/transactions/{transaction_id}/reviews": {
@@ -3100,6 +3420,126 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** AppointmentMaybeOut */
+        AppointmentMaybeOut: {
+            appointment: components["schemas"]["AppointmentOut"] | null;
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AppointmentOut */
+        AppointmentOut: {
+            /** Buyer Id */
+            buyer_id: number;
+            /** Can Cancel */
+            can_cancel: boolean;
+            /** Can Confirm */
+            can_confirm: boolean;
+            /** Can Edit */
+            can_edit: boolean;
+            /** Can Report Outcome */
+            can_report_outcome: boolean;
+            /** Cancel Reason */
+            cancel_reason: string | null;
+            /** Cancelled At */
+            cancelled_at: string | null;
+            /** Cancelled By Id */
+            cancelled_by_id: number | null;
+            /** Completed At */
+            completed_at: string | null;
+            /** Confirmed At */
+            confirmed_at: string | null;
+            /** Conversation Id */
+            conversation_id: number;
+            /** Created At */
+            created_at: string | null;
+            /** Id */
+            id: number;
+            place: components["schemas"]["AppointmentPlaceOut"] | null;
+            /** Post Id */
+            post_id: number;
+            /** Proposed By Id */
+            proposed_by_id: number;
+            quartier: components["schemas"]["AppointmentQuartierOut"] | null;
+            /** Sale Reported At */
+            sale_reported_at: string | null;
+            /** Seller Id */
+            seller_id: number;
+            /** Starts At */
+            starts_at: string;
+            /** Status */
+            status: string;
+            /** Transaction Id */
+            transaction_id: number | null;
+            /** Updated At */
+            updated_at: string | null;
+            /** Version */
+            version: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AppointmentOutcome */
+        AppointmentOutcome: {
+            /** Sold */
+            sold: boolean;
+            /** Version */
+            version: number;
+        };
+        /** AppointmentPlaceOut */
+        AppointmentPlaceOut: {
+            /** Address */
+            address?: string | null;
+            /** Details */
+            details?: string | null;
+            /** Kind */
+            kind: string;
+            /** Name */
+            name?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AppointmentQuartierOut */
+        AppointmentQuartierOut: {
+            /** City */
+            city: string | null;
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AppointmentResultOut */
+        AppointmentResultOut: {
+            appointment: components["schemas"]["AppointmentOut"];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AppointmentTransactionOut */
+        AppointmentTransactionOut: {
+            /** Amount */
+            amount: number;
+            /** Id */
+            id: number;
+            /** Post Id */
+            post_id: number;
+            /** Status */
+            status: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** AppointmentWithDealOut */
+        AppointmentWithDealOut: {
+            appointment: components["schemas"]["AppointmentOut"];
+            /** Success */
+            success: boolean;
+            transaction: components["schemas"]["AppointmentTransactionOut"] | null;
+        } & {
+            [key: string]: unknown;
+        };
         /** AttachImages */
         AttachImages: {
             /** Keys */
@@ -3340,6 +3780,19 @@ export interface components {
         BulkQuartiers: {
             /** Items */
             items: components["schemas"]["QuartierIn"][];
+            /**
+             * Source
+             * @default staff
+             * @enum {string}
+             */
+            source: "staff" | "osm";
+        };
+        /** CancelAppointment */
+        CancelAppointment: {
+            /** Reason */
+            reason?: string | null;
+            /** Version */
+            version: number;
         };
         /** ChangePassword */
         ChangePassword: {
@@ -3489,6 +3942,31 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * ConversationLastMessageOut
+         * @description Preview of the newest message. body is cut to 140 characters; system
+         *     messages (offers, acceptances…) have no body and carry payload instead.
+         */
+        ConversationLastMessageOut: {
+            /** Body */
+            body: string | null;
+            /** Created At */
+            created_at: string | null;
+            /** Id */
+            id: number;
+            /** Is Mine */
+            is_mine: boolean;
+            /** Kind */
+            kind: string;
+            /** Payload */
+            payload: unknown;
+            /** Read At */
+            read_at: string | null;
+            /** Sender Id */
+            sender_id: number | null;
+        } & {
+            [key: string]: unknown;
+        };
         /** ConversationListOut */
         ConversationListOut: {
             /** Conversations */
@@ -3547,6 +4025,7 @@ export interface components {
         };
         /** ConversationOut */
         ConversationOut: {
+            appointment?: components["schemas"]["AppointmentOut"] | null;
             /** Buyer Id */
             buyer_id: number;
             counterparty: components["schemas"]["ConversationCounterpartyOut"];
@@ -3554,6 +4033,7 @@ export interface components {
             created_at: string | null;
             /** Id */
             id: number;
+            last_message?: components["schemas"]["ConversationLastMessageOut"] | null;
             /** Last Message At */
             last_message_at: string | null;
             latest_negotiation: components["schemas"]["ConversationNegotiationSummaryOut"] | null;
@@ -3978,6 +4458,8 @@ export interface components {
         GeoMergeMovedOut: {
             /** Listings */
             listings: number;
+            /** Meeting Places */
+            meeting_places: number;
             /** Users */
             users: number;
         } & {
@@ -4224,6 +4706,8 @@ export interface components {
             first_name: string | null;
             /** Gender */
             gender: string | null;
+            /** Has Password */
+            has_password: boolean;
             /** Id */
             id: number;
             /** Last Name */
@@ -4261,6 +4745,8 @@ export interface components {
             first_name: string | null;
             /** Gender */
             gender: string | null;
+            /** Has Password */
+            has_password: boolean;
             /** Id */
             id: number;
             /** Last Name */
@@ -4342,6 +4828,123 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** MeetingPlaceAdminListOut */
+        MeetingPlaceAdminListOut: {
+            /** Places */
+            places: components["schemas"]["MeetingPlaceAdminOut"][];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** MeetingPlaceAdminOut */
+        MeetingPlaceAdminOut: {
+            /** Category */
+            category: string;
+            /** Id */
+            id: number;
+            /** Is Enabled */
+            is_enabled: boolean;
+            /** Lat */
+            lat: number | null;
+            /** Lng */
+            lng: number | null;
+            /** Name */
+            name: string;
+            /** Osm Id */
+            osm_id: string | null;
+            /** Quartier Id */
+            quartier_id: number;
+            /** Sort Order */
+            sort_order: number;
+            /** Source */
+            source: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** MeetingPlaceIn */
+        MeetingPlaceIn: {
+            /**
+             * Category
+             * @default other
+             * @enum {string}
+             */
+            category: "market" | "supermarket" | "mall" | "pharmacy" | "fuel" | "roundabout" | "bank" | "post_office" | "townhall" | "police" | "other";
+            /** Lat */
+            lat?: number | null;
+            /** Lng */
+            lng?: number | null;
+            /** Name */
+            name: string;
+            /**
+             * Sort Order
+             * @default 0
+             */
+            sort_order: number;
+        };
+        /** MeetingPlaceListOut */
+        MeetingPlaceListOut: {
+            /** Places */
+            places: components["schemas"]["MeetingPlaceOut"][];
+            quartier: components["schemas"]["MeetingPlaceQuartierOut"] | null;
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** MeetingPlaceOut */
+        MeetingPlaceOut: {
+            /** Category */
+            category: string;
+            /** Distance Km */
+            distance_km: number | null;
+            /** Id */
+            id: number;
+            /** Lat */
+            lat: number | null;
+            /** Lng */
+            lng: number | null;
+            /** Name */
+            name: string;
+            /** Quartier */
+            quartier: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** MeetingPlacePatch */
+        MeetingPlacePatch: {
+            /** Category */
+            category?: ("market" | "supermarket" | "mall" | "pharmacy" | "fuel" | "roundabout" | "bank" | "post_office" | "townhall" | "police" | "other") | null;
+            /** Is Enabled */
+            is_enabled?: boolean | null;
+            /** Lat */
+            lat?: number | null;
+            /** Lng */
+            lng?: number | null;
+            /** Name */
+            name?: string | null;
+            /** Sort Order */
+            sort_order?: number | null;
+        };
+        /** MeetingPlaceQuartierOut */
+        MeetingPlaceQuartierOut: {
+            /** City */
+            city: string;
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** MeetingPlaceResultOut */
+        MeetingPlaceResultOut: {
+            place: components["schemas"]["MeetingPlaceAdminOut"];
+            /** Success */
+            success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
         /** MergeQuartier */
         MergeQuartier: {
             /** Into Id */
@@ -4353,6 +4956,22 @@ export interface components {
             message: string;
         } & {
             [key: string]: unknown;
+        };
+        /** MobileRefresh */
+        MobileRefresh: {
+            /** Refresh Token */
+            refresh_token: string;
+        };
+        /** MobileTokenResponse */
+        MobileTokenResponse: {
+            /** Access Token */
+            access_token: string;
+            /** Expires In */
+            expires_in: number;
+            /** Refresh Token */
+            refresh_token: string;
+            /** Token Type */
+            token_type: string;
         };
         /** ModerationOwnerOut */
         ModerationOwnerOut: {
@@ -4414,6 +5033,8 @@ export interface components {
             allow_negotiation: boolean | null;
             /** Categories */
             categories: string[];
+            /** Chats Count */
+            chats_count: number;
             /** City */
             city: string | null;
             /** Condition */
@@ -4814,6 +5435,27 @@ export interface components {
             /** Message */
             message?: string | null;
         };
+        /** PhonePasswordLogin */
+        PhonePasswordLogin: {
+            /** Password */
+            password: string;
+            /** Phone Number */
+            phone_number: string;
+        };
+        /** PlaceIn */
+        PlaceIn: {
+            /** Address */
+            address?: string | null;
+            /** Details */
+            details?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "exact" | "relative";
+            /** Name */
+            name?: string | null;
+        };
         /** PostCreate */
         PostCreate: {
             /** Age Bucket */
@@ -4864,9 +5506,75 @@ export interface components {
         PostDetailOut: {
             /** Message */
             message: string;
-            post: components["schemas"]["PostOut"];
+            post: components["schemas"]["PostDetailPostOut"];
             /** Success */
             success: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        /** PostDetailPostOut */
+        PostDetailPostOut: {
+            /** Active Offer Count */
+            active_offer_count: number;
+            /** Age Bucket */
+            age_bucket: string | null;
+            /** Allow Negotiation */
+            allow_negotiation: boolean | null;
+            /** Categories */
+            categories: string[];
+            /** Chats Count */
+            chats_count: number;
+            /** City */
+            city: string | null;
+            /** Condition */
+            condition: string | null;
+            /** Created At */
+            created_at: string | null;
+            /** Description */
+            description: string | null;
+            /** Exchange Items */
+            exchange_items: string | null;
+            /** Expires At */
+            expires_at: string | null;
+            /** Id */
+            id: number;
+            /** Images */
+            images: components["schemas"]["PostImageOut"][];
+            /** Is Free */
+            is_free: boolean | null;
+            /** Lat */
+            lat: number | null;
+            /** Liked By Me */
+            liked_by_me: boolean;
+            /** Likes Count */
+            likes_count: number;
+            /** Lng */
+            lng: number | null;
+            /** Moderation Status */
+            moderation_status: string;
+            /** Offer Count */
+            offer_count: number;
+            /** Owner Id */
+            owner_id: number | null;
+            /** Owner Username */
+            owner_username: string | null;
+            /** Pickup Location Note */
+            pickup_location_note: string | null;
+            /** Pickup Quartier */
+            pickup_quartier: string | null;
+            /** Price */
+            price: number | null;
+            reservation: components["schemas"]["PostReservationOut"] | null;
+            /** Shares Count */
+            shares_count: number;
+            /** State */
+            state: string | null;
+            /** Title */
+            title: string | null;
+            /** Updated At */
+            updated_at: string | null;
+            /** Views Count */
+            views_count: number;
         } & {
             [key: string]: unknown;
         };
@@ -4948,6 +5656,8 @@ export interface components {
             allow_negotiation: boolean | null;
             /** Categories */
             categories: string[];
+            /** Chats Count */
+            chats_count: number;
             /** City */
             city: string | null;
             /** Condition */
@@ -4998,6 +5708,15 @@ export interface components {
             updated_at: string | null;
             /** Views Count */
             views_count: number;
+        } & {
+            [key: string]: unknown;
+        };
+        /** PostReservationOut */
+        PostReservationOut: {
+            /** For Me */
+            for_me: boolean;
+            /** Notify Me */
+            notify_me: boolean;
         } & {
             [key: string]: unknown;
         };
@@ -5168,6 +5887,17 @@ export interface components {
             note?: string | null;
             /** User Id */
             user_id?: number | null;
+        };
+        /** ProposeAppointment */
+        ProposeAppointment: {
+            place?: components["schemas"]["PlaceIn"] | null;
+            /** Quartier Id */
+            quartier_id?: number | null;
+            /**
+             * Starts At
+             * Format: date-time
+             */
+            starts_at: string;
         };
         /** QuartierDeleteOut */
         QuartierDeleteOut: {
@@ -5424,6 +6154,15 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** SetPassword */
+        SetPassword: {
+            /** Confirm Password */
+            confirm_password: string;
+            /** Current Password */
+            current_password?: string | null;
+            /** Password */
+            password: string;
+        };
         /** SetReviewVisibility */
         SetReviewVisibility: {
             /** Is Visible */
@@ -5516,6 +6255,8 @@ export interface components {
         TransactionDetailOut: {
             /** Amount */
             amount: number;
+            /** Appointment Id */
+            appointment_id?: number | null;
             buyer: components["schemas"]["TransactionUserBriefOut"] | null;
             /** Buyer Id */
             buyer_id: number;
@@ -5525,6 +6266,8 @@ export interface components {
             cancelled_at: string | null;
             /** Completed At */
             completed_at: string | null;
+            /** Conversation Id */
+            conversation_id?: number | null;
             /** Created At */
             created_at: string | null;
             /** Currency */
@@ -5538,6 +6281,8 @@ export interface components {
             disputed_at: string | null;
             /** Id */
             id: number;
+            /** Meeting At */
+            meeting_at: string | null;
             /** Meeting Location */
             meeting_location: string | null;
             /** Payment Method */
@@ -5583,6 +6328,8 @@ export interface components {
         TransactionOut: {
             /** Amount */
             amount: number;
+            /** Appointment Id */
+            appointment_id?: number | null;
             buyer: components["schemas"]["TransactionUserBriefOut"] | null;
             /** Buyer Id */
             buyer_id: number;
@@ -5592,6 +6339,8 @@ export interface components {
             cancelled_at: string | null;
             /** Completed At */
             completed_at: string | null;
+            /** Conversation Id */
+            conversation_id?: number | null;
             /** Created At */
             created_at: string | null;
             /** Currency */
@@ -5605,6 +6354,8 @@ export interface components {
             disputed_at: string | null;
             /** Id */
             id: number;
+            /** Meeting At */
+            meeting_at: string | null;
             /** Meeting Location */
             meeting_location: string | null;
             /** Payment Method */
@@ -5644,6 +6395,36 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** TrendingItem */
+        TrendingItem: {
+            /** Count */
+            count: number;
+            /** Query */
+            query: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** TrendingOut */
+        TrendingOut: {
+            /** City */
+            city: string | null;
+            /** Days */
+            days: number;
+            /** Items */
+            items: components["schemas"]["TrendingItem"][];
+        } & {
+            [key: string]: unknown;
+        };
+        /** UpdateAppointment */
+        UpdateAppointment: {
+            place?: components["schemas"]["PlaceIn"] | null;
+            /** Quartier Id */
+            quartier_id?: number | null;
+            /** Starts At */
+            starts_at?: string | null;
+            /** Version */
+            version: number;
+        };
         /** UpdateCountry */
         UpdateCountry: {
             /** Is Default */
@@ -5677,6 +6458,16 @@ export interface components {
             quartier?: string | null;
             /** Username */
             username?: string | null;
+        };
+        /**
+         * UpdateMeeting
+         * @description Omitted fields stay as they are; an explicit null clears the field.
+         */
+        UpdateMeeting: {
+            /** Meeting At */
+            meeting_at?: string | null;
+            /** Meeting Location */
+            meeting_location?: string | null;
         };
         /** UpdatePostRequest */
         UpdatePostRequest: {
@@ -5857,6 +6648,11 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** VersionBody */
+        VersionBody: {
+            /** Version */
+            version: number;
         };
         /** WarnRequest */
         WarnRequest: {
@@ -6854,6 +7650,72 @@ export interface operations {
             };
         };
     };
+    admin_list_meeting_places_v1_admin_geo_quartiers__quartier_id__meeting_places_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                quartier_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingPlaceAdminListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_create_meeting_place_v1_admin_geo_quartiers__quartier_id__meeting_places_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                quartier_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MeetingPlaceIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingPlaceResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     admin_geo_search_v1_admin_geo_search_get: {
         parameters: {
             query: {
@@ -6873,6 +7735,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GeoSearchOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_delete_meeting_place_v1_admin_meeting_places__place_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                place_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_update_meeting_place_v1_admin_meeting_places__place_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                place_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MeetingPlacePatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingPlaceResultOut"];
                 };
             };
             /** @description Validation Error */
@@ -8217,6 +9145,146 @@ export interface operations {
             };
         };
     };
+    update_appointment_v1_appointments__appt_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                appt_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAppointment"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppointmentResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_appointment_v1_appointments__appt_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                appt_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CancelAppointment"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppointmentResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    confirm_appointment_v1_appointments__appt_id__confirm_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                appt_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VersionBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppointmentWithDealOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    report_outcome_v1_appointments__appt_id__outcome_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                appt_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppointmentOutcome"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppointmentWithDealOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     firebase_exchange_v1_auth_firebase_post: {
         parameters: {
             query?: never;
@@ -8270,6 +9338,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TokenResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    phone_password_login_v1_auth_login_phone_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PhonePasswordLogin"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MobileTokenResponse"];
                 };
             };
             /** @description Validation Error */
@@ -8475,6 +9576,39 @@ export interface operations {
             };
         };
     };
+    set_my_password_v1_auth_me_password_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetPassword"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_preferences_v1_auth_me_preferences_get: {
         parameters: {
             query?: never;
@@ -8581,6 +9715,39 @@ export interface operations {
             };
         };
     };
+    mobile_refresh_v1_auth_token_refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MobileRefresh"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MobileTokenResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_conversations_v1_conversations_get: {
         parameters: {
             query?: {
@@ -8664,6 +9831,103 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConversationResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_conversation_appointment_v1_conversations__conv_id__appointment_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conv_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppointmentMaybeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    propose_appointment_v1_conversations__conv_id__appointments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conv_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProposeAppointment"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppointmentResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    conversation_meeting_places_v1_conversations__conv_id__meeting_places_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conv_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingPlaceListOut"];
                 };
             };
             /** @description Validation Error */
@@ -8880,6 +10144,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GeoPublicCityListOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    quartier_meeting_places_v1_geo_quartiers__quartier_id__meeting_places_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                quartier_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingPlaceListOut"];
                 };
             };
             /** @description Validation Error */
@@ -9262,6 +10557,8 @@ export interface operations {
                 near_lng?: number | null;
                 radius_km?: number | null;
                 owner_id?: number | null;
+                /** @description true: annonces gratuites seulement ; false: payantes/échanges seulement */
+                is_free?: boolean | null;
             };
             header?: never;
             path?: never;
@@ -10219,6 +11516,38 @@ export interface operations {
             };
         };
     };
+    search_trending_v1_search_trending_get: {
+        parameters: {
+            query?: {
+                city?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrendingOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_transactions_v1_transactions_get: {
         parameters: {
             query?: {
@@ -10328,6 +11657,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["OpenDispute"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransactionResultOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_transaction_meeting_v1_transactions__transaction_id__meeting_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                transaction_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMeeting"];
             };
         };
         responses: {

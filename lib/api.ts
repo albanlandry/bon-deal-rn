@@ -7,7 +7,7 @@
  * retries the original request. Concurrent 401s share a single refresh.
  */
 import { APP_VERSION } from '@/lib/appVersion';
-import { reportMaintenance, reportUpdateRequired } from '@/lib/appStatus';
+import { reportMaintenance, reportOffline, reportOnline, reportUpdateRequired } from '@/lib/appStatus';
 import { getApiUrl } from '@/utils/config';
 
 let authToken: string | null = null;
@@ -223,8 +223,10 @@ export async function apiFetch<T = any>(path: string, opts: ApiOptions = {}): Pr
     });
   } catch {
     // fetch only rejects on network failures ("Network request failed").
+    reportOffline();
     throw new ApiError(0, NETWORK_ERROR_MESSAGE, 'network');
   }
+  reportOnline();
 
   if (res.status === 401 && !_retry && !skipUnauthorized && onUnauthorized) {
     const refreshed = await refreshAuthToken();

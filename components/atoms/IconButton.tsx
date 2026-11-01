@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import PressableScale from '../motion/PressableScale';
 import { ColorTokens, useTheme } from '@/theme';
 import AppText from './AppText';
 
@@ -40,18 +41,19 @@ export default function IconButton({
           : 'transparent';
   const fg = variant === 'overlay' ? t.colors.onOverlay : t.colors[color];
   return (
-    <Pressable
+    <PressableScale
       accessibilityRole="button"
       accessibilityLabel={badge ? `${label}, ${badge} non lus` : label}
       onPress={onPress}
       disabled={disabled}
       hitSlop={4}
-      style={({ pressed }) => [
+      scaleTo={0.92}
+      style={[
         styles.base,
         {
           backgroundColor: bg,
           borderColor: variant === 'outline' ? t.colors.line : 'transparent',
-          opacity: disabled ? 0.4 : pressed ? 0.7 : 1,
+          opacity: disabled ? 0.4 : 1,
         },
         style,
       ]}>
@@ -63,7 +65,7 @@ export default function IconButton({
           </AppText>
         </View>
       )}
-    </Pressable>
+    </PressableScale>
   );
 }
 

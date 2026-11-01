@@ -109,9 +109,9 @@ export default function HelpSupportScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: t.colors.canvas }]}>
-      <ScreenHeader title="Aide & Support" />
+      <ScreenHeader large title="Aide & Support" />
       <ScrollView ref={scrollRef} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <ListGroup title="Besoin d'aide ?">
+        <ListGroup title="Besoin d’aide ?">
           <ListRow
             icon="help-circle-outline"
             title="Questions fréquentes"
@@ -122,10 +122,8 @@ export default function HelpSupportScreen() {
             title="Règles de la communauté"
             onPress={() => scrollRef.current?.scrollTo({ y: rulesY, animated: !t.reduceMotion })}
           />
-          <ListRow icon="document-text-outline" title="Conditions d'utilisation" onPress={openTerms} />
-          {/* No standalone privacy-policy document exists yet: the data-use
-              commitments live in the terms screen. */}
-          <ListRow icon="shield-outline" title="Politique de confidentialité" onPress={openTerms} />
+          <ListRow icon="document-text-outline" title="Conditions d’utilisation" onPress={openTerms} />
+          <ListRow icon="shield-outline" title="Politique de confidentialité" onPress={() => router.push('/privacy-policy' as Href)} />
           <ListRow icon="mail-outline" title="Contacter le support" onPress={contact} last />
         </ListGroup>
 
@@ -148,10 +146,10 @@ export default function HelpSupportScreen() {
         </View>
 
         <Card style={styles.contact}>
-          <AppText variant="h3" align="center">
+          <AppText variant="h3">
             Vous n’avez pas trouvé ?
           </AppText>
-          <AppText variant="small" color="inkMuted" align="center">
+          <AppText variant="small" color="inkMuted">
             Notre équipe vous répond par e-mail : {SUPPORT_EMAIL}
           </AppText>
           <Button label="Écrire au support" icon="mail-outline" onPress={contact} style={styles.contactBtn} />
@@ -165,6 +163,6 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: 16, paddingBottom: 32 },
   section: { marginTop: 20 },
-  contact: { alignItems: 'center', gap: 6, paddingVertical: 20 },
-  contactBtn: { marginTop: 10 },
+  contact: { gap: 4, marginTop: 20 },
+  contactBtn: { marginTop: 12, alignSelf: 'flex-start' },
 });

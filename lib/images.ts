@@ -25,3 +25,22 @@ export function coverThumb(images: BdPostImage[] | null | undefined): string | n
   const first = (images ?? []).find(isReady);
   return thumbUrl(first);
 }
+
+/**
+ * Route to the item page from a card: the card's cover thumbnail rides along
+ * as `cover` so the page can show it from the image cache while the listing
+ * loads (display only — the page still loads the post by id).
+ */
+export function itemDetailsRoute(post: { id: number; images?: BdPostImage[] | null }) {
+  const cover = coverThumb(post.images);
+  return {
+    pathname: '/item-details' as const,
+    params: cover ? { id: String(post.id), cover } : { id: String(post.id) },
+  };
+}
+
+/** The `cover` route param, accepted only as an http(s) URL. */
+export function safeCoverParam(cover: string | string[] | undefined | null): string | undefined {
+  const v = Array.isArray(cover) ? cover[0] : cover;
+  return v && /^https?:\/\//i.test(v) ? v : undefined;
+}

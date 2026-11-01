@@ -17,24 +17,28 @@ export interface PriceProps {
  */
 export default function Price({ amount, isFree, isExchange, size = 'md', style }: PriceProps) {
   const variant = size === 'lg' ? 'priceLarge' : size === 'sm' ? 'bodyStrong' : 'price';
+  // Direction B: price is a bold ink line, digits tabular so lists align.
+  const textStyle: StyleProp<TextStyle> = [size === 'sm' && tabular, style];
   if (isFree) {
     return (
-      <AppText variant={variant} color="success" style={style} accessibilityLabel="Gratuit">
+      <AppText variant={variant} color="success" style={textStyle} accessibilityLabel="Gratuit">
         Gratuit
       </AppText>
     );
   }
   if ((amount == null || amount === 0) && isExchange) {
     return (
-      <AppText variant={variant} color="trust" style={style}>
+      <AppText variant={variant} color="trust" style={textStyle}>
         Échange
       </AppText>
     );
   }
   const text = formatAmount(amount);
   return (
-    <AppText variant={variant} color="ink" style={style} accessibilityLabel={text.replace(/ /g, ' ')}>
+    <AppText variant={variant} color="ink" style={textStyle} accessibilityLabel={text.replace(/ /g, ' ')}>
       {text}
     </AppText>
   );
 }
+
+const tabular: TextStyle = { fontVariant: ['tabular-nums'] };

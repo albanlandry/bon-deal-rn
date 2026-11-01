@@ -13,7 +13,7 @@ import { AppText, Button, Card, showToast } from '@/components/ui';
 import { useAuth } from '@/contexts/AuthContext';
 import { acceptConsents, legalVersionsQuery } from '@/lib/api/account';
 import { haptics } from '@/lib/haptics';
-import { useTheme } from '@/theme';
+import { font, useTheme } from '@/theme';
 
 export default function ConsentScreen() {
   const t = useTheme();
@@ -71,12 +71,12 @@ export default function ConsentScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.hero}>
           <View style={[styles.icon, { backgroundColor: t.colors.brandTint }]}>
-            <Ionicons name="document-text" size={40} color={t.colors.brandStrong} />
+            <Ionicons name="document-text" size={24} color={t.colors.brandStrong} />
           </View>
-          <AppText variant="h2" align="center" accessibilityRole="header">
+          <AppText variant="h1" accessibilityRole="header" style={styles.title}>
             {isUpdate ? 'Nos conditions évoluent' : 'Bienvenue sur BonDeal'}
           </AppText>
-          <AppText variant="small" color="inkMuted" align="center">
+          <AppText variant="body" color="inkMuted">
             {isUpdate
               ? 'Pour continuer à utiliser BonDeal, prenez connaissance des nouvelles versions ci-dessous et acceptez-les.'
               : 'Avant de commencer, prenez connaissance de nos conditions et de la façon dont nous protégeons vos données.'}
@@ -103,6 +103,14 @@ export default function ConsentScreen() {
             variant="secondary"
             size="sm"
             onPress={() => router.push({ pathname: '/terms-and-conditions', params: { mode: 'read' } } as Href)}
+            style={styles.read}
+          />
+          <Button
+            label="Lire la politique de confidentialité"
+            icon="open-outline"
+            variant="secondary"
+            size="sm"
+            onPress={() => router.push('/privacy-policy' as Href)}
             style={styles.read}
           />
         </Card>
@@ -158,13 +166,14 @@ export default function ConsentScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   content: { padding: 16, paddingBottom: 24, gap: 16 },
-  hero: { alignItems: 'center', gap: 8, marginTop: 16 },
-  icon: { width: 80, height: 80, borderRadius: 40, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
+  hero: { gap: 8, marginTop: 16 },
+  icon: { width: 48, height: 48, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+  title: { ...font('800'), fontSize: 32, lineHeight: 38, letterSpacing: -0.7 },
   docs: { gap: 12 },
   docRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   read: { alignSelf: 'flex-start' },
-  check: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderWidth: 1, minHeight: 56 },
-  box: { width: 26, height: 26, borderRadius: 6, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  check: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, borderWidth: 1, minHeight: 56 },
+  box: { width: 26, height: 26, borderRadius: 4, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
   note: { paddingHorizontal: 4 },
   footer: { padding: 16, gap: 4, borderTopWidth: StyleSheet.hairlineWidth },
   flex: { flex: 1 },

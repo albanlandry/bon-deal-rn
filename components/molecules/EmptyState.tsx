@@ -16,7 +16,10 @@ export interface EmptyStateProps {
   tone?: 'neutral' | 'error';
 }
 
-/** Illustration + one clear next step (every list has one, MB-QA-02). */
+/**
+ * Tinted rounded square + one sentence on what the screen is for + one
+ * action (docs/11 §6; every list has one, MB-QA-02).
+ */
 export default function EmptyState({
   icon = 'sparkles-outline',
   title,
@@ -33,10 +36,11 @@ export default function EmptyState({
     <View style={styles.wrap} accessibilityRole={err ? 'alert' : undefined}>
       <View
         style={[
-          styles.circle,
+          styles.tile,
+          { borderRadius: t.radius.md },
           { backgroundColor: err ? t.colors.dangerTint : t.colors.brandTint },
         ]}>
-        <Ionicons name={icon} size={40} color={err ? t.colors.danger : t.colors.brandStrong} />
+        <Ionicons name={icon} size={32} color={err ? t.colors.danger : t.colors.brandStrong} />
       </View>
       <AppText variant="h3" align="center" style={styles.title}>
         {title}
@@ -71,8 +75,8 @@ export function ErrorState({ message, onRetry }: { message?: string; onRetry?: (
 
 const styles = StyleSheet.create({
   wrap: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
-  circle: { width: 88, height: 88, borderRadius: 44, alignItems: 'center', justifyContent: 'center' },
+  tile: { width: 72, height: 72, alignItems: 'center', justifyContent: 'center' },
   title: { marginTop: 16 },
-  message: { marginTop: 6, maxWidth: 300 },
-  action: { marginTop: 20 },
+  message: { marginTop: 8, maxWidth: 300 },
+  action: { marginTop: 24 },
 });

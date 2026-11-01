@@ -58,3 +58,31 @@ export async function clearDevPhone(): Promise<void> {
     // ignore
   }
 }
+
+// Set while signed in with phone + password (no Firebase session): the
+// 30-day token that renews the JWT through POST /auth/token/refresh.
+const REFRESH_KEY = 'bondeal.refreshToken';
+
+export async function getRefreshToken(): Promise<string | null> {
+  try {
+    return await SecureStore.getItemAsync(REFRESH_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export async function setRefreshToken(token: string): Promise<void> {
+  try {
+    await SecureStore.setItemAsync(REFRESH_KEY, token);
+  } catch {
+    // session still works for this run
+  }
+}
+
+export async function clearRefreshToken(): Promise<void> {
+  try {
+    await SecureStore.deleteItemAsync(REFRESH_KEY);
+  } catch {
+    // ignore
+  }
+}
