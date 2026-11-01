@@ -53,6 +53,8 @@ ios.keys.txt
 serviceAccountKey.json
 # Stray Firebase client config at repo root (the real, committed one is firebase/configs/google-services.json)
 /google-services.json
+# iOS Firebase client config: kept local, supplied to EAS builds as the GOOGLE_SERVICE_INFO_PLIST file env var
+/firebase/configs/GoogleService-Info.plist
 *.bak
 
 # Local Claude progress notes
